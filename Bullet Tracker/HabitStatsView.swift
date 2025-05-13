@@ -5,34 +5,61 @@
 //  Created by Dustin Brown on 5/12/25.
 //
 
-
-//
-//  HabitStatsView.swift
-//  Bullet Tracker
-//
-//  Created by Dustin Brown on 5/12/25.
-//
-
-
 import SwiftUI
 import CoreData
 
 struct HabitStatsView: View {
     let habits: [Habit]
-    @State private var selectedTimeframe: Timeframe = .thirtyDays
+    @State private var selectedTimeframe: Timeframe = .month
+    @State private var showAsFraction: Bool = false // Toggle for display format
     
     enum Timeframe: String, CaseIterable, Identifiable {
-        case sevenDays = "7 Days"
-        case thirtyDays = "30 Days"
-        case ninetyDays = "90 Days"
+        case week = "Week"
+        case month = "Month"
+        case quarter = "Quarter"
         
         var id: String { self.rawValue }
         
-        var days: Int {
+        // Get start date for the timeframe
+        func getStartDate(from endDate: Date = Date()) -> Date {
+            let calendar = Calendar.current
+            
             switch self {
-            case .sevenDays: return 7
-            case .thirtyDays: return 30
-            case .ninetyDays: return 90
+            case .week:
+                // Get the start of the last 7 days (natural week)
+                return calendar.date(byAdding: .weekOfYear, value: -1, to: endDate)!
+                
+            case .month:
+                // Get start of the current month
+                var components = calendar.dateComponents([.year, .month], from: endDate)
+                return calendar.date(from: components)!
+                
+            case .quarter:
+                // Get start date for the quarter (3 months back)
+                return calendar.date(byAdding: .month, value: -3, to: endDate)!
+            }
+        }
+        
+        // Get a descriptive string for the timeframe
+        func getDescription(for date: Date = Date()) -> String {
+            let calendar = Calendar.current
+            let startDate = getStartDate(from: date)
+            let dateFormatter = DateFormatter()
+            
+            switch self {
+            case .week:
+                dateFormatter.dateFormat = "MMM d"
+                return "\(dateFormatter.string(from: startDate)) - \(dateFormatter.string(from: date))"
+                
+            case .month:
+                dateFormatter.dateFormat = "MMMM"
+                return dateFormatter.string(from: date)
+                
+            case .quarter:
+                dateFormatter.dateFormat = "MMM d"
+                let endDateStr = dateFormatter.string(from: date)
+                let startDateStr = dateFormatter.string(from: startDate)
+                return "\(startDateStr) - \(endDateStr)"
             }
         }
     }
@@ -40,7 +67,7 @@ struct HabitStatsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Progress")
+                Text(selectedTimeframe.getDescription())
                     .font(.headline)
                 
                 Spacer()
@@ -54,8 +81,20 @@ struct HabitStatsView: View {
                 .frame(width: 200)
             }
             
+            // Display format toggle
+            Toggle(isOn: $showAsFraction) {
+                Text("Show as fractions")
+                    .font(.subheadline)
+            }
+            .toggleStyle(SwitchToggleStyle(tint: Color.blue))
+            .padding(.vertical, 4)
+            
             ForEach(habits) { habit in
-                EnhancedHabitProgressView(habit: habit, days: selectedTimeframe.days)
+                EnhancedHabitProgressView(
+                    habit: habit,
+                    timeframe: selectedTimeframe,
+                    showAsFraction: showAsFraction
+                )
             }
         }
         .padding()
@@ -67,12 +106,19 @@ struct HabitStatsView: View {
 // Enhanced habit progress view that shows multiple states
 struct EnhancedHabitProgressView: View {
     @ObservedObject var habit: Habit
-    let days: Int
+    let timeframe: HabitStatsView.Timeframe
+    let showAsFraction: Bool
     
     @State private var successRate: Double = 0
     @State private var partialRate: Double = 0
     @State private var failureRate: Double = 0
     @State private var useMultipleStates: Bool = false
+    
+    // Tracking actual counts for fraction display
+    @State private var successCount: Int = 0
+    @State private var partialCount: Int = 0
+    @State private var failureCount: Int = 0
+    @State private var totalDays: Int = 0
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -121,21 +167,36 @@ struct EnhancedHabitProgressView: View {
                 // State breakdown
                 HStack(spacing: 10) {
                     if successRate > 0 {
-                        StateIndicator(color: Color(hex: habit.color ?? "#007AFF"),
-                                      label: "Success",
-                                      percentage: Int(successRate * 100))
+                        StateIndicator(
+                            color: Color(hex: habit.color ?? "#007AFF"),
+                            label: "Success",
+                            value: successCount,
+                            total: totalDays,
+                            percentage: Int(successRate * 100),
+                            showAsFraction: showAsFraction
+                        )
                     }
                     
                     if partialRate > 0 {
-                        StateIndicator(color: .orange,
-                                      label: "Partial",
-                                      percentage: Int(partialRate * 100))
+                        StateIndicator(
+                            color: .orange,
+                            label: "Partial",
+                            value: partialCount,
+                            total: totalDays,
+                            percentage: Int(partialRate * 100),
+                            showAsFraction: showAsFraction
+                        )
                     }
                     
                     if failureRate > 0 {
-                        StateIndicator(color: .red,
-                                      label: "Attempted",
-                                      percentage: Int(failureRate * 100))
+                        StateIndicator(
+                            color: .red,
+                            label: "Attempted",
+                            value: failureCount,
+                            total: totalDays,
+                            percentage: Int(failureRate * 100),
+                            showAsFraction: showAsFraction
+                        )
                     }
                     
                     Spacer()
@@ -156,9 +217,15 @@ struct EnhancedHabitProgressView: View {
                     }
                     .frame(width: 200)
                     
-                    Text("\(Int(successRate * 100))%")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if showAsFraction {
+                        Text("\(successCount)/\(totalDays)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("\(Int(successRate * 100))%")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
         }
@@ -166,13 +233,18 @@ struct EnhancedHabitProgressView: View {
             useMultipleStates = (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
             loadStats()
         }
+        .onChange(of: timeframe) { _ in
+            loadStats()
+        }
+        .onChange(of: showAsFraction) { _ in
+            // No need to reload stats, just update the view
+        }
     }
     
     private func loadStats() {
-        // Get habit entries for the last X days
-        let calendar = Calendar.current
+        // Get start and end dates based on the selected timeframe
         let endDate = Date()
-        let startDate = calendar.date(byAdding: .day, value: -days, to: endDate)!
+        let startDate = timeframe.getStartDate(from: endDate)
         
         let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "habit == %@ AND date >= %@ AND date <= %@",
@@ -182,8 +254,8 @@ struct EnhancedHabitProgressView: View {
             let context = CoreDataManager.shared.container.viewContext
             let entries = try context.fetch(fetchRequest)
             
-            // Count days the habit should have been performed
-            var totalDays = 0
+            // Count days the habit should have been performed in this timeframe
+            totalDays = 0
             var currentDate = startDate
             
             while currentDate <= endDate {
@@ -198,13 +270,16 @@ struct EnhancedHabitProgressView: View {
                 successRate = 0
                 partialRate = 0
                 failureRate = 0
+                successCount = 0
+                partialCount = 0
+                failureCount = 0
                 return
             }
             
             // Count each state type
-            var successCount = 0
-            var partialCount = 0
-            var failureCount = 0
+            successCount = 0
+            partialCount = 0
+            failureCount = 0
             
             for entry in entries {
                 if useMultipleStates {
@@ -235,9 +310,13 @@ struct EnhancedHabitProgressView: View {
         }
     }
     
+    // Helper property for calendar to avoid repetition
+    private var calendar: Calendar {
+        return Calendar.current
+    }
+    
     // Helper method to determine if a habit should be performed on a given date
     private func shouldPerformHabit(_ habit: Habit, on date: Date) -> Bool {
-        let calendar = Calendar.current
         let weekday = calendar.component(.weekday, from: date) // 1 is Sunday, 7 is Saturday
         
         switch habit.frequency {
@@ -275,7 +354,10 @@ struct EnhancedHabitProgressView: View {
 struct StateIndicator: View {
     let color: Color
     let label: String
+    let value: Int
+    let total: Int
     let percentage: Int
+    let showAsFraction: Bool
     
     var body: some View {
         HStack(spacing: 2) {
@@ -283,9 +365,15 @@ struct StateIndicator: View {
                 .fill(color)
                 .frame(width: 8, height: 8)
             
-            Text("\(label): \(percentage)%")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            if showAsFraction {
+                Text("\(label): \(value)/\(total)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("\(label): \(percentage)%")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 }

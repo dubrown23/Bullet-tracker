@@ -13,6 +13,21 @@
 //  Created by Dustin Brown on 5/12/25.
 //
 
+//
+//  HabitDetailIndicatorView.swift
+//  Bullet Tracker
+//
+//  Created by Dustin Brown on 5/12/25.
+//
+
+
+//
+//  HabitDetailIndicatorView.swift
+//  Bullet Tracker
+//
+//  Created by Dustin Brown on 5/12/25.
+//
+
 import SwiftUI
 
 struct HabitDetailIndicatorView: View {
@@ -51,8 +66,20 @@ struct HabitDetailIndicatorView: View {
                 // Try to parse as JSON
                 if let data = details.data(using: String.Encoding.utf8),
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    // Format for workout
-                    if let type = json["type"] as? String, let duration = json["duration"] as? String {
+                    
+                    // Handle multiple workout types
+                    if let types = json["types"] as? [String], !types.isEmpty {
+                        let typesList = types.prefix(2).joined(separator: ", ")
+                        let moreIndicator = types.count > 2 ? "+" : ""
+                        
+                        if let duration = json["duration"] as? String {
+                            detailSummary = "\(typesList)\(moreIndicator) • \(duration) min"
+                        } else {
+                            detailSummary = "\(typesList)\(moreIndicator)"
+                        }
+                    }
+                    // Fallback to old single type format
+                    else if let type = json["type"] as? String, let duration = json["duration"] as? String {
                         detailSummary = "\(type) • \(duration) min"
                     } else if let notes = json["notes"] as? String, !notes.isEmpty {
                         // Just show truncated notes
