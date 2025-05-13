@@ -8,13 +8,18 @@
 import SwiftUI
 
 @main
-struct Bullet_TrackerApp: App {
-    let persistenceController = PersistenceController.shared
-
+struct BulletTrackerApp: App {
+    let coreDataManager = CoreDataManager.shared
+    
+    init() {
+        // Create default collections on first launch
+        coreDataManager.setupDefaultData()
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
+                .environment(\.managedObjectContext, coreDataManager.container.viewContext)
         }
     }
 }
