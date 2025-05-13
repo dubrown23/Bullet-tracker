@@ -1,10 +1,3 @@
-//
-//  HabitCheckboxView.swift
-//  Bullet Tracker
-//
-//  Created by Dustin Brown on 5/12/25.
-//
-
 import SwiftUI
 import CoreData
 
@@ -16,11 +9,19 @@ struct HabitCheckboxView: View {
     @State private var isAnimating: Bool = false
     @State private var hasDetails: Bool = false
     @State private var showingDetailView: Bool = false
+    @State private var shouldPromptForDetails: Bool = false
     
     var body: some View {
         Button(action: {
             // Toggle with multi-state if enabled
             toggleHabitWithState()
+            
+            // If we just completed a habit that should track details, show the detail view
+            if isChecked && shouldTrackDetailsForHabit() && !hasDetails {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showingDetailView = true
+                }
+            }
         }) {
             ZStack {
                 Circle()
@@ -38,6 +39,19 @@ struct HabitCheckboxView: View {
                         .font(.system(size: 12, weight: .bold))
                         .opacity(isAnimating ? 0.0 : 1.0)
                 }
+                
+                // Show a note indicator if there are details
+                if hasDetails && isChecked {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 12, height: 12)
+                        .overlay(
+                            Image(systemName: "note.text")
+                                .font(.system(size: 8))
+                                .foregroundColor(getStateColor())
+                        )
+                        .offset(x: 12, y: -12)
+                }
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isAnimating)
         }
@@ -45,6 +59,13 @@ struct HabitCheckboxView: View {
         .frame(width: 44, height: 44)
         .contextMenu {
             if isChecked {
+                // Add option to edit details
+                Button(action: {
+                    showingDetailView = true
+                }) {
+                    Label("Add/Edit Details", systemImage: "square.and.pencil")
+                }
+                
                 Button(action: {
                     // Uncheck
                     toggleHabit()
@@ -58,11 +79,36 @@ struct HabitCheckboxView: View {
                 }) {
                     Label("Complete", systemImage: "checkmark.circle")
                 }
+                
+                // Option to complete with details
+                Button(action: {
+                    toggleHabit()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showingDetailView = true
+                    }
+                }) {
+                    Label("Complete With Details", systemImage: "checkmark.circle.fill")
+                }
             }
+        }
+        .sheet(isPresented: $showingDetailView) {
+            checkHabitStatus() // Refresh status when dismissing the detail view
+        } content: {
+            HabitCompletionDetailView(habit: habit, date: date)
+        }
+        .onLongPressGesture {
+            // On long press, show details
+            showingDetailView = true
         }
         .onAppear {
             checkHabitStatus()
+            shouldPromptForDetails = shouldTrackDetailsForHabit()
         }
+    }
+    
+    // Helper method to check if details should be tracked
+    private func shouldTrackDetailsForHabit() -> Bool {
+        return (habit.value(forKey: "trackDetails") as? Bool) ?? false
     }
     
     // Helper method to check if multiple states are used
