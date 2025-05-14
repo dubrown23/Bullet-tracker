@@ -217,6 +217,16 @@ class CoreDataManager {
         habit.notes = notes
         habit.collection = collection
         
+        // Set the order to be the last in the list by default
+        let fetchRequest: NSFetchRequest<Habit> = Habit.fetchRequest()
+        do {
+            let count = try container.viewContext.count(for: fetchRequest)
+            habit.order = Int32(count)
+        } catch {
+            print("Error determining habit count: \(error)")
+            habit.order = 0
+        }
+        
         saveContext()
         return habit
     }

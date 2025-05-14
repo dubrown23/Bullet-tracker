@@ -32,15 +32,49 @@ struct AddHabitView: View {
     @State private var useMultipleStates: Bool = false
     
     // Available color options
+    // In AddHabitView.swift, replace the existing colorOptions array with this expanded version:
+
+    // Available color options - expanded selection
     let colorOptions = [
+        // Basic colors
         "#007AFF", // Blue
-        "#FF3B30", // Red
         "#34C759", // Green
+        "#FF3B30", // Red
         "#FF9500", // Orange
-        "#AF52DE", // Purple
+        "#FFCC00", // Yellow
+        "#5856D6", // Purple
         "#FF2D55", // Pink
         "#5AC8FA", // Light Blue
-        "#FFCC00"  // Yellow
+        
+        // Extended palette - pastels
+        "#AFD0F5", // Pastel Blue
+        "#A8E1A8", // Pastel Green
+        "#F5A8A8", // Pastel Red
+        "#F7D1A8", // Pastel Orange
+        "#F7EFA8", // Pastel Yellow
+        "#D1A8F7", // Pastel Purple
+        "#F7A8D1", // Pastel Pink
+        "#A8F5F5", // Pastel Cyan
+        
+        // Extended palette - darker shades
+        "#004080", // Dark Blue
+        "#006633", // Dark Green
+        "#801A15", // Dark Red
+        "#804D00", // Dark Orange
+        "#806600", // Dark Yellow
+        "#2E2B6B", // Dark Purple
+        "#80172B", // Dark Pink
+        "#0080A8", // Dark Teal
+        
+        // Neutral tones
+        "#8E8E93", // Gray
+        "#48484A", // Dark Gray
+        "#636366", // Mid Gray
+        "#A8A8A8", // Light Gray
+        "#53433D", // Brown
+        "#7A6E65", // Tan
+        "#B3A395", // Light Brown
+        "#D9C7B8"  // Beige
     ]
     
     // Basic icon options shown in main view

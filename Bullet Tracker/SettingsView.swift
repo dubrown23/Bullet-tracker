@@ -2,21 +2,28 @@
 //  SettingsView.swift
 //  Bullet Tracker
 //
-//  Created by Dustin Brown on 5/12/25.
+//  Updated by Dustin Brown on 5/12/25.
 //
-
 
 import SwiftUI
 import CoreData
+import UniformTypeIdentifiers
 
 class SettingsViewModel: ObservableObject {
     @Published var useDarkMode: Bool = UserDefaults.standard.bool(forKey: "useDarkMode")
     @Published var reminderEnabled: Bool = UserDefaults.standard.bool(forKey: "reminderEnabled")
     @Published var reminderTime: Date = UserDefaults.standard.object(forKey: "reminderTime") as? Date ?? Calendar.current.date(from: DateComponents(hour: 20, minute: 0))!
     
-    @Published var showingExportSheet = false
-    @Published var showingImportSheet = false
+    @Published var showingExportActionSheet = false
+    @Published var showingImportPicker = false
     @Published var showingClearDataAlert = false
+    @Published var showingExportProgressAlert = false
+    @Published var showingImportResultAlert = false
+    @Published var alertMessage = ""
+    @Published var importSuccess = false
+    
+    // For file picking
+    @Published var documentPickerDelegate = DocumentPickerDelegate()
     
     // Save user preferences
     func savePreferences() {
@@ -85,7 +92,56 @@ class SettingsViewModel: ObservableObject {
         }
     }
     
-    // Clear all app data
+    // Export data
+    func exportData(from viewController: UIViewController, sourceView: UIView) {
+        showingExportActionSheet = true
+    }
+    
+    // Export habits as CSV
+    func exportHabitsCSV(from viewController: UIViewController, sourceView: UIView) {
+        if let url = DataExportManager.shared.exportHabitsToCSV() {
+            DataExportManager.shared.shareFile(url: url, from: viewController, sourceView: sourceView)
+        } else {
+            alertMessage = "Failed to export habits data"
+            showingExportProgressAlert = true
+        }
+    }
+    
+    // Export habit entries as CSV
+    func exportEntriesCSV(from viewController: UIViewController, sourceView: UIView) {
+        if let url = DataExportManager.shared.exportHabitEntriesToCSV() {
+            DataExportManager.shared.shareFile(url: url, from: viewController, sourceView: sourceView)
+        } else {
+            alertMessage = "Failed to export entries data"
+            showingExportProgressAlert = true
+        }
+    }
+    
+    // Export full backup as JSON
+    func exportFullBackup(from viewController: UIViewController, sourceView: UIView) {
+        if let url = DataExportManager.shared.exportAppDataToJSON() {
+            DataExportManager.shared.shareFile(url: url, from: viewController, sourceView: sourceView)
+        } else {
+            alertMessage = "Failed to create backup"
+            showingExportProgressAlert = true
+        }
+    }
+    
+    // Import data from JSON backup
+    func importData() {
+        showingImportPicker = true
+    }
+    
+    // Process the selected imported file
+    func processImportedFile(url: URL) {
+        DataExportManager.shared.importAppDataFromJSON(url: url) { success, message in
+            self.importSuccess = success
+            self.alertMessage = message
+            self.showingImportResultAlert = true
+        }
+    }
+    
+    // Clear all data
     func clearAllData() {
         let context = CoreDataManager.shared.container.viewContext
         let entityNames = ["JournalEntry", "Collection", "Tag", "Habit", "HabitEntry"]
@@ -133,8 +189,23 @@ class SettingsViewModel: ObservableObject {
     }
 }
 
+// Document picker delegate to handle file imports
+class DocumentPickerDelegate: NSObject, ObservableObject, UIDocumentPickerDelegate {
+    var onDocumentsPicked: ((URL) -> Void)?
+    
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard let url = urls.first else { return }
+        onDocumentsPicked?(url)
+    }
+}
+
 struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
+    @State private var showingActionSheet = false
+    
+    // To get access to UIViewController for sharing
+    @State private var actionSourceRect: CGRect = .zero
+    @State private var actionSourceView: UIView? = nil
     
     var body: some View {
         NavigationView {
@@ -162,22 +233,45 @@ struct SettingsView: View {
                 
                 Section(header: Text("Data Management")) {
                     Button(action: {
-                        viewModel.showingExportSheet = true
+                        if let sourceView = actionSourceView {
+                            viewModel.showingExportActionSheet = true
+                        }
                     }) {
-                        Label("Export Data", systemImage: "square.and.arrow.up")
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                                .foregroundColor(.blue)
+                            Text("Export Data")
+                        }
                     }
+                    .background(GeometryReader { geometry -> Color in
+                        DispatchQueue.main.async {
+                            actionSourceRect = geometry.frame(in: .global)
+                            if actionSourceView == nil {
+                                actionSourceView = UIView(frame: actionSourceRect)
+                            }
+                        }
+                        return Color.clear
+                    })
                     
                     Button(action: {
-                        viewModel.showingImportSheet = true
+                        viewModel.importData()
                     }) {
-                        Label("Import Data", systemImage: "square.and.arrow.down")
+                        HStack {
+                            Image(systemName: "square.and.arrow.down")
+                                .foregroundColor(.blue)
+                            Text("Import Backup")
+                        }
                     }
                     
                     Button(action: {
                         viewModel.showingClearDataAlert = true
                     }) {
-                        Label("Clear All Data", systemImage: "trash")
-                            .foregroundColor(.red)
+                        HStack {
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                            Text("Clear All Data")
+                                .foregroundColor(.red)
+                        }
                     }
                 }
                 
@@ -202,6 +296,48 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .actionSheet(isPresented: $viewModel.showingExportActionSheet) {
+                ActionSheet(
+                    title: Text("Export Data"),
+                    message: Text("Choose what data to export"),
+                    buttons: [
+                        .default(Text("Export Habits as CSV")) {
+                            if let rootVC = UIApplication.shared.windows.first?.rootViewController,
+                               let sourceView = actionSourceView {
+                                viewModel.exportHabitsCSV(from: rootVC, sourceView: sourceView)
+                            }
+                        },
+                        .default(Text("Export Habit Entries as CSV")) {
+                            if let rootVC = UIApplication.shared.windows.first?.rootViewController,
+                               let sourceView = actionSourceView {
+                                viewModel.exportEntriesCSV(from: rootVC, sourceView: sourceView)
+                            }
+                        },
+                        .default(Text("Full Backup (JSON)")) {
+                            if let rootVC = UIApplication.shared.windows.first?.rootViewController,
+                               let sourceView = actionSourceView {
+                                viewModel.exportFullBackup(from: rootVC, sourceView: sourceView)
+                            }
+                        },
+                        .cancel()
+                    ]
+                )
+            }
+            .sheet(isPresented: $viewModel.showingImportPicker) {
+                DocumentPickerView(delegate: viewModel.documentPickerDelegate) { url in
+                    viewModel.processImportedFile(url: url)
+                }
+            }
+            .alert("Import Result", isPresented: $viewModel.showingImportResultAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(viewModel.alertMessage)
+            }
+            .alert("Export Error", isPresented: $viewModel.showingExportProgressAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(viewModel.alertMessage)
+            }
             .alert("Clear All Data", isPresented: $viewModel.showingClearDataAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Clear", role: .destructive) {
@@ -215,4 +351,27 @@ struct SettingsView: View {
             }
         }
     }
+}
+
+// View to wrap UIDocumentPickerViewController
+struct DocumentPickerView: UIViewControllerRepresentable {
+    var delegate: DocumentPickerDelegate
+    var onPick: (URL) -> Void
+    
+    init(delegate: DocumentPickerDelegate, onPick: @escaping (URL) -> Void) {
+        self.delegate = delegate
+        self.onPick = onPick
+        
+        // Set the callback
+        delegate.onDocumentsPicked = onPick
+    }
+    
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.json])
+        picker.allowsMultipleSelection = false
+        picker.delegate = delegate
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
 }

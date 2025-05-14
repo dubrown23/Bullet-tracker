@@ -5,14 +5,6 @@
 //  Created by Dustin Brown on 5/12/25.
 //
 
-
-//
-//  HabitTrackerViewModel.swift
-//  Bullet Tracker
-//
-//  Created by Dustin Brown on 5/12/25.
-//
-
 import SwiftUI
 import CoreData
 
@@ -31,10 +23,34 @@ class HabitTrackerViewModel: ObservableObject {
     func loadHabits() {
         let context = CoreDataManager.shared.container.viewContext
         let request: NSFetchRequest<Habit> = Habit.fetchRequest()
-        request.sortDescriptors = [NSSortDescriptor(key: "name", ascending: true)]
+        
+        // Sort by order first, then by name for habits with same order
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "order", ascending: true),
+            NSSortDescriptor(key: "name", ascending: true)
+        ]
         
         do {
             habits = try context.fetch(request)
+            
+            // Ensure all habits have an order value
+            var needsOrderUpdate = false
+            for (index, habit) in habits.enumerated() {
+                // Set order if not already set
+                if habit.order == 0 && index > 0 {
+                    habit.order = Int32(index)
+                    needsOrderUpdate = true
+                }
+            }
+            
+            // Save if we updated any order values
+            if needsOrderUpdate {
+                try context.save()
+                
+                // Re-sort the habits by order
+                habits.sort { ($0.order, $0.name ?? "") < ($1.order, $1.name ?? "") }
+            }
+            
             print("Loaded \(habits.count) habits")
             loadHabitEntries()
         } catch {
@@ -165,5 +181,44 @@ class HabitTrackerViewModel: ObservableObject {
     
     func getCompletionRate(for habit: Habit) -> Double {
         return CoreDataManager.shared.getCompletionRateForHabit(habit)
+    }
+    
+    // New function to handle reordering habits
+    func reorderHabits(from source: IndexSet, to destination: Int) {
+        // Convert from IndexSet to array indices
+        let sourceIndices = Array(source)
+        guard let sourceIndex = sourceIndices.first else { return }
+        
+        // Adjust destination if moving from above to below
+        var adjustedDestination = destination
+        if sourceIndex < destination {
+            adjustedDestination -= 1
+        }
+        
+        // Get the habit that's being moved
+        let habitToMove = habits[sourceIndex]
+        
+        // Remove from original position
+        habits.remove(at: sourceIndex)
+        
+        // Insert at new position
+        habits.insert(habitToMove, at: adjustedDestination)
+        
+        // Update order values for all habits
+        let context = CoreDataManager.shared.container.viewContext
+        
+        for (index, habit) in habits.enumerated() {
+            habit.order = Int32(index)
+        }
+        
+        // Save the changes
+        do {
+            try context.save()
+            print("Habits reordered successfully")
+        } catch {
+            print("Error saving habit order: \(error)")
+            // Reload to get back to a consistent state
+            loadHabits()
+        }
     }
 }
