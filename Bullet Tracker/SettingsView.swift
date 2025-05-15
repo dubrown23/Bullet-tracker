@@ -22,6 +22,10 @@ class SettingsViewModel: ObservableObject {
     @Published var alertMessage = ""
     @Published var importSuccess = false
     
+    // Monthly report properties
+    @Published var showingMonthPicker = false
+    @Published var selectedMonth = Date()
+    
     // For file picking
     @Published var documentPickerDelegate = DocumentPickerDelegate()
     
@@ -107,6 +111,16 @@ class SettingsViewModel: ObservableObject {
         }
     }
     
+    // Export habits as CSV with stats
+    func exportHabitsCSVWithStats(from viewController: UIViewController, sourceView: UIView) {
+        if let url = DataExportManager.shared.exportHabitsToCSVWithStats() {
+            DataExportManager.shared.shareFile(url: url, from: viewController, sourceView: sourceView)
+        } else {
+            alertMessage = "Failed to export habits data with statistics"
+            showingExportProgressAlert = true
+        }
+    }
+    
     // Export habit entries as CSV
     func exportEntriesCSV(from viewController: UIViewController, sourceView: UIView) {
         if let url = DataExportManager.shared.exportHabitEntriesToCSV() {
@@ -114,6 +128,60 @@ class SettingsViewModel: ObservableObject {
         } else {
             alertMessage = "Failed to export entries data"
             showingExportProgressAlert = true
+        }
+    }
+    
+    // Export monthly report
+    func exportMonthlyReport(from viewController: UIViewController, sourceView: UIView, date: Date) {
+        print("Starting monthly report export for date: \(date)")
+        
+        // Ensure we're on the main thread for UI operations
+        DispatchQueue.main.async {
+            // Show a loading indicator
+            let alert = UIAlertController(title: "Generating Report", message: "Please wait...", preferredStyle: .alert)
+            viewController.present(alert, animated: true)
+            
+            // Do the export on a background thread
+            DispatchQueue.global(qos: .userInitiated).async {
+                if let url = DataExportManager.shared.exportMonthlyReport(for: date) {
+                    print("Monthly report created successfully: \(url)")
+                    
+                    // Return to main thread to dismiss alert and show share sheet
+                    DispatchQueue.main.async {
+                        // Dismiss the loading alert
+                        alert.dismiss(animated: true) {
+                            // Show the share sheet
+                            print("Showing share sheet for url: \(url)")
+                            let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+                            
+                            // For iPad support
+                            if let popoverController = activityVC.popoverPresentationController {
+                                popoverController.sourceView = sourceView
+                                popoverController.sourceRect = sourceView.bounds
+                            }
+                            
+                            viewController.present(activityVC, animated: true)
+                        }
+                    }
+                } else {
+                    print("Failed to create monthly report")
+                    
+                    // Return to main thread to dismiss alert and show error
+                    DispatchQueue.main.async {
+                        // Dismiss the loading alert
+                        alert.dismiss(animated: true) {
+                            // Show error alert
+                            let errorAlert = UIAlertController(
+                                title: "Export Failed",
+                                message: "Failed to create monthly report. Please try again.",
+                                preferredStyle: .alert
+                            )
+                            errorAlert.addAction(UIAlertAction(title: "OK", style: .default))
+                            viewController.present(errorAlert, animated: true)
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -232,6 +300,7 @@ struct SettingsView: View {
                 }
                 
                 Section(header: Text("Data Management")) {
+                    // Export Data Button
                     Button(action: {
                         if let sourceView = actionSourceView {
                             viewModel.showingExportActionSheet = true
@@ -253,6 +322,18 @@ struct SettingsView: View {
                         return Color.clear
                     })
                     
+                    // Monthly Report Button
+                    Button(action: {
+                        viewModel.showingMonthPicker = true
+                    }) {
+                        HStack {
+                            Image(systemName: "calendar")
+                                .foregroundColor(.blue)
+                            Text("Monthly Habit Report")
+                        }
+                    }
+                    
+                    // Import Backup Button
                     Button(action: {
                         viewModel.importData()
                     }) {
@@ -263,6 +344,7 @@ struct SettingsView: View {
                         }
                     }
                     
+                    // Clear Data Button
                     Button(action: {
                         viewModel.showingClearDataAlert = true
                     }) {
@@ -307,6 +389,12 @@ struct SettingsView: View {
                                 viewModel.exportHabitsCSV(from: rootVC, sourceView: sourceView)
                             }
                         },
+                        .default(Text("Export Habits with Statistics")) {
+                            if let rootVC = UIApplication.shared.windows.first?.rootViewController,
+                               let sourceView = actionSourceView {
+                                viewModel.exportHabitsCSVWithStats(from: rootVC, sourceView: sourceView)
+                            }
+                        },
                         .default(Text("Export Habit Entries as CSV")) {
                             if let rootVC = UIApplication.shared.windows.first?.rootViewController,
                                let sourceView = actionSourceView {
@@ -326,6 +414,24 @@ struct SettingsView: View {
             .sheet(isPresented: $viewModel.showingImportPicker) {
                 DocumentPickerView(delegate: viewModel.documentPickerDelegate) { url in
                     viewModel.processImportedFile(url: url)
+                }
+            }
+            .sheet(isPresented: $viewModel.showingMonthPicker) {
+                MonthPickerView(selectedMonth: $viewModel.selectedMonth) {
+                    if let rootVC = UIApplication.shared.windows.first?.rootViewController,
+                       let sourceView = actionSourceView {
+                        // Debug output
+                        print("Exporting monthly report for: \(viewModel.selectedMonth)")
+                        
+                        // Ensure the action is performed on the main thread
+                        DispatchQueue.main.async {
+                            viewModel.exportMonthlyReport(from: rootVC, sourceView: sourceView, date: viewModel.selectedMonth)
+                            viewModel.showingMonthPicker = false
+                        }
+                    } else {
+                        print("Error: rootVC or sourceView is nil")
+                        viewModel.showingMonthPicker = false
+                    }
                 }
             }
             .alert("Import Result", isPresented: $viewModel.showingImportResultAlert) {
@@ -349,6 +455,99 @@ struct SettingsView: View {
             .onAppear {
                 viewModel.setAppearance()
             }
+        }
+    }
+}
+
+// Month Picker Sheet for selecting a month for report export
+struct MonthPickerView: View {
+    @Binding var selectedMonth: Date
+    var onExport: () -> Void
+    @Environment(\.presentationMode) var presentationMode
+    
+    private let months = Calendar.current.shortMonthSymbols
+    private let years: [Int] = {
+        let currentYear = Calendar.current.component(.year, from: Date())
+        return [currentYear-1, currentYear]
+    }()
+    
+    @State private var selectedMonthIndex: Int
+    @State private var selectedYearIndex: Int
+    
+    init(selectedMonth: Binding<Date>, onExport: @escaping () -> Void) {
+        self._selectedMonth = selectedMonth
+        self.onExport = onExport
+        
+        // Initialize with current selection
+        let calendar = Calendar.current
+        let month = calendar.component(.month, from: selectedMonth.wrappedValue) - 1 // 0-based
+        let year = calendar.component(.year, from: selectedMonth.wrappedValue)
+        let yearIndex = years.firstIndex(of: year) ?? 0
+        
+        self._selectedMonthIndex = State(initialValue: month)
+        self._selectedYearIndex = State(initialValue: yearIndex)
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("Select Month for Report")
+                    .font(.headline)
+                    .padding(.top)
+                
+                HStack {
+                    Picker("Month", selection: $selectedMonthIndex) {
+                        ForEach(0..<months.count, id: \.self) { index in
+                            Text(months[index]).tag(index)
+                        }
+                    }
+                    .pickerStyle(WheelPickerStyle())
+                    .frame(width: 150)
+                    
+                    Picker("Year", selection: $selectedYearIndex) {
+                        ForEach(0..<years.count, id: \.self) { index in
+                            Text(String(format: "%d", years[index])).tag(index)
+                        }
+                    }
+                    .pickerStyle(WheelPickerStyle())
+                    .frame(width: 100)
+                }
+                .padding()
+                
+                Button(action: {
+                    updateSelectedDate()
+                    onExport()
+                }) {
+                    HStack {
+                        Image(systemName: "square.and.arrow.up")
+                        Text("Export Report")
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                }
+                .padding(.horizontal)
+                
+                Spacer()
+            }
+            .padding()
+            .navigationBarItems(trailing: Button("Cancel") {
+                presentationMode.wrappedValue.dismiss()
+            })
+        }
+    }
+    
+    private func updateSelectedDate() {
+        let calendar = Calendar.current
+        var components = DateComponents()
+        components.year = years[selectedYearIndex]
+        components.month = selectedMonthIndex + 1
+        components.day = 1
+        
+        if let date = calendar.date(from: components) {
+            selectedMonth = date
         }
     }
 }

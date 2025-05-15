@@ -61,6 +61,62 @@ class DataExportManager {
         }
     }
     
+    /// Exports habit data to CSV format with summary statistics
+    func exportHabitsToCSVWithStats() -> URL? {
+        let habits = CoreDataManager.shared.fetchAllHabits()
+        
+        // Create CSV header
+        var csvString = "Name,Icon,Color,Frequency,CustomDays,StartDate,Notes,MultiState,TrackDetails,DetailType,Order\n"
+        
+        // Add data rows
+        for habit in habits {
+            let row = [
+                escapeCSV(habit.name ?? ""),
+                escapeCSV(habit.icon ?? ""),
+                escapeCSV(habit.color ?? ""),
+                escapeCSV(habit.frequency ?? ""),
+                escapeCSV(habit.customDays ?? ""),
+                formatDate(habit.startDate ?? Date()),
+                escapeCSV(habit.notes ?? ""),
+                "\(habit.value(forKey: "useMultipleStates") as? Bool ?? false)",
+                "\(habit.value(forKey: "trackDetails") as? Bool ?? false)",
+                escapeCSV(habit.value(forKey: "detailType") as? String ?? ""),
+                "\(habit.order)"
+            ]
+            
+            csvString.append(row.joined(separator: ",") + "\n")
+        }
+        
+        // Add summary statistics section
+        csvString.append("\n# Summary Statistics\n")
+        csvString.append("Total Habits,\(habits.count)\n")
+        
+        // Count habits by frequency
+        let dailyCount = habits.filter { $0.frequency == "daily" }.count
+        let weekdaysCount = habits.filter { $0.frequency == "weekdays" }.count
+        let weekendsCount = habits.filter { $0.frequency == "weekends" }.count
+        let weeklyCount = habits.filter { $0.frequency == "weekly" }.count
+        let customCount = habits.filter { $0.frequency == "custom" }.count
+        
+        csvString.append("Daily Habits,\(dailyCount)\n")
+        csvString.append("Weekday Habits,\(weekdaysCount)\n")
+        csvString.append("Weekend Habits,\(weekendsCount)\n")
+        csvString.append("Weekly Habits,\(weeklyCount)\n")
+        csvString.append("Custom Schedule Habits,\(customCount)\n")
+        
+        // Create a file in the temporary directory
+        let fileName = "BulletTracker_Habits_\(formatDateForFilename(Date())).csv"
+        let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(fileName)
+        
+        do {
+            try csvString.write(to: tempURL, atomically: true, encoding: .utf8)
+            return tempURL
+        } catch {
+            print("Error writing CSV file: \(error)")
+            return nil
+        }
+    }
+    
     /// Exports habit entries data to CSV format
     func exportHabitEntriesToCSV() -> URL? {
         let habits = CoreDataManager.shared.fetchAllHabits()
@@ -95,6 +151,241 @@ class DataExportManager {
         } catch {
             print("Error writing CSV file: \(error)")
             return nil
+        }
+    }
+    
+    /// Exports a monthly report for habit tracking
+    func exportMonthlyReport(for date: Date) -> URL? {
+        let calendar = Calendar.current
+        
+        // Get the first and last day of the month
+        let components = calendar.dateComponents([.year, .month], from: date)
+        guard let startOfMonth = calendar.date(from: components),
+              let endOfMonth = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth) else {
+            print("Error calculating month date range")
+            return nil
+        }
+        
+        print("Generating monthly report from \(startOfMonth) to \(endOfMonth)")
+        
+        let habits = CoreDataManager.shared.fetchAllHabits()
+        print("Found \(habits.count) habits")
+        
+        // Create a formatted month name for the report
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "MMMM yyyy"
+        let monthTitle = dateFormatter.string(from: date)
+        
+        // Create simple report if no data is available
+        if habits.isEmpty {
+            // Create a simple report
+            var csvString = "Monthly Habit Report - \(monthTitle)\n\n"
+            csvString.append("No habits found in the system. Add habits to generate a detailed report.\n")
+            
+            // Create a file in the temporary directory
+            let fileName = "BulletTracker_MonthlyReport_\(formatDateForFilename(date)).csv"
+            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(fileName)
+            
+            do {
+                try csvString.write(to: tempURL, atomically: true, encoding: .utf8)
+                print("Successfully created empty monthly report at: \(tempURL)")
+                return tempURL
+            } catch {
+                print("Error writing monthly report file: \(error)")
+                return nil
+            }
+        }
+        
+        // Create the CSV header
+        var csvString = "Monthly Habit Report - \(monthTitle)\n\n"
+        csvString.append("Habit Name,Frequency,Success Rate,Success,Partial,Failed\n")
+        
+        // Get all habit entries for the month - manually since getHabitEntriesForDateRange might not be available
+        let entries = getHabitEntriesForRange(start: startOfMonth, end: endOfMonth)
+        print("Found \(entries.count) habit entries for the month")
+        
+        // Process each habit
+        for habit in habits {
+            guard let habitId = habit.id else { continue }
+            
+            // Calculate expected completions for this habit in the month
+            var expectedCompletions = 0
+            var currentDate = startOfMonth
+            while currentDate <= endOfMonth {
+                if shouldPerformHabit(habit, on: currentDate) {
+                    expectedCompletions += 1
+                }
+                currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate)!
+            }
+            
+            // Get actual completions
+            let habitEntries = entries.filter { $0.habit?.id == habitId }
+            let actualCompletions = habitEntries.count
+            
+            // Count by state if habit uses multiple states
+            let useMultipleStates = habit.value(forKey: "useMultipleStates") as? Bool ?? false
+            var successCount = 0
+            var partialCount = 0
+            var failedCount = 0
+            
+            if useMultipleStates {
+                for entry in habitEntries {
+                    let state = entry.value(forKey: "completionState") as? Int ?? 1
+                    switch state {
+                    case 1: successCount += 1
+                    case 2: partialCount += 1
+                    case 3: failedCount += 1
+                    default: break
+                    }
+                }
+            } else {
+                // If not using multiple states, all completions are successes
+                successCount = actualCompletions
+            }
+            
+            // Calculate success rate
+            let successRate = expectedCompletions > 0 ? Double(successCount) / Double(expectedCompletions) : 0
+            let successRateFormatted = String(format: "%.1f%%", successRate * 100)
+            
+            // Create the row - different format based on whether it's multi-state or binary
+            let row: [String]
+            
+            if useMultipleStates {
+                // Multi-state habit format (with success/partial/failed columns)
+                row = [
+                    escapeCSV(habit.name ?? ""),
+                    escapeCSV(getFrequencyDescription(habit)),
+                    successRateFormatted,
+                    "\(successCount)/\(expectedCompletions)", // Success fraction
+                    "\(partialCount)/\(expectedCompletions)", // Partial fraction
+                    "\(failedCount)/\(expectedCompletions)"   // Failed fraction
+                ]
+            } else {
+                // Binary habit format (without partial/failed columns)
+                row = [
+                    escapeCSV(habit.name ?? ""),
+                    escapeCSV(getFrequencyDescription(habit)),
+                    successRateFormatted,
+                    "\(successCount)/\(expectedCompletions)", // Success fraction
+                    "", // Empty partial column
+                    ""  // Empty failed column
+                ]
+            }
+            
+            csvString.append(row.joined(separator: ",") + "\n")
+            
+            csvString.append(row.joined(separator: ",") + "\n")
+        }
+        
+        // Add summary section
+        csvString.append("\n# Month Summary\n")
+        
+        // Calculate overall statistics
+        let totalExpectedCompletions = habits.reduce(0) { total, habit in
+            var expectedForHabit = 0
+            var currentDate = startOfMonth
+            while currentDate <= endOfMonth {
+                if shouldPerformHabit(habit, on: currentDate) {
+                    expectedForHabit += 1
+                }
+                currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate)!
+            }
+            return total + expectedForHabit
+        }
+        
+        let totalActualCompletions = entries.count
+        let overallSuccessRate = totalExpectedCompletions > 0 ? Double(totalActualCompletions) / Double(totalExpectedCompletions) : 0
+        
+        csvString.append("Total Expected Completions,\(totalExpectedCompletions)\n")
+        csvString.append("Total Actual Completions,\(totalActualCompletions)\n")
+        csvString.append("Overall Success Rate,\(String(format: "%.1f%%", overallSuccessRate * 100))\n")
+        
+        // Calculate total success completions
+        let totalSuccessCompletions = entries.filter { entry in
+            let habit = entry.habit
+            let useMultipleStates = habit?.value(forKey: "useMultipleStates") as? Bool ?? false
+            if useMultipleStates {
+                return (entry.value(forKey: "completionState") as? Int ?? 1) == 1
+            } else {
+                return true
+            }
+        }.count
+        
+        csvString.append("Overall Completion Fraction,\(totalSuccessCompletions)/\(totalExpectedCompletions)\n")
+        
+        // Calculate most and least successful habits
+        if !habits.isEmpty {
+            var habitSuccessRates: [(Habit, Double)] = []
+            
+            for habit in habits {
+                guard let habitId = habit.id else { continue }
+                
+                // Calculate expected completions
+                var expectedForHabit = 0
+                var currentDate = startOfMonth
+                while currentDate <= endOfMonth {
+                    if shouldPerformHabit(habit, on: currentDate) {
+                        expectedForHabit += 1
+                    }
+                    currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate)!
+                }
+                
+                if expectedForHabit > 0 {
+                    // Calculate actual successful completions
+                    let habitEntries = entries.filter { $0.habit?.id == habitId }
+                    let successCount = habitEntries.filter {
+                        ($0.value(forKey: "completionState") as? Int ?? 1) == 1 ||
+                        !(habit.value(forKey: "useMultipleStates") as? Bool ?? false)
+                    }.count
+                    
+                    let successRate = Double(successCount) / Double(expectedForHabit)
+                    habitSuccessRates.append((habit, successRate))
+                }
+            }
+            
+            // Sort by success rate
+            habitSuccessRates.sort { $0.1 > $1.1 }
+            
+            if let mostSuccessful = habitSuccessRates.first {
+                csvString.append("Most Successful Habit,\(escapeCSV(mostSuccessful.0.name ?? "")),\(String(format: "%.1f%%", mostSuccessful.1 * 100))\n")
+            }
+            
+            if habitSuccessRates.count > 1, let leastSuccessful = habitSuccessRates.last {
+                csvString.append("Least Successful Habit,\(escapeCSV(leastSuccessful.0.name ?? "")),\(String(format: "%.1f%%", leastSuccessful.1 * 100))\n")
+            }
+        }
+        
+        // Create a file in the temporary directory
+        let fileName = "BulletTracker_MonthlyReport_\(formatDateForFilename(date)).csv"
+        let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(fileName)
+        
+        do {
+            try csvString.write(to: tempURL, atomically: true, encoding: .utf8)
+            print("Successfully created monthly report at: \(tempURL)")
+            return tempURL
+        } catch {
+            print("Error writing monthly report file: \(error)")
+            return nil
+        }
+    }
+    
+    // Custom implementation to get habit entries for a date range
+    private func getHabitEntriesForRange(start: Date, end: Date) -> [HabitEntry] {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: start)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: end)!
+        
+        let context = CoreDataManager.shared.container.viewContext
+        let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "date >= %@ AND date < %@", startOfDay as NSDate, endOfDay as NSDate)
+        
+        do {
+            let results = try context.fetch(fetchRequest)
+            print("Found \(results.count) entries between \(startOfDay) and \(endOfDay)")
+            return results
+        } catch {
+            print("Error fetching habit entries for date range: \(error)")
+            return []
         }
     }
     
@@ -592,6 +883,65 @@ class DataExportManager {
         formatter.dateFormat = "yyyyMMdd_HHmmss"
         return formatter.string(from: date)
     }
+    
+    // Convert frequency to readable description
+    private func getFrequencyDescription(_ habit: Habit) -> String {
+        guard let frequency = habit.frequency else { return "Unknown" }
+        
+        switch frequency {
+        case "daily":
+            return "Daily"
+        case "weekdays":
+            return "Weekdays (Mon-Fri)"
+        case "weekends":
+            return "Weekends (Sat-Sun)"
+        case "weekly":
+            return "Weekly"
+        case "custom":
+            if let customDays = habit.customDays, !customDays.isEmpty {
+                return "Custom (\(customDays))"
+            } else {
+                return "Custom"
+            }
+        default:
+            return frequency.capitalized
+        }
+    }
+    
+    // Helper method to determine if a habit should be performed on a given date
+    private func shouldPerformHabit(_ habit: Habit, on date: Date) -> Bool {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: date) // 1 is Sunday, 7 is Saturday
+        
+        switch habit.frequency {
+        case "daily":
+            return true
+            
+        case "weekdays":
+            // Weekdays are 2-6 (Monday-Friday)
+            return weekday >= 2 && weekday <= 6
+            
+        case "weekends":
+            // Weekends are 1 and 7 (Sunday and Saturday)
+            return weekday == 1 || weekday == 7
+            
+        case "weekly":
+            // Assume the habit should be done on the same day of the week as it was started
+            if let startDate = habit.startDate {
+                let startWeekday = calendar.component(.weekday, from: startDate)
+                return weekday == startWeekday
+            }
+            return false
+            
+        case "custom":
+            // Custom days format: "1,3,5" for Sun, Tue, Thu
+            let customDays = habit.customDays?.components(separatedBy: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) } ?? []
+            return customDays.contains(weekday)
+            
+        default:
+            return false
+        }
+    }
 }
 
 // Extension to CoreDataManager to add data clearing functionality
@@ -614,4 +964,6 @@ extension CoreDataManager {
         // Reset context
         context.reset()
     }
+    
+    
 }
