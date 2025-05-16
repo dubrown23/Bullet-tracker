@@ -2,17 +2,27 @@
 //  SettingsView.swift
 //  Bullet Tracker
 //
-//  Updated by Dustin Brown on 5/12/25.
+//  Updated by Dustin Brown on 5/15/25.
 //
 
 import SwiftUI
 import CoreData
 import UniformTypeIdentifiers
 
+// Document picker delegate to handle file imports
+class DocumentPickerDelegate: NSObject, ObservableObject, UIDocumentPickerDelegate {
+    var onDocumentsPicked: ((URL) -> Void)?
+    
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard let url = urls.first else { return }
+        onDocumentsPicked?(url)
+    }
+}
+
 class SettingsViewModel: ObservableObject {
     @Published var useDarkMode: Bool = UserDefaults.standard.bool(forKey: "useDarkMode")
     @Published var reminderEnabled: Bool = UserDefaults.standard.bool(forKey: "reminderEnabled")
-    @Published var reminderTime: Date = UserDefaults.standard.object(forKey: "reminderTime") as? Date ?? Calendar.current.date(from: DateComponents(hour: 20, minute: 0))!
+    @Published var reminderTime: Date = UserDefaults.standard.object(forKey: "reminderTime") as? Date ?? Calendar.current.date(from: DateComponents(hour: 20, minute: 0)) ?? Date()
     
     @Published var showingExportActionSheet = false
     @Published var showingImportPicker = false
@@ -257,16 +267,6 @@ class SettingsViewModel: ObservableObject {
     }
 }
 
-// Document picker delegate to handle file imports
-class DocumentPickerDelegate: NSObject, ObservableObject, UIDocumentPickerDelegate {
-    var onDocumentsPicked: ((URL) -> Void)?
-    
-    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        guard let url = urls.first else { return }
-        onDocumentsPicked?(url)
-    }
-}
-
 struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
     @State private var showingActionSheet = false
@@ -300,6 +300,15 @@ struct SettingsView: View {
                 }
                 
                 Section(header: Text("Data Management")) {
+                    // New Backup & Restore Link
+                    NavigationLink(destination: BackupRestoreView()) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise.icloud")
+                                .foregroundColor(.blue)
+                            Text("Backup & Restore")
+                        }
+                    }
+                    
                     // Export Data Button
                     Button(action: {
                         if let sourceView = actionSourceView {
@@ -412,7 +421,7 @@ struct SettingsView: View {
                 )
             }
             .sheet(isPresented: $viewModel.showingImportPicker) {
-                DocumentPickerView(delegate: viewModel.documentPickerDelegate) { url in
+                ImportDocumentPickerView(delegate: viewModel.documentPickerDelegate) { url in
                     viewModel.processImportedFile(url: url)
                 }
             }
@@ -552,8 +561,8 @@ struct MonthPickerView: View {
     }
 }
 
-// View to wrap UIDocumentPickerViewController
-struct DocumentPickerView: UIViewControllerRepresentable {
+// View to wrap UIDocumentPickerViewController for the settings view
+struct ImportDocumentPickerView: UIViewControllerRepresentable {
     var delegate: DocumentPickerDelegate
     var onPick: (URL) -> Void
     

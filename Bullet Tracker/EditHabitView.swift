@@ -5,14 +5,6 @@
 //  Created by Dustin Brown on 5/12/25.
 //
 
-
-//
-//  EditHabitView.swift
-//  Bullet Tracker
-//
-//  Created by Dustin Brown on 5/12/25.
-//
-
 import SwiftUI
 import CoreData
 
@@ -29,6 +21,11 @@ struct EditHabitView: View {
     @State private var selectedCollection: Collection?
     @State private var collections: [Collection] = []
     @State private var showingDeleteAlert = false
+    
+    // Added state variables for tracking options
+    @State private var trackDetails: Bool = false
+    @State private var detailType: String = "general"
+    @State private var useMultipleStates: Bool = false
     
     // Available color options
     let colorOptions = [
@@ -73,6 +70,14 @@ struct EditHabitView: View {
         ("weekends", "Weekends Only"),
         ("weekly", "Once a Week"),
         ("custom", "Custom Days")
+    ]
+    
+    // Detail type options
+    let detailTypeOptions = [
+        ("general", "General Notes"),
+        ("workout", "Workout Details"),
+        ("reading", "Reading Log"),
+        ("mood", "Mood Tracking")
     ]
     
     // Days of the week for custom selection
@@ -170,6 +175,45 @@ struct EditHabitView: View {
                     }
                 }
                 
+                // Added Tracking Options Section
+                Section(header: Text("Tracking Options")) {
+                    // Detail tracking toggle
+                    Toggle("Track Additional Details", isOn: $trackDetails)
+                    
+                    if trackDetails {
+                        Picker("Detail Type", selection: $detailType) {
+                            ForEach(detailTypeOptions, id: \.0) { option in
+                                Text(option.1).tag(option.0)
+                            }
+                        }
+                        
+                        Text("You'll be prompted to add details each time you complete this habit.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    // Multi-state tracking toggle
+                    Toggle("Use Multiple Completion States", isOn: $useMultipleStates)
+                    
+                    if useMultipleStates {
+                        Text("This habit will track success, partial success, and failure states separately.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Text("• Success (✓): Full completion")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                        
+                        Text("• Partial (⚬): Did some but not all")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                        
+                        Text("• Failure (✗): Attempted but struggled")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                }
+                
                 Section(header: Text("Collection")) {
                     Picker("Add to Collection", selection: $selectedCollection) {
                         Text("None").tag(nil as Collection?)
@@ -233,6 +277,11 @@ struct EditHabitView: View {
         if let customDaysString = habit.customDays, !customDaysString.isEmpty {
             customDays = customDaysString.components(separatedBy: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
         }
+        
+        // Load tracking options
+        trackDetails = (habit.value(forKey: "trackDetails") as? Bool) ?? false
+        detailType = (habit.value(forKey: "detailType") as? String) ?? "general"
+        useMultipleStates = (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
     }
     
     private func loadCollections() {
@@ -260,6 +309,14 @@ struct EditHabitView: View {
             notes: notes,
             collection: selectedCollection
         )
+        
+        // Update tracking options using the dynamic properties
+        habit.setValue(trackDetails, forKey: "trackDetails")
+        habit.setValue(detailType, forKey: "detailType")
+        habit.setValue(useMultipleStates, forKey: "useMultipleStates")
+        
+        // Save context after updating the dynamic properties
+        CoreDataManager.shared.saveContext()
         
         presentationMode.wrappedValue.dismiss()
     }

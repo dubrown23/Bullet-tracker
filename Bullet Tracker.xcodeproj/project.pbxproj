@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535962DD62DAE008BBCD8 /* BackupManager.swift */; };
+		77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		7783B26E2DD2894D0008E0F3 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +32,8 @@
 		7783B25B2DD2894B0008E0F3 /* Bullet Tracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Bullet Tracker.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7783B26D2DD2894D0008E0F3 /* Bullet TrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Bullet TrackerTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7783B2772DD2894D0008E0F3 /* Bullet TrackerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Bullet TrackerUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		77B535962DD62DAE008BBCD8 /* BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManager.swift; sourceTree = "<group>"; };
+		77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRestoreViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -79,6 +86,8 @@
 				7783B2702DD2894D0008E0F3 /* Bullet TrackerTests */,
 				7783B27A2DD2894D0008E0F3 /* Bullet TrackerUITests */,
 				7783B25C2DD2894B0008E0F3 /* Products */,
+				77B535962DD62DAE008BBCD8 /* BackupManager.swift */,
+				77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -236,6 +245,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */,
+				77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
