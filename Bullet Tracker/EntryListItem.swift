@@ -5,20 +5,31 @@
 //  Created by Dustin Brown on 5/12/25.
 //
 
-
 import SwiftUI
 import CoreData
 
-// Helper view for entry list items
 struct EntryListItem: View {
+    // MARK: - Properties
+    
     @ObservedObject var entry: JournalEntry
+    
+    // MARK: - Computed Properties
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }
+    
+    // MARK: - Body
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 // Symbol based on entry type
                 getEntryTypeIcon()
-                    .foregroundColor(getEntryColor())
+                    .foregroundStyle(getEntryColor())
                     .font(.headline)
                 
                 Text(entry.content ?? "")
@@ -30,7 +41,7 @@ struct EntryListItem: View {
                 if let date = entry.date {
                     Text(dateFormatter.string(from: date))
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 
                 Spacer()
@@ -41,13 +52,13 @@ struct EntryListItem: View {
                         ForEach(Array(tags).prefix(3), id: \.self) { tag in
                             Text("#\(tag.name ?? "")")
                                 .font(.caption)
-                                .foregroundColor(.blue)
+                                .foregroundStyle(.blue)
                         }
                         
                         if tags.count > 3 {
                             Text("+\(tags.count - 3) more")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -56,6 +67,9 @@ struct EntryListItem: View {
         .padding(.vertical, 4)
     }
     
+    // MARK: - Helper Methods
+    
+    /// Returns the appropriate SF Symbol icon for the entry type
     private func getEntryTypeIcon() -> some View {
         switch entry.entryType {
         case "task":
@@ -67,6 +81,7 @@ struct EntryListItem: View {
         }
     }
     
+    /// Returns the appropriate color for the entry based on type and status
     private func getEntryColor() -> Color {
         switch entry.entryType {
         case "task":
@@ -77,11 +92,17 @@ struct EntryListItem: View {
             return .gray
         }
     }
+}
+
+// MARK: - Preview
+
+#Preview {
+    let context = CoreDataManager.shared.container.viewContext
+    let entry = JournalEntry(context: context)
+    entry.content = "Sample task"
+    entry.entryType = "task"
+    entry.date = Date()
     
-    private var dateFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
-    }
+    return EntryListItem(entry: entry)
+        .padding()
 }

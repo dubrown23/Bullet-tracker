@@ -2,8 +2,13 @@ import SwiftUI
 import CoreData
 
 struct HabitCheckboxView: View {
+    // MARK: - Properties
+    
     @ObservedObject var habit: Habit
     let date: Date
+    
+    // MARK: - State Properties
+    
     @State private var isChecked: Bool = false
     @State private var completionState: Int = 0 // 0: none, 1: success, 2: partial, 3: failure
     @State private var isAnimating: Bool = false
@@ -11,9 +16,10 @@ struct HabitCheckboxView: View {
     @State private var showingDetailView: Bool = false
     @State private var shouldPromptForDetails: Bool = false
     
+    // MARK: - Body
+    
     var body: some View {
         Button(action: {
-            // Toggle with multi-state if enabled
             toggleHabitWithState()
             
             // If we just completed a habit that should track details, show the detail view
@@ -23,73 +29,12 @@ struct HabitCheckboxView: View {
                 }
             }
         }) {
-            ZStack {
-                Circle()
-                    .strokeBorder(getStateColor(), lineWidth: isChecked ? 0 : 1)
-                    .background(
-                        Circle()
-                            .fill(isChecked ? getStateColor() : Color.clear)
-                    )
-                    .frame(width: 28, height: 28)
-                    .scaleEffect(isAnimating ? 1.2 : 1.0)
-                
-                if isChecked {
-                    Image(systemName: getStateIcon())
-                        .foregroundColor(.white)
-                        .font(.system(size: 12, weight: .bold))
-                        .opacity(isAnimating ? 0.0 : 1.0)
-                }
-                
-                // Show a note indicator if there are details
-                if hasDetails && isChecked {
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 12, height: 12)
-                        .overlay(
-                            Image(systemName: "note.text")
-                                .font(.system(size: 8))
-                                .foregroundColor(getStateColor())
-                        )
-                        .offset(x: 12, y: -12)
-                }
-            }
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isAnimating)
+            checkboxContent
         }
         .buttonStyle(PlainButtonStyle())
         .frame(width: 44, height: 44)
         .contextMenu {
-            if isChecked {
-                // Add option to edit details
-                Button(action: {
-                    showingDetailView = true
-                }) {
-                    Label("Add/Edit Details", systemImage: "square.and.pencil")
-                }
-                
-                Button(action: {
-                    // Uncheck
-                    toggleHabit()
-                }) {
-                    Label("Uncheck", systemImage: "circle")
-                }
-            } else {
-                Button(action: {
-                    // Check
-                    toggleHabit()
-                }) {
-                    Label("Complete", systemImage: "checkmark.circle")
-                }
-                
-                // Option to complete with details
-                Button(action: {
-                    toggleHabit()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        showingDetailView = true
-                    }
-                }) {
-                    Label("Complete With Details", systemImage: "checkmark.circle.fill")
-                }
-            }
+            contextMenuContent
         }
         .sheet(isPresented: $showingDetailView) {
             checkHabitStatus() // Refresh status when dismissing the detail view
@@ -97,7 +42,6 @@ struct HabitCheckboxView: View {
             HabitCompletionDetailView(habit: habit, date: date)
         }
         .onLongPressGesture {
-            // On long press, show details
             showingDetailView = true
         }
         .onAppear {
@@ -106,16 +50,91 @@ struct HabitCheckboxView: View {
         }
     }
     
-    // Helper method to check if details should be tracked
+    // MARK: - View Components
+    
+    private var checkboxContent: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(getStateColor(), lineWidth: isChecked ? 0 : 1)
+                .background(
+                    Circle()
+                        .fill(isChecked ? getStateColor() : Color.clear)
+                )
+                .frame(width: 28, height: 28)
+                .scaleEffect(isAnimating ? 1.2 : 1.0)
+            
+            if isChecked {
+                Image(systemName: getStateIcon())
+                    .foregroundStyle(.white)
+                    .font(.system(size: 12, weight: .bold))
+                    .opacity(isAnimating ? 0.0 : 1.0)
+            }
+            
+            // Show a note indicator if there are details
+            if hasDetails && isChecked {
+                detailIndicator
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isAnimating)
+    }
+    
+    private var detailIndicator: some View {
+        Circle()
+            .fill(Color.white)
+            .frame(width: 12, height: 12)
+            .overlay(
+                Image(systemName: "note.text")
+                    .font(.system(size: 8))
+                    .foregroundStyle(getStateColor())
+            )
+            .offset(x: 12, y: -12)
+    }
+    
+    @ViewBuilder
+    private var contextMenuContent: some View {
+        if isChecked {
+            Button(action: {
+                showingDetailView = true
+            }) {
+                Label("Add/Edit Details", systemImage: "square.and.pencil")
+            }
+            
+            Button(action: {
+                toggleHabit()
+            }) {
+                Label("Uncheck", systemImage: "circle")
+            }
+        } else {
+            Button(action: {
+                toggleHabit()
+            }) {
+                Label("Complete", systemImage: "checkmark.circle")
+            }
+            
+            Button(action: {
+                toggleHabit()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showingDetailView = true
+                }
+            }) {
+                Label("Complete With Details", systemImage: "checkmark.circle.fill")
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    /// Checks if details should be tracked for this habit
     private func shouldTrackDetailsForHabit() -> Bool {
         return (habit.value(forKey: "trackDetails") as? Bool) ?? false
     }
     
-    // Helper method to check if multiple states are used
+    /// Checks if multiple completion states are enabled
     private func useMultipleStates() -> Bool {
         return (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
     }
     
+    /// Returns the appropriate color based on completion state
     private func getStateColor() -> Color {
         if !useMultipleStates() || completionState == 1 {
             return Color(hex: habit.color ?? "#007AFF") // Default or success
@@ -127,6 +146,7 @@ struct HabitCheckboxView: View {
         return Color(hex: habit.color ?? "#007AFF") // Default
     }
     
+    /// Returns the appropriate icon based on completion state
     private func getStateIcon() -> String {
         if !useMultipleStates() || completionState == 1 {
             return "checkmark" // Default or success
@@ -138,6 +158,7 @@ struct HabitCheckboxView: View {
         return "checkmark" // Default
     }
     
+    /// Checks the current habit completion status for the date
     private func checkHabitStatus() {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
@@ -170,21 +191,26 @@ struct HabitCheckboxView: View {
                 hasDetails = false
             }
         } catch {
+            #if DEBUG
             print("Error checking habit status: \(error)")
+            #endif
             isChecked = false
             completionState = 0
             hasDetails = false
         }
     }
     
+    /// Toggles the habit completion status
     private func toggleHabit() {
         // Check if date is in the future
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         let checkDate = calendar.startOfDay(for: date)
         
-        if checkDate > today {
+        guard checkDate <= today else {
+            #if DEBUG
             print("Cannot complete habits in the future")
+            #endif
             return
         }
         
@@ -208,14 +234,17 @@ struct HabitCheckboxView: View {
         generator.impactOccurred()
     }
     
+    /// Toggles habit with multi-state support
     private func toggleHabitWithState() {
         // Check if date is in the future
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         let checkDate = calendar.startOfDay(for: date)
         
-        if checkDate > today {
+        guard checkDate <= today else {
+            #if DEBUG
             print("Cannot complete habits in the future")
+            #endif
             return
         }
         
@@ -266,7 +295,7 @@ struct HabitCheckboxView: View {
         generator.impactOccurred()
     }
     
-    // Create or update habit entry with state
+    /// Creates or updates a habit entry with the specified completion state
     private func createOrUpdateHabitEntry(state: Int) {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
@@ -296,11 +325,13 @@ struct HabitCheckboxView: View {
             
             try context.save()
         } catch {
+            #if DEBUG
             print("Error creating/updating habit entry: \(error)")
+            #endif
         }
     }
     
-    // Delete habit entry
+    /// Deletes the habit entry for the current date
     private func deleteHabitEntry() {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
@@ -319,7 +350,21 @@ struct HabitCheckboxView: View {
                 try context.save()
             }
         } catch {
+            #if DEBUG
             print("Error deleting habit entry: \(error)")
+            #endif
         }
     }
+}
+
+// MARK: - Preview
+
+#Preview {
+    let context = CoreDataManager.shared.container.viewContext
+    let habit = Habit(context: context)
+    habit.name = "Sample Habit"
+    habit.color = "#007AFF"
+    
+    return HabitCheckboxView(habit: habit, date: Date())
+        .padding()
 }

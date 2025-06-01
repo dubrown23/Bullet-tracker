@@ -5,55 +5,86 @@
 //  Created by Dustin Brown on 5/12/25.
 //
 
-
 import SwiftUI
 
 struct SimplestEntryView: View {
+    // MARK: - Properties
+    
     let date: Date
     
-    @State private var content: String = ""
+    // MARK: - Environment Properties
+    
     @Environment(\.managedObjectContext) private var viewContext
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
+    
+    // MARK: - State Properties
+    
+    @State private var content: String = ""
+    
+    // MARK: - Computed Properties
+    
+    /// Determines if the save button should be disabled
+    private var isSaveDisabled: Bool {
+        content.isEmpty
+    }
+    
+    // MARK: - Body
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
-                Section(header: Text("Simple Entry")) {
-                    TextField("Content", text: $content)
-                }
+                entrySection
             }
             .navigationTitle("Quick Note")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveBasicEntry()
-                    }
-                    .disabled(content.isEmpty)
-                }
+                toolbarContent
             }
         }
     }
     
+    // MARK: - View Components
+    
+    private var entrySection: some View {
+        Section(header: Text("Simple Entry")) {
+            TextField("Content", text: $content)
+        }
+    }
+    
+    // MARK: - Toolbar Components
+    
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button("Cancel") {
+                dismiss()
+            }
+        }
+        
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button("Save") {
+                saveBasicEntry()
+            }
+            .disabled(isSaveDisabled)
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    /// Saves a basic journal entry to Core Data
     private func saveBasicEntry() {
-        // Create the entry directly without using CoreDataManager
         let entry = JournalEntry(context: viewContext)
         entry.id = UUID()
         entry.content = content
         entry.date = date
-        entry.entryType = "note" // Simplest type
+        entry.entryType = "note"
         
-        // Save the context
         do {
             try viewContext.save()
-            presentationMode.wrappedValue.dismiss()
+            dismiss()
         } catch {
+            #if DEBUG
             print("Error saving entry: \(error)")
+            #endif
         }
     }
 }

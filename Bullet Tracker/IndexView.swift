@@ -5,164 +5,246 @@
 //  Created by Dustin Brown on 5/12/25.
 //
 
-
 import SwiftUI
 import CoreData
 
+// MARK: - View Model
+
 class IndexViewModel: ObservableObject {
+    // MARK: - Published Properties
+    
     @Published var searchText: String = ""
     @Published var entries: [JournalEntry] = []
     @Published var selectedEntry: JournalEntry? = nil
     
+    // MARK: - Constants
+    
+    private let recentEntriesLimit = 50
+    
+    // MARK: - Public Methods
+    
+    /// Searches journal entries based on the current search text
     func searchEntries() {
-        // If search is empty, just show recent entries
         let context = CoreDataManager.shared.container.viewContext
         let fetchRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
         
-        if !searchText.isEmpty {
-            // Create predicates for different fields to search
-            let contentPredicate = NSPredicate(format: "content CONTAINS[cd] %@", searchText)
-            let tagPredicate = NSPredicate(format: "ANY tags.name CONTAINS[cd] %@", searchText)
-            
-            // Combine predicates with OR
-            let combinedPredicate = NSCompoundPredicate(orPredicateWithSubpredicates: [contentPredicate, tagPredicate])
-            fetchRequest.predicate = combinedPredicate
-        }
+        configureSearchPredicate(for: fetchRequest)
+        configureSortDescriptors(for: fetchRequest)
         
-        // Sort by date, newest first
-        fetchRequest.sortDescriptors = [NSSortDescriptor(key: "date", ascending: false)]
-        
-        // Limit results if no search is active
         if searchText.isEmpty {
-            fetchRequest.fetchLimit = 50 // Show most recent entries
+            fetchRequest.fetchLimit = recentEntriesLimit
         }
         
         do {
             entries = try context.fetch(fetchRequest)
+            #if DEBUG
             print("Found \(entries.count) entries")
+            #endif
         } catch {
+            #if DEBUG
             print("Error searching entries: \(error)")
+            #endif
             entries = []
         }
     }
+    
+    // MARK: - Private Methods
+    
+    /// Configures the search predicate based on the search text
+    private func configureSearchPredicate(for fetchRequest: NSFetchRequest<JournalEntry>) {
+        guard !searchText.isEmpty else { return }
+        
+        let contentPredicate = NSPredicate(
+            format: "content CONTAINS[cd] %@",
+            searchText
+        )
+        let tagPredicate = NSPredicate(
+            format: "ANY tags.name CONTAINS[cd] %@",
+            searchText
+        )
+        
+        fetchRequest.predicate = NSCompoundPredicate(
+            orPredicateWithSubpredicates: [contentPredicate, tagPredicate]
+        )
+    }
+    
+    /// Configures sort descriptors to show newest entries first
+    private func configureSortDescriptors(for fetchRequest: NSFetchRequest<JournalEntry>) {
+        fetchRequest.sortDescriptors = [
+            NSSortDescriptor(key: "date", ascending: false)
+        ]
+    }
 }
 
+// MARK: - Main View
+
 struct IndexView: View {
+    // MARK: - State Properties
+    
     @StateObject private var viewModel = IndexViewModel()
     
+    // MARK: - Body
+    
     var body: some View {
-        NavigationView {
-            VStack {
-                // Search bar
-                SearchBar(text: $viewModel.searchText, onSearchChanged: {
-                    viewModel.searchEntries()
-                })
-                .padding(.horizontal)
-                .padding(.top, 8)
+        NavigationStack {
+            VStack(spacing: 0) {
+                searchBar
                 
-                if viewModel.entries.isEmpty {
-                    if viewModel.searchText.isEmpty {
-                        // Initial state - no search has been performed yet
-                        VStack {
-                            Spacer()
-                            
-                            Image(systemName: "doc.text.magnifyingglass")
-                                .font(.system(size: 70))
-                                .foregroundColor(.gray)
-                            
-                            Text("Your Journal Index")
-                                .font(.title2)
-                                .padding(.top)
-                            
-                            Text("Search for entries or browse your recent entries")
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding()
-                            
-                            Spacer()
-                        }
-                    } else {
-                        // No results for search
-                        VStack {
-                            Spacer()
-                            
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 70))
-                                .foregroundColor(.gray)
-                            
-                            Text("No Results")
-                                .font(.title2)
-                                .padding(.top)
-                            
-                            Text("No entries found matching '\(viewModel.searchText)'")
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding()
-                            
-                            Spacer()
-                        }
-                    }
-                } else {
-                    List {
-                        // Results header
-                        if !viewModel.searchText.isEmpty {
-                            Text("\(viewModel.entries.count) entries found")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .listRowBackground(Color.clear)
-                        }
-                        
-                        ForEach(viewModel.entries) { entry in
-                            EntryListItem(entry: entry)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    viewModel.selectedEntry = entry
-                                }
-                        }
-                    }
-                    .listStyle(PlainListStyle())
-                }
+                contentView
             }
             .navigationTitle("Index")
             .onAppear {
-                viewModel.searchEntries() // Load recent entries on appear
+                viewModel.searchEntries()
             }
             .sheet(item: $viewModel.selectedEntry) { entry in
                 EditEntryView(entry: entry)
             }
         }
     }
+    
+    // MARK: - View Components
+    
+    private var searchBar: some View {
+        SearchBar(text: $viewModel.searchText) {
+            viewModel.searchEntries()
+        }
+        .padding(.horizontal)
+        .padding(.top, 8)
+    }
+    
+    private var contentView: some View {
+        Group {
+            if viewModel.entries.isEmpty {
+                emptyStateView
+            } else {
+                entriesListView
+            }
+        }
+    }
+    
+    private var emptyStateView: some View {
+        Group {
+            if viewModel.searchText.isEmpty {
+                initialStateView
+            } else {
+                noResultsView
+            }
+        }
+    }
+    
+    private var initialStateView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.system(size: 70))
+                .foregroundStyle(.secondary)
+            
+            Text("Your Journal Index")
+                .font(.title2)
+            
+            Text("Search for entries or browse your recent entries")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            Spacer()
+        }
+    }
+    
+    private var noResultsView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 70))
+                .foregroundStyle(.secondary)
+            
+            Text("No Results")
+                .font(.title2)
+            
+            Text("No entries found matching '\(viewModel.searchText)'")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            Spacer()
+        }
+    }
+    
+    private var entriesListView: some View {
+        List {
+            if !viewModel.searchText.isEmpty {
+                resultsHeader
+            }
+            
+            entriesSection
+        }
+        .listStyle(.plain)
+    }
+    
+    private var resultsHeader: some View {
+        Text("\(viewModel.entries.count) entries found")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .listRowBackground(Color.clear)
+    }
+    
+    private var entriesSection: some View {
+        ForEach(viewModel.entries) { entry in
+            EntryListItem(entry: entry)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    viewModel.selectedEntry = entry
+                }
+        }
+    }
 }
 
-// Custom Search Bar
+// MARK: - Supporting Views
+
 struct SearchBar: View {
+    // MARK: - Properties
+    
     @Binding var text: String
-    var onSearchChanged: () -> Void
+    let onSearchChanged: () -> Void
+    
+    // MARK: - Body
     
     var body: some View {
         HStack {
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.gray)
-                
-                TextField("Search entries", text: $text)
-                    .onChange(of: text) { _ in
-                        onSearchChanged()
-                    }
-                
-                if !text.isEmpty {
-                    Button(action: {
-                        text = ""
-                        onSearchChanged()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.gray)
-                    }
+            searchField
+        }
+    }
+    
+    // MARK: - View Components
+    
+    private var searchField: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            
+            TextField("Search entries", text: $text)
+                .onChange(of: text) { _, _ in
+                    onSearchChanged()
                 }
+            
+            if !text.isEmpty {
+                clearButton
             }
-            .padding(8)
-            .background(Color(.systemGray6))
-            .cornerRadius(10)
+        }
+        .padding(8)
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+    }
+    
+    private var clearButton: some View {
+        Button {
+            text = ""
+            onSearchChanged()
+        } label: {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.secondary)
         }
     }
 }

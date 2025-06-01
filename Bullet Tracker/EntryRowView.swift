@@ -5,13 +5,22 @@
 //  Created by Dustin Brown on 5/12/25.
 //
 
-
 import SwiftUI
 
 struct EntryRowView: View {
+    // MARK: - Environment Properties
+    
     @Environment(\.managedObjectContext) private var viewContext
+    
+    // MARK: - Properties
+    
     @ObservedObject var entry: JournalEntry
+    
+    // MARK: - State Properties
+    
     @State private var showingEditSheet = false
+    
+    // MARK: - Body
     
     var body: some View {
         HStack(alignment: .top) {
@@ -20,13 +29,13 @@ struct EntryRowView: View {
                 Button(action: toggleTaskStatus) {
                     Text(getSymbol())
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(entry.priority ? .red : .primary)
+                        .foregroundStyle(entry.priority ? .red : .primary)
                         .frame(width: 30)
                 }
             } else {
                 Text(getSymbol())
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.primary)
                     .frame(width: 30)
             }
             
@@ -36,20 +45,7 @@ struct EntryRowView: View {
                     .strikethrough(entry.taskStatus == TaskStatus.completed.rawValue)
                 
                 if let tags = entry.tags as? Set<Tag>, !tags.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            ForEach(Array(tags), id: \.self) { tag in
-                                Text("#\(tag.name ?? "")")
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
-                                    .background(Color.blue.opacity(0.1))
-                                    .cornerRadius(4)
-                            }
-                        }
-                    }
-                    .frame(height: 24)
+                    tagScrollView(tags: tags)
                 }
             }
             
@@ -59,7 +55,7 @@ struct EntryRowView: View {
                 showingEditSheet = true
             }) {
                 Image(systemName: "pencil")
-                    .foregroundColor(.gray)
+                    .foregroundStyle(.gray)
             }
             .padding(.leading)
         }
@@ -70,6 +66,29 @@ struct EntryRowView: View {
         }
     }
     
+    // MARK: - View Components
+    
+    /// Horizontal scrolling view for tags
+    private func tagScrollView(tags: Set<Tag>) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack {
+                ForEach(Array(tags), id: \.self) { tag in
+                    Text("#\(tag.name ?? "")")
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(4)
+                }
+            }
+        }
+        .frame(height: 24)
+    }
+    
+    // MARK: - Helper Methods
+    
+    /// Returns the appropriate symbol for the entry type and status
     private func getSymbol() -> String {
         if entry.entryType == EntryType.task.rawValue {
             if let status = entry.taskStatus {
@@ -82,19 +101,36 @@ struct EntryRowView: View {
         return "•" // Default
     }
     
+    /// Toggles the task completion status
     private func toggleTaskStatus() {
-        if entry.entryType == EntryType.task.rawValue {
-            if entry.taskStatus == TaskStatus.completed.rawValue {
-                entry.taskStatus = TaskStatus.pending.rawValue
-            } else {
-                entry.taskStatus = TaskStatus.completed.rawValue
-            }
-            
-            do {
-                try viewContext.save()
-            } catch {
-                print("Error saving context: \(error)")
-            }
+        guard entry.entryType == EntryType.task.rawValue else { return }
+        
+        if entry.taskStatus == TaskStatus.completed.rawValue {
+            entry.taskStatus = TaskStatus.pending.rawValue
+        } else {
+            entry.taskStatus = TaskStatus.completed.rawValue
+        }
+        
+        do {
+            try viewContext.save()
+        } catch {
+            #if DEBUG
+            print("Error saving context: \(error)")
+            #endif
         }
     }
+}
+
+// MARK: - Preview
+
+#Preview {
+    let context = CoreDataManager.shared.container.viewContext
+    let entry = JournalEntry(context: context)
+    entry.content = "Sample task"
+    entry.entryType = "task"
+    entry.taskStatus = "pending"
+    
+    return EntryRowView(entry: entry)
+        .environment(\.managedObjectContext, context)
+        .padding()
 }

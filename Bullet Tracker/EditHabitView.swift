@@ -9,8 +9,15 @@ import SwiftUI
 import CoreData
 
 struct EditHabitView: View {
-    @Environment(\.presentationMode) var presentationMode
+    // MARK: - Environment Properties
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    // MARK: - Properties
+    
     @ObservedObject var habit: Habit
+    
+    // MARK: - State Properties
     
     @State private var name: String = ""
     @State private var selectedIcon: String = "circle.fill"
@@ -22,12 +29,13 @@ struct EditHabitView: View {
     @State private var collections: [Collection] = []
     @State private var showingDeleteAlert = false
     
-    // Added state variables for tracking options
+    // Tracking options
     @State private var trackDetails: Bool = false
     @State private var detailType: String = "general"
     @State private var useMultipleStates: Bool = false
     
-    // Available color options
+    // MARK: - Constants
+    
     let colorOptions = [
         "#007AFF", // Blue
         "#FF3B30", // Red
@@ -39,7 +47,6 @@ struct EditHabitView: View {
         "#FFCC00"  // Yellow
     ]
     
-    // Available icon options
     let iconOptions = [
         "circle.fill",
         "heart.fill",
@@ -63,7 +70,6 @@ struct EditHabitView: View {
         "leaf.fill"
     ]
     
-    // Frequency options
     let frequencyOptions = [
         ("daily", "Every Day"),
         ("weekdays", "Weekdays Only"),
@@ -72,7 +78,6 @@ struct EditHabitView: View {
         ("custom", "Custom Days")
     ]
     
-    // Detail type options
     let detailTypeOptions = [
         ("general", "General Notes"),
         ("workout", "Workout Details"),
@@ -80,7 +85,6 @@ struct EditHabitView: View {
         ("mood", "Mood Tracking")
     ]
     
-    // Days of the week for custom selection
     let daysOfWeek = [
         (1, "Sunday"),
         (2, "Monday"),
@@ -91,8 +95,10 @@ struct EditHabitView: View {
         (7, "Saturday")
     ]
     
+    // MARK: - Body
+    
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(header: Text("Habit Details")) {
                     TextField("Habit Name", text: $name)
@@ -101,7 +107,7 @@ struct EditHabitView: View {
                     VStack(alignment: .leading) {
                         Text("Color")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
@@ -127,13 +133,13 @@ struct EditHabitView: View {
                     VStack(alignment: .leading) {
                         Text("Icon")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
                                 ForEach(iconOptions, id: \.self) { icon in
                                     Image(systemName: icon)
-                                        .foregroundColor(Color(hex: selectedColor))
+                                        .foregroundStyle(Color(hex: selectedColor))
                                         .frame(width: 30, height: 30)
                                         .background(
                                             Circle()
@@ -166,18 +172,16 @@ struct EditHabitView: View {
                                     Spacer()
                                     if customDays.contains(day.0) {
                                         Image(systemName: "checkmark")
-                                            .foregroundColor(.blue)
+                                            .foregroundStyle(.blue)
                                     }
                                 }
                             }
-                            .foregroundColor(.primary)
+                            .foregroundStyle(.primary)
                         }
                     }
                 }
                 
-                // Added Tracking Options Section
                 Section(header: Text("Tracking Options")) {
-                    // Detail tracking toggle
                     Toggle("Track Additional Details", isOn: $trackDetails)
                     
                     if trackDetails {
@@ -189,28 +193,27 @@ struct EditHabitView: View {
                         
                         Text("You'll be prompted to add details each time you complete this habit.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                     
-                    // Multi-state tracking toggle
                     Toggle("Use Multiple Completion States", isOn: $useMultipleStates)
                     
                     if useMultipleStates {
                         Text("This habit will track success, partial success, and failure states separately.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         
                         Text("• Success (✓): Full completion")
                             .font(.caption)
-                            .foregroundColor(.green)
+                            .foregroundStyle(.green)
                         
                         Text("• Partial (⚬): Did some but not all")
                             .font(.caption)
-                            .foregroundColor(.orange)
+                            .foregroundStyle(.orange)
                         
                         Text("• Failure (✗): Attempted but struggled")
                             .font(.caption)
-                            .foregroundColor(.red)
+                            .foregroundStyle(.red)
                     }
                 }
                 
@@ -238,7 +241,7 @@ struct EditHabitView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
+                        dismiss()
                     }
                 }
                 
@@ -264,8 +267,9 @@ struct EditHabitView: View {
         }
     }
     
+    // MARK: - Helper Methods
+    
     private func loadHabitData() {
-        // Load the current habit data
         name = habit.name ?? ""
         selectedIcon = habit.icon ?? "circle.fill"
         selectedColor = habit.color ?? "#007AFF"
@@ -273,12 +277,10 @@ struct EditHabitView: View {
         notes = habit.notes ?? ""
         selectedCollection = habit.collection
         
-        // Load custom days if applicable
         if let customDaysString = habit.customDays, !customDaysString.isEmpty {
             customDays = customDaysString.components(separatedBy: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
         }
         
-        // Load tracking options
         trackDetails = (habit.value(forKey: "trackDetails") as? Bool) ?? false
         detailType = (habit.value(forKey: "detailType") as? String) ?? "general"
         useMultipleStates = (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
@@ -310,19 +312,17 @@ struct EditHabitView: View {
             collection: selectedCollection
         )
         
-        // Update tracking options using the dynamic properties
         habit.setValue(trackDetails, forKey: "trackDetails")
         habit.setValue(detailType, forKey: "detailType")
         habit.setValue(useMultipleStates, forKey: "useMultipleStates")
         
-        // Save context after updating the dynamic properties
         CoreDataManager.shared.saveContext()
         
-        presentationMode.wrappedValue.dismiss()
+        dismiss()
     }
     
     private func deleteHabit() {
         CoreDataManager.shared.deleteHabit(habit)
-        presentationMode.wrappedValue.dismiss()
+        dismiss()
     }
 }

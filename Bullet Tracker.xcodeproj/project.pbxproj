@@ -3,12 +3,16 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 90;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535962DD62DAE008BBCD8 /* BackupManager.swift */; };
 		77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */; };
+		77DB37272DEBD47E004E2ED9 /* Bullet Track - update log.md in Resources */ = {isa = PBXBuildFile; fileRef = 77DB37262DEBD47E004E2ED9 /* Bullet Track - update log.md */; };
+		77DB37292DEBD593004E2ED9 /* Bullet Track - Overview.md in Resources */ = {isa = PBXBuildFile; fileRef = 77DB37282DEBD593004E2ED9 /* Bullet Track - Overview.md */; };
+		77DB372C2DEBD616004E2ED9 /* Bullet Track - Context.md in Resources */ = {isa = PBXBuildFile; fileRef = 77DB372B2DEBD616004E2ED9 /* Bullet Track - Context.md */; };
+		77DB372E2DEBD64D004E2ED9 /* Bullet Track - protocol in Resources */ = {isa = PBXBuildFile; fileRef = 77DB372D2DEBD64D004E2ED9 /* Bullet Track - protocol */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,6 +38,10 @@
 		7783B2772DD2894D0008E0F3 /* Bullet TrackerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Bullet TrackerUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		77B535962DD62DAE008BBCD8 /* BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManager.swift; sourceTree = "<group>"; };
 		77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRestoreViewModel.swift; sourceTree = "<group>"; };
+		77DB37262DEBD47E004E2ED9 /* Bullet Track - update log.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "Bullet Track - update log.md"; sourceTree = "<group>"; };
+		77DB37282DEBD593004E2ED9 /* Bullet Track - Overview.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "Bullet Track - Overview.md"; sourceTree = "<group>"; };
+		77DB372B2DEBD616004E2ED9 /* Bullet Track - Context.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "Bullet Track - Context.md"; sourceTree = "<group>"; };
+		77DB372D2DEBD64D004E2ED9 /* Bullet Track - protocol */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Bullet Track - protocol"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -57,24 +65,18 @@
 /* Begin PBXFrameworksBuildPhase section */
 		7783B2582DD2894B0008E0F3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7783B26A2DD2894D0008E0F3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7783B2742DD2894D0008E0F3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -88,6 +90,7 @@
 				7783B25C2DD2894B0008E0F3 /* Products */,
 				77B535962DD62DAE008BBCD8 /* BackupManager.swift */,
 				77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */,
+				77DB372A2DEBD5B6004E2ED9 /* Documentation */,
 			);
 			sourceTree = "<group>";
 		};
@@ -99,6 +102,17 @@
 				7783B2772DD2894D0008E0F3 /* Bullet TrackerUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		77DB372A2DEBD5B6004E2ED9 /* Documentation */ = {
+			isa = PBXGroup;
+			children = (
+				77DB37282DEBD593004E2ED9 /* Bullet Track - Overview.md */,
+				77DB37262DEBD47E004E2ED9 /* Bullet Track - update log.md */,
+				77DB372B2DEBD616004E2ED9 /* Bullet Track - Context.md */,
+				77DB372D2DEBD64D004E2ED9 /* Bullet Track - protocol */,
+			);
+			path = Documentation;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -114,14 +128,10 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
 			fileSystemSynchronizedGroups = (
 				7783B25D2DD2894B0008E0F3 /* Bullet Tracker */,
 			);
 			name = "Bullet Tracker";
-			packageProductDependencies = (
-			);
 			productName = "Bullet Tracker";
 			productReference = 7783B25B2DD2894B0008E0F3 /* Bullet Tracker.app */;
 			productType = "com.apple.product-type.application";
@@ -143,8 +153,6 @@
 				7783B2702DD2894D0008E0F3 /* Bullet TrackerTests */,
 			);
 			name = "Bullet TrackerTests";
-			packageProductDependencies = (
-			);
 			productName = "Bullet TrackerTests";
 			productReference = 7783B26D2DD2894D0008E0F3 /* Bullet TrackerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -166,8 +174,6 @@
 				7783B27A2DD2894D0008E0F3 /* Bullet TrackerUITests */,
 			);
 			name = "Bullet TrackerUITests";
-			packageProductDependencies = (
-			);
 			productName = "Bullet TrackerUITests";
 			productReference = 7783B2772DD2894D0008E0F3 /* Bullet TrackerUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -204,7 +210,7 @@
 			);
 			mainGroup = 7783B2522DD2894B0008E0F3;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
+			preferredProjectObjectVersion = 90;
 			productRefGroup = 7783B25C2DD2894B0008E0F3 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -219,50 +225,42 @@
 /* Begin PBXResourcesBuildPhase section */
 		7783B2592DD2894B0008E0F3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
+				77DB372C2DEBD616004E2ED9 /* Bullet Track - Context.md in Resources */,
+				77DB372E2DEBD64D004E2ED9 /* Bullet Track - protocol in Resources */,
+				77DB37272DEBD47E004E2ED9 /* Bullet Track - update log.md in Resources */,
+				77DB37292DEBD593004E2ED9 /* Bullet Track - Overview.md in Resources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7783B26B2DD2894D0008E0F3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7783B2752DD2894D0008E0F3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		7783B2572DD2894B0008E0F3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */,
 				77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7783B2692DD2894D0008E0F3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7783B2732DD2894D0008E0F3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
@@ -280,7 +278,7 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		7783B27F2DD2894D0008E0F3 /* Debug */ = {
+		7783B27F2DD2894D0008E0F3 /* Debug configuration for PBXProject "Bullet Tracker" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -344,7 +342,7 @@
 			};
 			name = Debug;
 		};
-		7783B2802DD2894D0008E0F3 /* Release */ = {
+		7783B2802DD2894D0008E0F3 /* Release configuration for PBXProject "Bullet Tracker" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -401,16 +399,18 @@
 			};
 			name = Release;
 		};
-		7783B2822DD2894D0008E0F3 /* Debug */ = {
+		7783B2822DD2894D0008E0F3 /* Debug configuration for PBXNativeTarget "Bullet Tracker" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Bullet Tracker/Bullet Tracker.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6W932TN323;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Bullet-Tracker-Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -429,16 +429,18 @@
 			};
 			name = Debug;
 		};
-		7783B2832DD2894D0008E0F3 /* Release */ = {
+		7783B2832DD2894D0008E0F3 /* Release configuration for PBXNativeTarget "Bullet Tracker" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Bullet Tracker/Bullet Tracker.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6W932TN323;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Bullet-Tracker-Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -457,7 +459,7 @@
 			};
 			name = Release;
 		};
-		7783B2852DD2894D0008E0F3 /* Debug */ = {
+		7783B2852DD2894D0008E0F3 /* Debug configuration for PBXNativeTarget "Bullet TrackerTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -476,7 +478,7 @@
 			};
 			name = Debug;
 		};
-		7783B2862DD2894D0008E0F3 /* Release */ = {
+		7783B2862DD2894D0008E0F3 /* Release configuration for PBXNativeTarget "Bullet TrackerTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -495,7 +497,7 @@
 			};
 			name = Release;
 		};
-		7783B2882DD2894D0008E0F3 /* Debug */ = {
+		7783B2882DD2894D0008E0F3 /* Debug configuration for PBXNativeTarget "Bullet TrackerUITests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
@@ -512,7 +514,7 @@
 			};
 			name = Debug;
 		};
-		7783B2892DD2894D0008E0F3 /* Release */ = {
+		7783B2892DD2894D0008E0F3 /* Release configuration for PBXNativeTarget "Bullet TrackerUITests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
@@ -535,37 +537,33 @@
 		7783B2562DD2894B0008E0F3 /* Build configuration list for PBXProject "Bullet Tracker" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				7783B27F2DD2894D0008E0F3 /* Debug */,
-				7783B2802DD2894D0008E0F3 /* Release */,
+				7783B27F2DD2894D0008E0F3 /* Debug configuration for PBXProject "Bullet Tracker" */,
+				7783B2802DD2894D0008E0F3 /* Release configuration for PBXProject "Bullet Tracker" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		7783B2812DD2894D0008E0F3 /* Build configuration list for PBXNativeTarget "Bullet Tracker" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				7783B2822DD2894D0008E0F3 /* Debug */,
-				7783B2832DD2894D0008E0F3 /* Release */,
+				7783B2822DD2894D0008E0F3 /* Debug configuration for PBXNativeTarget "Bullet Tracker" */,
+				7783B2832DD2894D0008E0F3 /* Release configuration for PBXNativeTarget "Bullet Tracker" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		7783B2842DD2894D0008E0F3 /* Build configuration list for PBXNativeTarget "Bullet TrackerTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				7783B2852DD2894D0008E0F3 /* Debug */,
-				7783B2862DD2894D0008E0F3 /* Release */,
+				7783B2852DD2894D0008E0F3 /* Debug configuration for PBXNativeTarget "Bullet TrackerTests" */,
+				7783B2862DD2894D0008E0F3 /* Release configuration for PBXNativeTarget "Bullet TrackerTests" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		7783B2872DD2894D0008E0F3 /* Build configuration list for PBXNativeTarget "Bullet TrackerUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				7783B2882DD2894D0008E0F3 /* Debug */,
-				7783B2892DD2894D0008E0F3 /* Release */,
+				7783B2882DD2894D0008E0F3 /* Debug configuration for PBXNativeTarget "Bullet TrackerUITests" */,
+				7783B2892DD2894D0008E0F3 /* Release configuration for PBXNativeTarget "Bullet TrackerUITests" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */

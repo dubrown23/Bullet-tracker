@@ -8,7 +8,11 @@
 import SwiftUI
 import CoreData
 
+// MARK: - View Model
+
 class HabitTrackerViewModel: ObservableObject {
+    // MARK: - Published Properties
+    
     @Published var habits: [Habit] = []
     @Published var selectedDate = Date()
     @Published var visibleDates: [Date] = []
@@ -17,9 +21,14 @@ class HabitTrackerViewModel: ObservableObject {
     @Published var selectedHabit: Habit? = nil
     @Published var showingDeleteAlert = false
     
-    // Number of days to display in the tracker
+    // MARK: - Constants
+    
+    /// Number of days to display in the tracker
     let daysToShow = 4
     
+    // MARK: - Public Methods
+    
+    /// Loads all habits from Core Data
     func loadHabits() {
         let context = CoreDataManager.shared.container.viewContext
         let request: NSFetchRequest<Habit> = Habit.fetchRequest()
@@ -35,12 +44,9 @@ class HabitTrackerViewModel: ObservableObject {
             
             // Ensure all habits have an order value
             var needsOrderUpdate = false
-            for (index, habit) in habits.enumerated() {
-                // Set order if not already set
-                if habit.order == 0 && index > 0 {
-                    habit.order = Int32(index)
-                    needsOrderUpdate = true
-                }
+            for (index, habit) in habits.enumerated() where habit.order == 0 && index > 0 {
+                habit.order = Int32(index)
+                needsOrderUpdate = true
             }
             
             // Save if we updated any order values
@@ -51,13 +57,18 @@ class HabitTrackerViewModel: ObservableObject {
                 habits.sort { ($0.order, $0.name ?? "") < ($1.order, $1.name ?? "") }
             }
             
+            #if DEBUG
             print("Loaded \(habits.count) habits")
+            #endif
             loadHabitEntries()
         } catch {
+            #if DEBUG
             print("Error loading habits: \(error)")
+            #endif
         }
     }
     
+    /// Updates the visible date range based on selected date
     func updateVisibleDates() {
         let calendar = Calendar.current
         
@@ -78,6 +89,7 @@ class HabitTrackerViewModel: ObservableObject {
         visibleDates = dates
     }
     
+    /// Loads habit entries for the visible date range
     func loadHabitEntries() {
         guard !habits.isEmpty && !visibleDates.isEmpty else { return }
         
@@ -85,12 +97,9 @@ class HabitTrackerViewModel: ObservableObject {
         let request: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
         
         // Create a predicate for all habits and the visible date range
-        var habitPredicates: [NSPredicate] = []
-        
-        for habit in habits {
-            if let habitId = habit.id {
-                habitPredicates.append(NSPredicate(format: "habit == %@", habit))
-            }
+        let habitPredicates = habits.compactMap { habit -> NSPredicate? in
+            guard habit.id != nil else { return nil }
+            return NSPredicate(format: "habit == %@", habit)
         }
         
         let habitsPredicate = NSCompoundPredicate(orPredicateWithSubpredicates: habitPredicates)
@@ -105,13 +114,17 @@ class HabitTrackerViewModel: ObservableObject {
         
         do {
             let entries = try context.fetch(request)
+            #if DEBUG
             print("Loaded \(entries.count) habit entries")
+            #endif
             
             // Organize entries by habit ID and date
             var entriesDict: [UUID: [Date: HabitEntry]] = [:]
             
             for entry in entries {
-                if let habit = entry.habit, let habitId = habit.id, let date = entry.date {
+                if let habit = entry.habit,
+                   let habitId = habit.id,
+                   let date = entry.date {
                     let dayStart = calendar.startOfDay(for: date)
                     
                     if entriesDict[habitId] == nil {
@@ -124,10 +137,13 @@ class HabitTrackerViewModel: ObservableObject {
             
             habitEntries = entriesDict
         } catch {
+            #if DEBUG
             print("Error loading habit entries: \(error)")
+            #endif
         }
     }
     
+    /// Toggles a habit's completion status for a specific date
     func toggleHabit(_ habit: Habit, on date: Date) {
         guard let habitId = habit.id else { return }
         
@@ -162,14 +178,19 @@ class HabitTrackerViewModel: ObservableObject {
         
         do {
             try context.save()
+            #if DEBUG
             print("Habit toggled successfully")
+            #endif
         } catch {
+            #if DEBUG
             print("Error toggling habit: \(error)")
+            #endif
             // Reload to get back to a consistent state
             loadHabitEntries()
         }
     }
     
+    /// Checks if a habit is completed on a specific date
     func isHabitCompleted(_ habit: Habit, on date: Date) -> Bool {
         guard let habitId = habit.id else { return false }
         
@@ -179,11 +200,12 @@ class HabitTrackerViewModel: ObservableObject {
         return habitEntries[habitId]?[startOfDay] != nil
     }
     
+    /// Gets the completion rate for a habit
     func getCompletionRate(for habit: Habit) -> Double {
-        return CoreDataManager.shared.getCompletionRateForHabit(habit)
+        CoreDataManager.shared.getCompletionRateForHabit(habit)
     }
     
-    // New function to handle reordering habits
+    /// Handles reordering habits in the list
     func reorderHabits(from source: IndexSet, to destination: Int) {
         // Convert from IndexSet to array indices
         let sourceIndices = Array(source)
@@ -214,9 +236,13 @@ class HabitTrackerViewModel: ObservableObject {
         // Save the changes
         do {
             try context.save()
+            #if DEBUG
             print("Habits reordered successfully")
+            #endif
         } catch {
+            #if DEBUG
             print("Error saving habit order: \(error)")
+            #endif
             // Reload to get back to a consistent state
             loadHabits()
         }

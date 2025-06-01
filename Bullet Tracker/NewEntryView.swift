@@ -5,14 +5,19 @@
 //  Created by Dustin Brown on 5/12/25.
 //
 
-
 import SwiftUI
 import CoreData
 
 struct NewEntryView: View {
+    // MARK: - Properties
+    
     let date: Date
     
-    @Environment(\.presentationMode) var presentationMode
+    // MARK: - Environment Properties
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    // MARK: - State Properties
     
     @State private var content: String = ""
     @State private var entryType: String = "task"
@@ -22,56 +27,23 @@ struct NewEntryView: View {
     @State private var selectedCollection: Collection?
     @State private var collections: [Collection] = []
     
+    // MARK: - Computed Properties
+    
+    /// Determines if the save button should be disabled
+    private var isSaveDisabled: Bool {
+        content.isEmpty
+    }
+    
+    // MARK: - Body
+    
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
-                Section(header: Text("Entry Details")) {
-                    Picker("Type", selection: $entryType) {
-                        Text("Task").tag("task")
-                        Text("Event").tag("event")
-                        Text("Note").tag("note")
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                    
-                    if entryType == "task" {
-                        Picker("Status", selection: $taskStatus) {
-                            Text("Pending").tag("pending")
-                            Text("Completed").tag("completed")
-                            Text("Migrated").tag("migrated")
-                            Text("Scheduled").tag("scheduled")
-                        }
-                        
-                        Toggle("Priority", isOn: $priority)
-                    }
-                    
-                    TextField("Content", text: $content)
-                    
-                    TextField("Tags (comma separated)", text: $tagsText)
-                    
-                    if !collections.isEmpty {
-                        Picker("Collection", selection: $selectedCollection) {
-                            Text("None").tag(nil as Collection?)
-                            ForEach(collections, id: \.self) { collection in
-                                Text(collection.name ?? "").tag(collection as Collection?)
-                            }
-                        }
-                    }
-                }
+                entryDetailsSection
             }
             .navigationTitle("New Entry")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveEntry()
-                    }
-                    .disabled(content.isEmpty)
-                }
+                toolbarContent
             }
             .onAppear {
                 loadCollections()
@@ -79,16 +51,112 @@ struct NewEntryView: View {
         }
     }
     
+    // MARK: - View Components
+    
+    private var entryDetailsSection: some View {
+        Section(header: Text("Entry Details")) {
+            entryTypePicker
+            
+            if entryType == "task" {
+                taskControls
+            }
+            
+            contentField
+            tagsField
+            
+            if !collections.isEmpty {
+                collectionPicker
+            }
+        }
+    }
+    
+    private var entryTypePicker: some View {
+        Picker("Type", selection: $entryType) {
+            Text("Task").tag("task")
+            Text("Event").tag("event")
+            Text("Note").tag("note")
+        }
+        .pickerStyle(.segmented)
+    }
+    
+    private var taskControls: some View {
+        Group {
+            Picker("Status", selection: $taskStatus) {
+                Text("Pending").tag("pending")
+                Text("Completed").tag("completed")
+                Text("Migrated").tag("migrated")
+                Text("Scheduled").tag("scheduled")
+            }
+            
+            Toggle("Priority", isOn: $priority)
+        }
+    }
+    
+    private var contentField: some View {
+        TextField("Content", text: $content)
+    }
+    
+    private var tagsField: some View {
+        TextField("Tags (comma separated)", text: $tagsText)
+    }
+    
+    private var collectionPicker: some View {
+        Picker("Collection", selection: $selectedCollection) {
+            Text("None").tag(nil as Collection?)
+            ForEach(collections, id: \.self) { collection in
+                Text(collection.name ?? "").tag(collection as Collection?)
+            }
+        }
+    }
+    
+    // MARK: - Toolbar Components
+    
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button("Cancel") {
+                dismiss()
+            }
+        }
+        
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button("Save") {
+                saveEntry()
+            }
+            .disabled(isSaveDisabled)
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    /// Loads all collections from Core Data
     private func loadCollections() {
-        // Use CoreDataManager to fetch collections
         collections = CoreDataManager.shared.fetchAllCollections()
     }
     
+    /// Saves the new journal entry to Core Data
     private func saveEntry() {
-        // Get context from CoreDataManager
         let context = CoreDataManager.shared.container.viewContext
         
-        // Create a new entry
+        let entry = createJournalEntry(in: context)
+        processTags(for: entry, in: context)
+        
+        do {
+            try context.save()
+            #if DEBUG
+            print("Entry saved successfully")
+            #endif
+        } catch {
+            #if DEBUG
+            print("Error saving entry: \(error)")
+            #endif
+        }
+        
+        dismiss()
+    }
+    
+    /// Creates a new journal entry with the current form data
+    private func createJournalEntry(in context: NSManagedObjectContext) -> JournalEntry {
         let entry = JournalEntry(context: context)
         entry.id = UUID()
         entry.content = content
@@ -96,54 +164,51 @@ struct NewEntryView: View {
         entry.entryType = entryType
         entry.priority = priority
         
-        // Only set taskStatus if it's a task
         if entryType == "task" {
             entry.taskStatus = taskStatus
         }
         
-        // Set collection if selected
         entry.collection = selectedCollection
         
-        // Process tags if any
-        if !tagsText.isEmpty {
-            let tagNames = tagsText.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }
-            
-            for tagName in tagNames where !tagName.isEmpty {
-                // Check if tag already exists
-                let fetchRequest: NSFetchRequest<Tag> = Tag.fetchRequest()
-                fetchRequest.predicate = NSPredicate(format: "name == %@", tagName)
-                fetchRequest.fetchLimit = 1
-                
-                var tag: Tag
-                
-                do {
-                    let results = try context.fetch(fetchRequest)
-                    if let existingTag = results.first {
-                        tag = existingTag
-                    } else {
-                        // Create new tag
-                        tag = Tag(context: context)
-                        tag.id = UUID()
-                        tag.name = tagName
-                    }
-                    
-                    // Add tag to entry
-                    entry.addToTags(tag)
-                } catch {
-                    print("Error processing tag: \(error)")
-                }
-            }
-        }
+        return entry
+    }
+    
+    /// Processes and adds tags to the journal entry
+    private func processTags(for entry: JournalEntry, in context: NSManagedObjectContext) {
+        guard !tagsText.isEmpty else { return }
         
-        // Save context
+        let tagNames = tagsText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        
+        for tagName in tagNames {
+            let tag = findOrCreateTag(named: tagName, in: context)
+            entry.addToTags(tag)
+        }
+    }
+    
+    /// Finds an existing tag or creates a new one
+    private func findOrCreateTag(named tagName: String, in context: NSManagedObjectContext) -> Tag {
+        let fetchRequest: NSFetchRequest<Tag> = Tag.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "name == %@", tagName)
+        fetchRequest.fetchLimit = 1
+        
         do {
-            try context.save()
-            print("Entry saved successfully")
+            let results = try context.fetch(fetchRequest)
+            if let existingTag = results.first {
+                return existingTag
+            }
         } catch {
-            print("Error saving entry: \(error)")
+            #if DEBUG
+            print("Error fetching tag: \(error)")
+            #endif
         }
         
-        // Dismiss the view
-        presentationMode.wrappedValue.dismiss()
+        // Create new tag if not found
+        let newTag = Tag(context: context)
+        newTag.id = UUID()
+        newTag.name = tagName
+        return newTag
     }
 }

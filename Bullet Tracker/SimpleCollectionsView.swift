@@ -5,138 +5,48 @@
 //  Created by Dustin Brown on 5/12/25.
 //
 
-
 import SwiftUI
 import CoreData
 
 struct SimpleCollectionsView: View {
+    // MARK: - State Properties
+    
     @State private var collections: [Collection] = []
     @State private var showingAddAlert = false
     @State private var newCollectionName = ""
     @State private var showingDeleteAlert = false
     @State private var collectionToDelete: Collection?
     
+    // MARK: - Constants
+    
+    private let defaultCollectionNames = ["Daily Log", "Monthly Log", "Future Log", "Projects", "Ideas"]
+    
+    // MARK: - Body
+    
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
-                Section(header: Text("Special Collections")) {
-                    NavigationLink(destination: HabitTrackerView()) {
-                        HStack {
-                            Image(systemName: "chart.bar.fill")
-                                .foregroundColor(.blue)
-                                .font(.title3)
-                                .frame(width: 32, height: 32)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Habit Tracker")
-                                    .font(.headline)
-                                
-                                Text("Track your daily habits")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-                
-                Section(header: Text("Your Collections")) {
-                    ForEach(collections) { collection in
-                        NavigationLink(destination: CollectionDetailView(collection: collection)) {
-                            HStack {
-                                Image(systemName: "folder.fill")
-                                    .foregroundColor(.blue)
-                                    .font(.title3)
-                                    .frame(width: 32, height: 32)
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(collection.name ?? "Unnamed Collection")
-                                        .font(.headline)
-                                    
-                                    // Show entry count
-                                    Text(getEntryCountText(for: collection))
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    collectionToDelete = collection
-                                    showingDeleteAlert = true
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
-                    .onDelete(perform: deleteCollections)
-                    
-                    // Add collection button within the list
-                    Button(action: {
-                        showingAddAlert = true
-                    }) {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundColor(.green)
-                            Text("Add Collection")
-                                .foregroundColor(.primary)
-                        }
-                    }
-                }
+                specialCollectionsSection
+                userCollectionsSection
                 
                 if collections.isEmpty {
-                    Section {
-                        Button("Create Default Collections") {
-                            createDefaultCollections()
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                        .padding(.vertical)
-                    }
+                    defaultCollectionsSection
                 }
             }
-            .listStyle(InsetGroupedListStyle())
+            .listStyle(.insetGrouped)
             .navigationTitle("Collections")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingAddAlert = true
-                    }) {
-                        Image(systemName: "plus")
-                    }
-                }
+                toolbarContent
             }
             .alert("New Collection", isPresented: $showingAddAlert) {
-                TextField("Collection Name", text: $newCollectionName)
-                Button("Cancel", role: .cancel) {
-                    newCollectionName = ""
-                }
-                Button("Create") {
-                    if !newCollectionName.isEmpty {
-                        addCollection(name: newCollectionName)
-                        newCollectionName = ""
-                    }
-                }
+                newCollectionAlert
             } message: {
                 Text("Enter a name for your new collection")
             }
             .alert("Delete Collection", isPresented: $showingDeleteAlert) {
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) {
-                    if let collection = collectionToDelete {
-                        deleteCollection(collection)
-                    }
-                }
+                deleteCollectionAlert
             } message: {
-                if let collection = collectionToDelete {
-                    Text("Are you sure you want to delete '\(collection.name ?? "this collection")'? This action cannot be undone.")
-                } else {
-                    Text("Are you sure you want to delete this collection? This action cannot be undone.")
-                }
+                deleteAlertMessage
             }
             .onAppear {
                 loadCollections()
@@ -144,20 +54,167 @@ struct SimpleCollectionsView: View {
         }
     }
     
+    // MARK: - View Components
+    
+    private var specialCollectionsSection: some View {
+        Section(header: Text("Special Collections")) {
+            NavigationLink(destination: HabitTrackerView()) {
+                habitTrackerRow
+            }
+        }
+    }
+    
+    private var habitTrackerRow: some View {
+        HStack {
+            Image(systemName: "chart.bar.fill")
+                .foregroundStyle(.blue)
+                .font(.title3)
+                .frame(width: 32, height: 32)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Habit Tracker")
+                    .font(.headline)
+                
+                Text("Track your daily habits")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+    
+    private var userCollectionsSection: some View {
+        Section(header: Text("Your Collections")) {
+            ForEach(collections) { collection in
+                NavigationLink(destination: CollectionDetailView(collection: collection)) {
+                    collectionRow(for: collection)
+                        .contextMenu {
+                            deleteContextMenu(for: collection)
+                        }
+                }
+            }
+            .onDelete(perform: deleteCollections)
+        }
+    }
+    
+    private func collectionRow(for collection: Collection) -> some View {
+        HStack {
+            Image(systemName: "folder.fill")
+                .foregroundStyle(.blue)
+                .font(.title3)
+                .frame(width: 32, height: 32)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(collection.name ?? "Unnamed Collection")
+                    .font(.headline)
+                
+                Text(getEntryCountText(for: collection))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+    
+    private func deleteContextMenu(for collection: Collection) -> some View {
+        Button(role: .destructive) {
+            collectionToDelete = collection
+            showingDeleteAlert = true
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+    }
+    
+    private var defaultCollectionsSection: some View {
+        Section {
+            Button {
+                createDefaultCollections()
+            } label: {
+                Text("Create Default Collections")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundStyle(.white)
+                    .cornerRadius(10)
+            }
+            .padding(.vertical)
+        }
+    }
+    
+    // MARK: - Toolbar Components
+    
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button {
+                showingAddAlert = true
+            } label: {
+                Image(systemName: "plus")
+            }
+        }
+    }
+    
+    // MARK: - Alert Components
+    
+    private var newCollectionAlert: some View {
+        Group {
+            TextField("Collection Name", text: $newCollectionName)
+            Button("Cancel", role: .cancel) {
+                newCollectionName = ""
+            }
+            Button("Create") {
+                if !newCollectionName.isEmpty {
+                    addCollection(name: newCollectionName)
+                    newCollectionName = ""
+                }
+            }
+        }
+    }
+    
+    private var deleteCollectionAlert: some View {
+        Group {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                if let collection = collectionToDelete {
+                    deleteCollection(collection)
+                }
+            }
+        }
+    }
+    
+    private var deleteAlertMessage: Text {
+        if let collection = collectionToDelete {
+            Text("Are you sure you want to delete '\(collection.name ?? "this collection")'? This action cannot be undone.")
+        } else {
+            Text("Are you sure you want to delete this collection? This action cannot be undone.")
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    /// Loads all collections from Core Data
     private func loadCollections() {
+        #if DEBUG
         print("Loading collections...")
+        #endif
+        
         let context = CoreDataManager.shared.container.viewContext
         let request: NSFetchRequest<Collection> = Collection.fetchRequest()
         request.sortDescriptors = [NSSortDescriptor(key: "name", ascending: true)]
         
         do {
             collections = try context.fetch(request)
+            #if DEBUG
             print("Found \(collections.count) collections")
+            #endif
         } catch {
+            #if DEBUG
             print("Failed to fetch collections: \(error)")
+            #endif
         }
     }
     
+    /// Adds a new collection with the specified name
     private func addCollection(name: String) {
         guard !name.isEmpty else { return }
         
@@ -170,10 +227,13 @@ struct SimpleCollectionsView: View {
             try context.save()
             loadCollections()
         } catch {
+            #if DEBUG
             print("Failed to save collection: \(error)")
+            #endif
         }
     }
     
+    /// Deletes the specified collection
     private func deleteCollection(_ collection: Collection) {
         let context = CoreDataManager.shared.container.viewContext
         context.delete(collection)
@@ -182,10 +242,13 @@ struct SimpleCollectionsView: View {
             try context.save()
             loadCollections()
         } catch {
+            #if DEBUG
             print("Failed to delete collection: \(error)")
+            #endif
         }
     }
     
+    /// Deletes collections at the specified offsets
     private func deleteCollections(at offsets: IndexSet) {
         let context = CoreDataManager.shared.container.viewContext
         
@@ -197,27 +260,30 @@ struct SimpleCollectionsView: View {
             try context.save()
             loadCollections()
         } catch {
+            #if DEBUG
             print("Error deleting collections: \(error)")
+            #endif
         }
     }
     
+    /// Creates default collections for new users
     private func createDefaultCollections() {
-        let defaultNames = ["Daily Log", "Monthly Log", "Future Log", "Projects", "Ideas"]
-        
-        for name in defaultNames {
+        for name in defaultCollectionNames {
             addCollection(name: name)
         }
     }
     
+    /// Returns a formatted string describing the number of entries in a collection
     private func getEntryCountText(for collection: Collection) -> String {
-        let entries = collection.entries?.count ?? 0
+        let entryCount = collection.entries?.count ?? 0
         
-        if entries == 0 {
+        switch entryCount {
+        case 0:
             return "No entries"
-        } else if entries == 1 {
+        case 1:
             return "1 entry"
-        } else {
-            return "\(entries) entries"
+        default:
+            return "\(entryCount) entries"
         }
     }
 }

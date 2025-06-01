@@ -5,13 +5,19 @@
 //  Created by Dustin Brown on 5/12/25.
 //
 
-
 import SwiftUI
 
 struct EditEntryView: View {
+    // MARK: - Environment Properties
+    
     @Environment(\.managedObjectContext) private var viewContext
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
+    
+    // MARK: - Properties
+    
     @ObservedObject var entry: JournalEntry
+    
+    // MARK: - State Properties
     
     @State private var content: String = ""
     @State private var type: EntryType = .task
@@ -22,8 +28,10 @@ struct EditEntryView: View {
     @State private var collections: [Collection] = []
     @State private var showingDeleteAlert = false
     
+    // MARK: - Body
+    
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(header: Text("Entry Details")) {
                     Picker("Type", selection: $type) {
@@ -70,7 +78,7 @@ struct EditEntryView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
+                        dismiss()
                     }
                 }
                 
@@ -89,13 +97,15 @@ struct EditEntryView: View {
                 Button("Cancel", role: .cancel) { }
                 Button("Delete", role: .destructive) {
                     CoreDataManager.shared.deleteJournalEntry(entry)
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 }
             } message: {
                 Text("Are you sure you want to delete this entry? This action cannot be undone.")
             }
         }
     }
+    
+    // MARK: - Helper Methods
     
     private func loadCollections() {
         collections = CoreDataManager.shared.fetchAllCollections()
@@ -142,6 +152,6 @@ struct EditEntryView: View {
             tags: tags
         )
         
-        presentationMode.wrappedValue.dismiss()
+        dismiss()
     }
 }

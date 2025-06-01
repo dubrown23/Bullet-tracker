@@ -5,14 +5,6 @@
 //  Created by Dustin Brown on 5/13/25.
 //
 
-
-//
-//  DataExportManager.swift
-//  Bullet Tracker
-//
-//  Created by Dustin Brown on 5/12/25.
-//
-
 import Foundation
 import CoreData
 import UIKit
@@ -56,7 +48,9 @@ class DataExportManager {
             try csvString.write(to: tempURL, atomically: true, encoding: .utf8)
             return tempURL
         } catch {
+            #if DEBUG
             print("Error writing CSV file: \(error)")
+            #endif
             return nil
         }
     }
@@ -112,7 +106,9 @@ class DataExportManager {
             try csvString.write(to: tempURL, atomically: true, encoding: .utf8)
             return tempURL
         } catch {
+            #if DEBUG
             print("Error writing CSV file: \(error)")
+            #endif
             return nil
         }
     }
@@ -149,7 +145,9 @@ class DataExportManager {
             try csvString.write(to: tempURL, atomically: true, encoding: .utf8)
             return tempURL
         } catch {
+            #if DEBUG
             print("Error writing CSV file: \(error)")
+            #endif
             return nil
         }
     }
@@ -162,14 +160,20 @@ class DataExportManager {
         let components = calendar.dateComponents([.year, .month], from: date)
         guard let startOfMonth = calendar.date(from: components),
               let endOfMonth = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth) else {
+            #if DEBUG
             print("Error calculating month date range")
+            #endif
             return nil
         }
         
+        #if DEBUG
         print("Generating monthly report from \(startOfMonth) to \(endOfMonth)")
+        #endif
         
         let habits = CoreDataManager.shared.fetchAllHabits()
+        #if DEBUG
         print("Found \(habits.count) habits")
+        #endif
         
         // Create a formatted month name for the report
         let dateFormatter = DateFormatter()
@@ -188,10 +192,14 @@ class DataExportManager {
             
             do {
                 try csvString.write(to: tempURL, atomically: true, encoding: .utf8)
+                #if DEBUG
                 print("Successfully created empty monthly report at: \(tempURL)")
+                #endif
                 return tempURL
             } catch {
+                #if DEBUG
                 print("Error writing monthly report file: \(error)")
+                #endif
                 return nil
             }
         }
@@ -202,7 +210,9 @@ class DataExportManager {
         
         // Get all habit entries for the month - manually since getHabitEntriesForDateRange might not be available
         let entries = getHabitEntriesForRange(start: startOfMonth, end: endOfMonth)
+        #if DEBUG
         print("Found \(entries.count) habit entries for the month")
+        #endif
         
         // Process each habit
         for habit in habits {
@@ -271,8 +281,6 @@ class DataExportManager {
                     ""  // Empty failed column
                 ]
             }
-            
-            csvString.append(row.joined(separator: ",") + "\n")
             
             csvString.append(row.joined(separator: ",") + "\n")
         }
@@ -361,10 +369,14 @@ class DataExportManager {
         
         do {
             try csvString.write(to: tempURL, atomically: true, encoding: .utf8)
+            #if DEBUG
             print("Successfully created monthly report at: \(tempURL)")
+            #endif
             return tempURL
         } catch {
+            #if DEBUG
             print("Error writing monthly report file: \(error)")
+            #endif
             return nil
         }
     }
@@ -381,10 +393,14 @@ class DataExportManager {
         
         do {
             let results = try context.fetch(fetchRequest)
+            #if DEBUG
             print("Found \(results.count) entries between \(startOfDay) and \(endOfDay)")
+            #endif
             return results
         } catch {
+            #if DEBUG
             print("Error fetching habit entries for date range: \(error)")
+            #endif
             return []
         }
     }
@@ -406,7 +422,9 @@ class DataExportManager {
             try jsonData.write(to: tempURL)
             return tempURL
         } catch {
+            #if DEBUG
             print("Error creating JSON backup: \(error)")
+            #endif
             return nil
         }
     }
@@ -477,12 +495,12 @@ class DataExportManager {
         
         // First restore collections (they have no dependencies)
         if let collectionsData = data["collections"] as? [[String: Any]] {
-            importCollections(collectionsData, context: context)
+            _ = importCollections(collectionsData, context: context)
         }
         
         // Then restore tags
         if let tagsData = data["tags"] as? [[String: Any]] {
-            importTags(tagsData, context: context)
+            _ = importTags(tagsData, context: context)
         }
         
         // Then restore habits
@@ -594,7 +612,7 @@ class DataExportManager {
         var result: [[String: Any]] = []
         
         for collection in collections {
-            var collectionDict: [String: Any] = [
+            let collectionDict: [String: Any] = [
                 "id": collection.id?.uuidString ?? UUID().uuidString,
                 "name": collection.name ?? ""
             ]
@@ -646,7 +664,9 @@ class DataExportManager {
                 result.append(entryDict)
             }
         } catch {
+            #if DEBUG
             print("Error fetching journal entries: \(error)")
+            #endif
         }
         
         return result
@@ -668,7 +688,9 @@ class DataExportManager {
                 result.append(tagDict)
             }
         } catch {
+            #if DEBUG
             print("Error fetching tags: \(error)")
+            #endif
         }
         
         return result
@@ -821,7 +843,9 @@ class DataExportManager {
                 }
             }
         } catch {
+            #if DEBUG
             print("Error fetching tags: \(error)")
+            #endif
         }
         
         for entryData in entries {
@@ -919,7 +943,7 @@ class DataExportManager {
             
         case "weekdays":
             // Weekdays are 2-6 (Monday-Friday)
-            return weekday >= 2 && weekday <= 6
+            return (2...6).contains(weekday)
             
         case "weekends":
             // Weekends are 1 and 7 (Sunday and Saturday)
@@ -944,7 +968,8 @@ class DataExportManager {
     }
 }
 
-// Extension to CoreDataManager to add data clearing functionality
+// MARK: - CoreDataManager Extension
+
 extension CoreDataManager {
     func clearAllData() {
         let context = container.viewContext
@@ -957,13 +982,13 @@ extension CoreDataManager {
             do {
                 try container.persistentStoreCoordinator.execute(deleteRequest, with: context)
             } catch {
+                #if DEBUG
                 print("Error clearing \(entityName) data: \(error)")
+                #endif
             }
         }
         
         // Reset context
         context.reset()
     }
-    
-    
 }

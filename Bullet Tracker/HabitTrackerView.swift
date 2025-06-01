@@ -109,7 +109,7 @@ struct HabitTrackerView: View {
         DatePicker("End Date", selection: $viewModel.selectedDate, displayedComponents: .date)
             .datePickerStyle(CompactDatePickerStyle())
             .padding(.horizontal)
-            .onChange(of: viewModel.selectedDate) { _ in
+            .onChange(of: viewModel.selectedDate) { _, _ in
                 viewModel.updateVisibleDates()
                 viewModel.loadHabitEntries()
             }

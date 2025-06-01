@@ -9,9 +9,16 @@ import SwiftUI
 import CoreData
 
 struct HabitStatsView: View {
+    // MARK: - Properties
+    
     let habits: [Habit]
+    
+    // MARK: - State Properties
+    
     @State private var selectedTimeframe: Timeframe = .month
-    @State private var showAsFraction: Bool = false // Toggle for display format
+    @State private var showAsFraction: Bool = false
+    
+    // MARK: - Supporting Types
     
     enum Timeframe: String, CaseIterable, Identifiable {
         case week = "Week"
@@ -20,7 +27,7 @@ struct HabitStatsView: View {
         
         var id: String { self.rawValue }
         
-        // Get start date for the timeframe
+        /// Get start date for the timeframe
         func getStartDate(from endDate: Date = Date()) -> Date {
             let calendar = Calendar.current
             
@@ -31,7 +38,7 @@ struct HabitStatsView: View {
                 
             case .month:
                 // Get start of the current month
-                var components = calendar.dateComponents([.year, .month], from: endDate)
+                let components = calendar.dateComponents([.year, .month], from: endDate)
                 return calendar.date(from: components)!
                 
             case .quarter:
@@ -40,9 +47,8 @@ struct HabitStatsView: View {
             }
         }
         
-        // Get a descriptive string for the timeframe
+        /// Get a descriptive string for the timeframe
         func getDescription(for date: Date = Date()) -> String {
-            let calendar = Calendar.current
             let startDate = getStartDate(from: date)
             let dateFormatter = DateFormatter()
             
@@ -64,29 +70,19 @@ struct HabitStatsView: View {
         }
     }
     
+    // MARK: - Body
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text(selectedTimeframe.getDescription())
-                    .font(.headline)
-                
-                Spacer()
-                
-                Picker("Timeframe", selection: $selectedTimeframe) {
-                    ForEach(Timeframe.allCases) { timeframe in
-                        Text(timeframe.rawValue).tag(timeframe)
-                    }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .frame(width: 200)
-            }
+            headerSection
             
             // Display format toggle
             Toggle(isOn: $showAsFraction) {
                 Text("Show as fractions")
                     .font(.subheadline)
             }
-            .toggleStyle(SwitchToggleStyle(tint: Color.blue))
+            .toggleStyle(.switch)
+            .tint(.blue)
             .padding(.vertical, 4)
             
             ForEach(habits) { habit in
@@ -101,13 +97,37 @@ struct HabitStatsView: View {
         .background(Color.gray.opacity(0.1))
         .cornerRadius(12)
     }
+    
+    // MARK: - View Components
+    
+    private var headerSection: some View {
+        HStack {
+            Text(selectedTimeframe.getDescription())
+                .font(.headline)
+            
+            Spacer()
+            
+            Picker("Timeframe", selection: $selectedTimeframe) {
+                ForEach(Timeframe.allCases) { timeframe in
+                    Text(timeframe.rawValue).tag(timeframe)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 200)
+        }
+    }
 }
 
-// Enhanced habit progress view that shows multiple states
+// MARK: - Enhanced Habit Progress View
+
 struct EnhancedHabitProgressView: View {
+    // MARK: - Properties
+    
     @ObservedObject var habit: Habit
     let timeframe: HabitStatsView.Timeframe
     let showAsFraction: Bool
+    
+    // MARK: - State Properties
     
     @State private var successRate: Double = 0
     @State private var partialRate: Double = 0
@@ -120,6 +140,14 @@ struct EnhancedHabitProgressView: View {
     @State private var failureCount: Int = 0
     @State private var totalDays: Int = 0
     
+    // MARK: - Computed Properties
+    
+    private var calendar: Calendar {
+        Calendar.current
+    }
+    
+    // MARK: - Body
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(habit.name ?? "")
@@ -127,122 +155,131 @@ struct EnhancedHabitProgressView: View {
                 .bold()
             
             if useMultipleStates {
-                // Multi-state progress bar
-                ZStack(alignment: .leading) {
-                    // Background
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(height: 8)
-                        .cornerRadius(4)
-                    
-                    // Success portion
-                    if successRate > 0 {
-                        Rectangle()
-                            .fill(Color(hex: habit.color ?? "#007AFF"))
-                            .frame(width: max(4, CGFloat(successRate) * 200), height: 8)
-                            .cornerRadius(4)
-                    }
-                    
-                    // Partial portion (stacked after success)
-                    if partialRate > 0 {
-                        Rectangle()
-                            .fill(Color.orange)
-                            .frame(width: max(4, CGFloat(partialRate) * 200), height: 8)
-                            .offset(x: successRate > 0 ? max(4, CGFloat(successRate) * 200) : 0)
-                            .cornerRadius(4)
-                    }
-                    
-                    // Failure portion (stacked after partial and success)
-                    if failureRate > 0 {
-                        Rectangle()
-                            .fill(Color.red)
-                            .frame(width: max(4, CGFloat(failureRate) * 200), height: 8)
-                            .offset(x: (successRate > 0 ? max(4, CGFloat(successRate) * 200) : 0) +
-                                      (partialRate > 0 ? max(4, CGFloat(partialRate) * 200) : 0))
-                            .cornerRadius(4)
-                    }
-                }
-                .frame(width: 200)
-                
-                // State breakdown
-                HStack(spacing: 10) {
-                    if successRate > 0 {
-                        StateIndicator(
-                            color: Color(hex: habit.color ?? "#007AFF"),
-                            label: "Success",
-                            value: successCount,
-                            total: totalDays,
-                            percentage: Int(successRate * 100),
-                            showAsFraction: showAsFraction
-                        )
-                    }
-                    
-                    if partialRate > 0 {
-                        StateIndicator(
-                            color: .orange,
-                            label: "Partial",
-                            value: partialCount,
-                            total: totalDays,
-                            percentage: Int(partialRate * 100),
-                            showAsFraction: showAsFraction
-                        )
-                    }
-                    
-                    if failureRate > 0 {
-                        StateIndicator(
-                            color: .red,
-                            label: "Attempted",
-                            value: failureCount,
-                            total: totalDays,
-                            percentage: Int(failureRate * 100),
-                            showAsFraction: showAsFraction
-                        )
-                    }
-                    
-                    Spacer()
-                }
+                multiStateProgressView
             } else {
-                // Simple progress bar for non-multi-state habits
-                HStack {
-                    ZStack(alignment: .leading) {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(height: 8)
-                            .cornerRadius(4)
-                        
-                        Rectangle()
-                            .fill(Color(hex: habit.color ?? "#007AFF"))
-                            .frame(width: max(4, CGFloat(successRate) * 200), height: 8)
-                            .cornerRadius(4)
-                    }
-                    .frame(width: 200)
-                    
-                    if showAsFraction {
-                        Text("\(successCount)/\(totalDays)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else {
-                        Text("\(Int(successRate * 100))%")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
+                simpleProgressView
             }
         }
         .onAppear {
             useMultipleStates = (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
             loadStats()
         }
-        .onChange(of: timeframe) { _ in
+        .onChange(of: timeframe) { _, _ in
             loadStats()
-        }
-        .onChange(of: showAsFraction) { _ in
-            // No need to reload stats, just update the view
         }
     }
     
+    // MARK: - View Components
+    
+    private var multiStateProgressView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Multi-state progress bar
+            ZStack(alignment: .leading) {
+                // Background
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(height: 8)
+                    .cornerRadius(4)
+                
+                // Success portion
+                if successRate > 0 {
+                    Rectangle()
+                        .fill(Color(hex: habit.color ?? "#007AFF"))
+                        .frame(width: max(4, CGFloat(successRate) * 200), height: 8)
+                        .cornerRadius(4)
+                }
+                
+                // Partial portion (stacked after success)
+                if partialRate > 0 {
+                    Rectangle()
+                        .fill(Color.orange)
+                        .frame(width: max(4, CGFloat(partialRate) * 200), height: 8)
+                        .offset(x: successRate > 0 ? max(4, CGFloat(successRate) * 200) : 0)
+                        .cornerRadius(4)
+                }
+                
+                // Failure portion (stacked after partial and success)
+                if failureRate > 0 {
+                    Rectangle()
+                        .fill(Color.red)
+                        .frame(width: max(4, CGFloat(failureRate) * 200), height: 8)
+                        .offset(x: (successRate > 0 ? max(4, CGFloat(successRate) * 200) : 0) +
+                                  (partialRate > 0 ? max(4, CGFloat(partialRate) * 200) : 0))
+                        .cornerRadius(4)
+                }
+            }
+            .frame(width: 200)
+            
+            // State breakdown
+            HStack(spacing: 10) {
+                if successRate > 0 {
+                    StateIndicator(
+                        color: Color(hex: habit.color ?? "#007AFF"),
+                        label: "Success",
+                        value: successCount,
+                        total: totalDays,
+                        percentage: Int(successRate * 100),
+                        showAsFraction: showAsFraction
+                    )
+                }
+                
+                if partialRate > 0 {
+                    StateIndicator(
+                        color: .orange,
+                        label: "Partial",
+                        value: partialCount,
+                        total: totalDays,
+                        percentage: Int(partialRate * 100),
+                        showAsFraction: showAsFraction
+                    )
+                }
+                
+                if failureRate > 0 {
+                    StateIndicator(
+                        color: .red,
+                        label: "Attempted",
+                        value: failureCount,
+                        total: totalDays,
+                        percentage: Int(failureRate * 100),
+                        showAsFraction: showAsFraction
+                    )
+                }
+                
+                Spacer()
+            }
+        }
+    }
+    
+    private var simpleProgressView: some View {
+        HStack {
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(height: 8)
+                    .cornerRadius(4)
+                
+                Rectangle()
+                    .fill(Color(hex: habit.color ?? "#007AFF"))
+                    .frame(width: max(4, CGFloat(successRate) * 200), height: 8)
+                    .cornerRadius(4)
+            }
+            .frame(width: 200)
+            
+            if showAsFraction {
+                Text("\(successCount)/\(totalDays)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("\(Int(successRate * 100))%")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
     private func loadStats() {
-        // Get start and end dates based on the selected timeframe
         let endDate = Date()
         let startDate = timeframe.getStartDate(from: endDate)
         
@@ -306,16 +343,13 @@ struct EnhancedHabitProgressView: View {
             failureRate = Double(failureCount) / Double(totalDays)
             
         } catch {
+            #if DEBUG
             print("Error loading habit statistics: \(error)")
+            #endif
         }
     }
     
-    // Helper property for calendar to avoid repetition
-    private var calendar: Calendar {
-        return Calendar.current
-    }
-    
-    // Helper method to determine if a habit should be performed on a given date
+    /// Determines if a habit should be performed on a given date
     private func shouldPerformHabit(_ habit: Habit, on date: Date) -> Bool {
         let weekday = calendar.component(.weekday, from: date) // 1 is Sunday, 7 is Saturday
         
@@ -324,15 +358,12 @@ struct EnhancedHabitProgressView: View {
             return true
             
         case "weekdays":
-            // Weekdays are 2-6 (Monday-Friday)
-            return weekday >= 2 && weekday <= 6
+            return (2...6).contains(weekday)
             
         case "weekends":
-            // Weekends are 1 and 7 (Sunday and Saturday)
             return weekday == 1 || weekday == 7
             
         case "weekly":
-            // Assume the habit should be done on the same day of the week as it was started
             if let startDate = habit.startDate {
                 let startWeekday = calendar.component(.weekday, from: startDate)
                 return weekday == startWeekday
@@ -340,8 +371,9 @@ struct EnhancedHabitProgressView: View {
             return false
             
         case "custom":
-            // Custom days format: "1,3,5" for Sun, Tue, Thu
-            let customDays = habit.customDays?.components(separatedBy: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) } ?? []
+            let customDays = habit.customDays?
+                .components(separatedBy: ",")
+                .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) } ?? []
             return customDays.contains(weekday)
             
         default:
@@ -350,7 +382,8 @@ struct EnhancedHabitProgressView: View {
     }
 }
 
-// Helper view for displaying state indicators
+// MARK: - State Indicator
+
 struct StateIndicator: View {
     let color: Color
     let label: String
@@ -368,12 +401,31 @@ struct StateIndicator: View {
             if showAsFraction {
                 Text("\(label): \(value)/\(total)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             } else {
                 Text("\(label): \(percentage)%")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
         }
     }
+}
+
+// MARK: - Preview
+
+#Preview {
+    let context = CoreDataManager.shared.container.viewContext
+    let habit1 = Habit(context: context)
+    habit1.name = "Morning Exercise"
+    habit1.color = "#34C759"
+    habit1.frequency = "daily"
+    
+    let habit2 = Habit(context: context)
+    habit2.name = "Reading"
+    habit2.color = "#007AFF"
+    habit2.frequency = "daily"
+    habit2.setValue(true, forKey: "useMultipleStates")
+    
+    return HabitStatsView(habits: [habit1, habit2])
+        .padding()
 }
