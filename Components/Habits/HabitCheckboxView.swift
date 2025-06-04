@@ -20,12 +20,18 @@ struct HabitCheckboxView: View {
     
     var body: some View {
         Button(action: {
-            toggleHabitWithState()
-            
-            // If we just completed a habit that should track details, show the detail view
-            if isChecked && shouldTrackDetailsForHabit() && !hasDetails {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    showingDetailView = true
+            // If habit tracks details and is already checked, open detail view instead of cycling
+            if shouldTrackDetailsForHabit() && isChecked {
+                showingDetailView = true
+            } else {
+                // Normal behavior - cycle through states
+                toggleHabitWithState()
+                
+                // If we just completed a habit that should track details, show the detail view
+                if isChecked && shouldTrackDetailsForHabit() && !hasDetails {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showingDetailView = true
+                    }
                 }
             }
         }) {
@@ -54,13 +60,15 @@ struct HabitCheckboxView: View {
     
     private var checkboxContent: some View {
         ZStack {
+            // Outer ring in habit color
             Circle()
-                .strokeBorder(getStateColor(), lineWidth: isChecked ? 0 : 1)
-                .background(
-                    Circle()
-                        .fill(isChecked ? getStateColor() : Color.clear)
-                )
-                .frame(width: 28, height: 28)
+                .strokeBorder(Color(hex: habit.color ?? "#007AFF"), lineWidth: isChecked ? 2 : 1)
+                .frame(width: 32, height: 32)
+            
+            // Inner circle with state color
+            Circle()
+                .fill(isChecked ? getStateColor() : Color.clear)
+                .frame(width: 24, height: 24)
                 .scaleEffect(isAnimating ? 1.2 : 1.0)
             
             if isChecked {
@@ -85,7 +93,7 @@ struct HabitCheckboxView: View {
             .overlay(
                 Image(systemName: "note.text")
                     .font(.system(size: 8))
-                    .foregroundStyle(getStateColor())
+                    .foregroundStyle(Color(hex: habit.color ?? "#007AFF"))
             )
             .offset(x: 12, y: -12)
     }
@@ -134,20 +142,39 @@ struct HabitCheckboxView: View {
         return (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
     }
     
+    /// Checks if this is a negative habit
+    private func isNegativeHabit() -> Bool {
+        return (habit.value(forKey: "isNegativeHabit") as? Bool) ?? false
+    }
+    
     /// Returns the appropriate color based on completion state
     private func getStateColor() -> Color {
-        if !useMultipleStates() || completionState == 1 {
-            return Color(hex: habit.color ?? "#007AFF") // Default or success
-        } else if completionState == 2 {
-            return Color.orange // Partial
-        } else if completionState == 3 {
-            return Color.red // Failed
+        print("DEBUG - Habit: \(habit.name ?? ""), isNegativeHabit: \(isNegativeHabit()), isChecked: \(isChecked)")
+        
+        // For negative habits, being checked means failure (red)
+        if isNegativeHabit() {
+            return Color.red
         }
-        return Color(hex: habit.color ?? "#007AFF") // Default
+        
+        // For positive habits, use normal color scheme
+        if !useMultipleStates() || completionState == 1 {
+            return Color.green // Success = Green
+        } else if completionState == 2 {
+            return Color.yellow // Partial = Yellow
+        } else if completionState == 3 {
+            return Color.red // Attempted = Red
+        }
+        return Color.green // Default to green
     }
     
     /// Returns the appropriate icon based on completion state
     private func getStateIcon() -> String {
+        // For negative habits, show X when checked
+        if isNegativeHabit() {
+            return "xmark"
+        }
+        
+        // For positive habits, use normal icons
         if !useMultipleStates() || completionState == 1 {
             return "checkmark" // Default or success
         } else if completionState == 2 {
@@ -183,8 +210,28 @@ struct HabitCheckboxView: View {
                     completionState = 1 // Default to success
                 }
                 
-                // Check for details
-                hasDetails = entry.details != nil && !(entry.details?.isEmpty ?? true)
+                // Check for details - but only consider it "has details" if it's actually meaningful
+                if let detailsString = entry.details, !detailsString.isEmpty {
+                    // Parse JSON to see if there's actual content
+                    if let data = detailsString.data(using: .utf8),
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        // For workout habits, only show indicator if there's actual workout data
+                        if isWorkoutHabit() && useMultipleStates() {
+                            // Only show details indicator for success state with actual workout info
+                            hasDetails = completionState == 1 &&
+                                        (!((json["types"] as? [String])?.isEmpty ?? true) ||
+                                         !((json["duration"] as? String)?.isEmpty ?? true))
+                        } else {
+                            // For non-workout habits, check if notes exist
+                            hasDetails = !((json["notes"] as? String)?.isEmpty ?? true)
+                        }
+                    } else {
+                        // Plain text details
+                        hasDetails = !detailsString.isEmpty
+                    }
+                } else {
+                    hasDetails = false
+                }
             } else {
                 isChecked = false
                 completionState = 0
@@ -198,6 +245,19 @@ struct HabitCheckboxView: View {
             completionState = 0
             hasDetails = false
         }
+    }
+    
+    /// Checks if this is a workout-related habit
+    private func isWorkoutHabit() -> Bool {
+        let workoutKeywords = ["workout", "exercise", "gym", "fitness", "training", "movement"]
+        let habitName = (habit.name ?? "").lowercased()
+        let detailType = (habit.value(forKey: "detailType") as? String) ?? ""
+        
+        let hasWorkoutKeyword = workoutKeywords.contains { keyword in
+            habitName.contains(keyword)
+        }
+        
+        return hasWorkoutKeyword || detailType == "workout"
     }
     
     /// Toggles the habit completion status
@@ -250,6 +310,12 @@ struct HabitCheckboxView: View {
         
         // Trigger animation
         isAnimating = true
+        
+        // For negative habits, simple toggle (no multi-state)
+        if isNegativeHabit() {
+            toggleHabit()
+            return
+        }
         
         if !useMultipleStates() {
             // If multiple states not enabled, just toggle

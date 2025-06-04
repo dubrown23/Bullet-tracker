@@ -25,14 +25,13 @@ struct EditHabitView: View {
     @State private var selectedFrequency: String = "daily"
     @State private var customDays: [Int] = []
     @State private var notes: String = ""
-    @State private var selectedCollection: Collection?
-    @State private var collections: [Collection] = []
     @State private var showingDeleteAlert = false
     
     // Tracking options
     @State private var trackDetails: Bool = false
     @State private var detailType: String = "general"
     @State private var useMultipleStates: Bool = false
+    @State private var isNegativeHabit: Bool = false
     
     // MARK: - Constants
     
@@ -182,6 +181,14 @@ struct EditHabitView: View {
                 }
                 
                 Section(header: Text("Tracking Options")) {
+                    Toggle("This is something I'm avoiding", isOn: $isNegativeHabit)
+                    
+                    if isNegativeHabit {
+                        Text("Checking this habit means you did the thing you're trying to avoid. Leave it unchecked for success.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
                     Toggle("Track Additional Details", isOn: $trackDetails)
                     
                     if trackDetails {
@@ -196,32 +203,26 @@ struct EditHabitView: View {
                             .foregroundStyle(.secondary)
                     }
                     
-                    Toggle("Use Multiple Completion States", isOn: $useMultipleStates)
-                    
-                    if useMultipleStates {
-                        Text("This habit will track success, partial success, and failure states separately.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    // Don't show multi-state option for negative habits
+                    if !isNegativeHabit {
+                        Toggle("Use Multiple Completion States", isOn: $useMultipleStates)
                         
-                        Text("• Success (✓): Full completion")
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                        
-                        Text("• Partial (⚬): Did some but not all")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                        
-                        Text("• Failure (✗): Attempted but struggled")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-                }
-                
-                Section(header: Text("Collection")) {
-                    Picker("Add to Collection", selection: $selectedCollection) {
-                        Text("None").tag(nil as Collection?)
-                        ForEach(collections, id: \.self) { collection in
-                            Text(collection.name ?? "").tag(collection as Collection?)
+                        if useMultipleStates {
+                            Text("This habit will track success, partial success, and failure states separately.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            
+                            Text("• Success (✓): Full completion")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                            
+                            Text("• Partial (⚬): Did some but not all")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            
+                            Text("• Failure (✗): Attempted but struggled")
+                                .font(.caption)
+                                .foregroundStyle(.red)
                         }
                     }
                 }
@@ -254,7 +255,12 @@ struct EditHabitView: View {
             }
             .onAppear {
                 loadHabitData()
-                loadCollections()
+            }
+            .onChange(of: isNegativeHabit) { _, newValue in
+                // If switching to negative habit, disable multi-state
+                if newValue {
+                    useMultipleStates = false
+                }
             }
             .alert("Delete Habit", isPresented: $showingDeleteAlert) {
                 Button("Cancel", role: .cancel) { }
@@ -275,7 +281,6 @@ struct EditHabitView: View {
         selectedColor = habit.color ?? "#007AFF"
         selectedFrequency = habit.frequency ?? "daily"
         notes = habit.notes ?? ""
-        selectedCollection = habit.collection
         
         if let customDaysString = habit.customDays, !customDaysString.isEmpty {
             customDays = customDaysString.components(separatedBy: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
@@ -284,10 +289,7 @@ struct EditHabitView: View {
         trackDetails = (habit.value(forKey: "trackDetails") as? Bool) ?? false
         detailType = (habit.value(forKey: "detailType") as? String) ?? "general"
         useMultipleStates = (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
-    }
-    
-    private func loadCollections() {
-        collections = CoreDataManager.shared.fetchAllCollections()
+        isNegativeHabit = (habit.value(forKey: "isNegativeHabit") as? Bool) ?? false
     }
     
     private func toggleCustomDay(_ day: Int) {
@@ -309,12 +311,13 @@ struct EditHabitView: View {
             frequency: selectedFrequency,
             customDays: customDaysString,
             notes: notes,
-            collection: selectedCollection
+            collection: nil  // Always nil now
         )
         
         habit.setValue(trackDetails, forKey: "trackDetails")
         habit.setValue(detailType, forKey: "detailType")
-        habit.setValue(useMultipleStates, forKey: "useMultipleStates")
+        habit.setValue(isNegativeHabit ? false : useMultipleStates, forKey: "useMultipleStates") // Negative habits don't use multi-state
+        habit.setValue(isNegativeHabit, forKey: "isNegativeHabit")
         
         CoreDataManager.shared.saveContext()
         

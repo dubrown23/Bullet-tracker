@@ -58,24 +58,24 @@ struct SimpleCollectionsView: View {
     
     private var specialCollectionsSection: some View {
         Section(header: Text("Special Collections")) {
-            NavigationLink(destination: HabitTrackerView()) {
-                habitTrackerRow
+            NavigationLink(destination: IndexView()) {
+                indexRow
             }
         }
     }
     
-    private var habitTrackerRow: some View {
+    private var indexRow: some View {
         HStack {
-            Image(systemName: "chart.bar.fill")
+            Image(systemName: "doc.text.magnifyingglass")
                 .foregroundStyle(.blue)
                 .font(.title3)
                 .frame(width: 32, height: 32)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text("Habit Tracker")
+                Text("Index")
                     .font(.headline)
                 
-                Text("Track your daily habits")
+                Text("Search and browse all entries")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

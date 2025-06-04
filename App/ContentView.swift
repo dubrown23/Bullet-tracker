@@ -17,8 +17,8 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             dailyLogTab
+            habitsTab
             collectionsTab
-            indexTab
             settingsTab
         }
     }
@@ -34,20 +34,22 @@ struct ContentView: View {
             .tag(0)
     }
     
-    /// Collections tab for organizing entries
+    /// Habits tab for tracking daily habits
+    private var habitsTab: some View {
+        NavigationStack {
+            HabitTrackerView()
+        }
+        .tabItem {
+            Label("Habits", systemImage: "chart.bar.fill")
+        }
+        .tag(1)
+    }
+    
+    /// Collections tab for organizing entries and accessing index
     private var collectionsTab: some View {
         SimpleCollectionsView()
             .tabItem {
                 Label("Collections", systemImage: "folder")
-            }
-            .tag(1)
-    }
-    
-    /// Index tab for browsing all entries
-    private var indexTab: some View {
-        IndexView()
-            .tabItem {
-                Label("Index", systemImage: "list.bullet")
             }
             .tag(2)
     }

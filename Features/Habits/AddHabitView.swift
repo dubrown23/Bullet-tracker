@@ -21,13 +21,12 @@ struct AddHabitView: View {
     @State private var selectedFrequency: String = "daily"
     @State private var customDays: [Int] = []
     @State private var notes: String = ""
-    @State private var selectedCollection: Collection?
-    @State private var collections: [Collection] = []
     @State private var iconSearchText: String = ""
     @State private var showingIconSheet: Bool = false
     @State private var trackDetails: Bool = false
     @State private var detailType: String = "general"
     @State private var useMultipleStates: Bool = false
+    @State private var isNegativeHabit: Bool = false
     
     // MARK: - Constants
     
@@ -98,14 +97,12 @@ struct AddHabitView: View {
                 habitDetailsSection
                 scheduleSection
                 trackingOptionsSection
-                collectionSection
                 notesSection
             }
             .navigationTitle("New Habit")
             .toolbar {
                 toolbarContent
             }
-            .onAppear(perform: setupView)
             .sheet(isPresented: $showingIconSheet) {
                 IconSelectorView(
                     selectedIcon: $selectedIcon,
@@ -239,8 +236,22 @@ struct AddHabitView: View {
     /// Tracking options section for detail tracking and multi-state options
     private var trackingOptionsSection: some View {
         Section(header: Text("Tracking Options")) {
+            negativeHabitToggle
             detailTrackingToggle
             multiStateTrackingToggle
+        }
+    }
+    
+    /// Negative habit toggle
+    private var negativeHabitToggle: some View {
+        Group {
+            Toggle("This is something I'm avoiding", isOn: $isNegativeHabit)
+            
+            if isNegativeHabit {
+                Text("Checking this habit means you did the thing you're trying to avoid. Leave it unchecked for success.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
     
@@ -266,37 +277,28 @@ struct AddHabitView: View {
     /// Multi-state tracking toggle and explanation
     private var multiStateTrackingToggle: some View {
         Group {
-            Toggle("Use Multiple Completion States", isOn: $useMultipleStates)
-            
-            if useMultipleStates {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("This habit will track success, partial success, and failure states separately.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text("• Success (✓): Full completion")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                    
-                    Text("• Partial (⚬): Did some but not all")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                    
-                    Text("• Failure (✗): Attempted but struggled")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                }
-            }
-        }
-    }
-    
-    /// Collection selection section
-    private var collectionSection: some View {
-        Section(header: Text("Collection")) {
-            Picker("Add to Collection", selection: $selectedCollection) {
-                Text("None").tag(nil as Collection?)
-                ForEach(collections, id: \.self) { collection in
-                    Text(collection.name ?? "").tag(collection as Collection?)
+            // Don't show multi-state option for negative habits
+            if !isNegativeHabit {
+                Toggle("Use Multiple Completion States", isOn: $useMultipleStates)
+                
+                if useMultipleStates {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("This habit will track success, partial success, and failure states separately.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Text("• Success (✓): Full completion")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                        
+                        Text("• Partial (⚬): Did some but not all")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                        
+                        Text("• Failure (✗): Attempted but struggled")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
                 }
             }
         }
@@ -330,24 +332,6 @@ struct AddHabitView: View {
     
     // MARK: - Helper Methods
     
-    /// Initial setup when view appears
-    private func setupView() {
-        loadCollections()
-        preSelectHabitTrackerCollection()
-    }
-    
-    /// Loads all collections from Core Data
-    private func loadCollections() {
-        collections = CoreDataManager.shared.fetchAllCollections()
-    }
-    
-    /// Pre-selects the "Habit Tracker" collection if it exists
-    private func preSelectHabitTrackerCollection() {
-        if let habitTrackerCollection = collections.first(where: { $0.name == "Habit Tracker" }) {
-            selectedCollection = habitTrackerCollection
-        }
-    }
-    
     /// Toggles a custom day selection
     private func toggleCustomDay(_ day: Int) {
         if customDays.contains(day) {
@@ -361,7 +345,7 @@ struct AddHabitView: View {
     private func saveHabit() {
         let customDaysString = customDays.sorted().map { String($0) }.joined(separator: ",")
         
-        // Create the habit with basic properties
+        // Create the habit with basic properties (removed collection parameter)
         let habit = CoreDataManager.shared.createHabit(
             name: name,
             color: selectedColor,
@@ -370,13 +354,14 @@ struct AddHabitView: View {
             customDays: customDaysString,
             startDate: Date(),
             notes: notes,
-            collection: selectedCollection
+            collection: nil  // Always nil now
         )
         
         // Set dynamic properties for tracking options
         habit.setValue(trackDetails, forKey: "trackDetails")
         habit.setValue(detailType, forKey: "detailType")
-        habit.setValue(useMultipleStates, forKey: "useMultipleStates")
+        habit.setValue(isNegativeHabit ? false : useMultipleStates, forKey: "useMultipleStates") // Negative habits don't use multi-state
+        habit.setValue(isNegativeHabit, forKey: "isNegativeHabit")
         
         // Save changes
         CoreDataManager.shared.saveContext()

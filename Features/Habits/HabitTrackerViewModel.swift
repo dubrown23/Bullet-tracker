@@ -19,6 +19,7 @@ class HabitTrackerViewModel: ObservableObject {
     @Published var habitEntries: [UUID: [Date: HabitEntry]] = [:]
     @Published var showingAddHabitSheet = false
     @Published var selectedHabit: Habit? = nil
+    @Published var habitToDelete: Habit? = nil  // Separate property for deletion
     @Published var showingDeleteAlert = false
     
     // MARK: - Constants

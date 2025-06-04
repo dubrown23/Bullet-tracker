@@ -10,7 +10,9 @@ import SwiftUI
 struct HabitTrackerView: View {
     @StateObject private var viewModel = HabitTrackerViewModel()
     @State private var isEditMode: EditMode = .inactive
+    @State private var lastDateCheck = Date()
     @Environment(\.presentationMode) var presentationMode
+    @Environment(\.scenePhase) var scenePhase
     
     var body: some View {
         contentView
@@ -69,11 +71,13 @@ struct HabitTrackerView: View {
                 EditHabitView(habit: habit)
             }
             .alert("Delete Habit", isPresented: $viewModel.showingDeleteAlert) {
-                Button("Cancel", role: .cancel) { }
+                Button("Cancel", role: .cancel) {
+                    viewModel.habitToDelete = nil
+                }
                 Button("Delete", role: .destructive) {
-                    if let habit = viewModel.selectedHabit {
+                    if let habit = viewModel.habitToDelete {
                         CoreDataManager.shared.deleteHabit(habit)
-                        viewModel.selectedHabit = nil
+                        viewModel.habitToDelete = nil
                         viewModel.loadHabits()
                     }
                 }
@@ -84,6 +88,18 @@ struct HabitTrackerView: View {
                 viewModel.updateVisibleDates()
                 viewModel.loadHabits()
                 viewModel.loadHabitEntries()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    // Check if we're on a new day when app becomes active
+                    let calendar = Calendar.current
+                    if !calendar.isDate(lastDateCheck, inSameDayAs: Date()) {
+                        viewModel.selectedDate = Date()
+                        viewModel.updateVisibleDates()
+                        viewModel.loadHabitEntries()
+                        lastDateCheck = Date()
+                    }
+                }
             }
     }
     
@@ -106,7 +122,7 @@ struct HabitTrackerView: View {
     
     // Date picker component
     private var datePickerView: some View {
-        DatePicker("End Date", selection: $viewModel.selectedDate, displayedComponents: .date)
+        DatePicker("Date Range", selection: $viewModel.selectedDate, displayedComponents: .date)
             .datePickerStyle(CompactDatePickerStyle())
             .padding(.horizontal)
             .onChange(of: viewModel.selectedDate) { _, _ in
@@ -275,30 +291,40 @@ struct HabitRowWithEdit: View {
         VStack {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .center) {
-                    // Habit name and icon with edit button
-                    HStack(spacing: 4) {
-                        HabitRowLabelView(habit: habit)
-                            .frame(width: 100, alignment: .leading)
-                        
-                        Button(action: {
+                    // Habit name and icon - removed pencil button for cleaner UI
+                    HabitRowLabelView(habit: habit)
+                        .frame(width: 120, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
                             viewModel.selectedHabit = habit
-                        }) {
-                            Image(systemName: "pencil")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .frame(width: 20, height: 20)
                         }
-                    }
-                    .frame(width: 120)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        viewModel.selectedHabit = habit
-                    }
+                        // Move context menu to just the habit label area, not the whole row
+                        .contextMenu {
+                            Button(action: {
+                                viewModel.selectedHabit = habit
+                            }) {
+                                Label("Edit Habit", systemImage: "pencil")
+                            }
+                            
+                            Button(role: .destructive, action: {
+                                // Fixed: Use habitToDelete instead of selectedHabit
+                                viewModel.habitToDelete = habit
+                                viewModel.showingDeleteAlert = true
+                            }) {
+                                Label("Delete Habit", systemImage: "trash")
+                            }
+                        }
                     
-                    // Checkboxes for each date
+                    // Checkboxes for each date - these have their own interaction
                     HStack(spacing: 12) {
                         ForEach(dates, id: \.self) { date in
                             HabitCheckboxView(habit: habit, date: date)
+                                .highPriorityGesture(
+                                    LongPressGesture(minimumDuration: 0.5)
+                                        .onEnded { _ in
+                                            // This will be handled in HabitCheckboxView
+                                        }
+                                )
                         }
                     }
                 }
@@ -308,20 +334,7 @@ struct HabitRowWithEdit: View {
         }
         .background(Color.gray.opacity(0.1))
         .cornerRadius(8)
-        .contextMenu {
-            Button(action: {
-                viewModel.selectedHabit = habit
-            }) {
-                Label("Edit", systemImage: "pencil")
-            }
-            
-            Button(role: .destructive, action: {
-                viewModel.selectedHabit = habit
-                viewModel.showingDeleteAlert = true
-            }) {
-                Label("Delete", systemImage: "trash")
-            }
-        }
+        // Removed the context menu from the entire row
     }
 }
 
