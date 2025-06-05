@@ -240,19 +240,20 @@ struct MonthLogView: View {
         // Fetch regular journal entries for this month
         let calendar = Calendar.current
         let startComponents = DateComponents(year: year, month: month, day: 1)
-        let endComponents = DateComponents(year: year, month: month + 1, day: 0)
-        
         guard let startDate = calendar.date(from: startComponents),
-              let endDate = calendar.date(from: endComponents) else { return }
+              let endDate = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startDate) else { return }
+        
+        // Add one day to endDate to include the entire last day
+        guard let endDateInclusive = calendar.date(byAdding: .day, value: 1, to: endDate) else { return }
         
         let context = CoreDataManager.shared.container.viewContext
         
-        // Fetch journal entries for this month
+        // Fetch journal entries for this month (excluding special entries)
         let journalRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
         journalRequest.predicate = NSPredicate(
-            format: "date >= %@ AND date <= %@ AND (isFutureEntry == NO OR isFutureEntry == nil)",
+            format: "date >= %@ AND date < %@ AND (isFutureEntry == NO OR isFutureEntry == nil) AND isSpecialEntry == NO",
             startDate as NSDate,
-            endDate as NSDate
+            endDateInclusive as NSDate
         )
         journalRequest.sortDescriptors = [
             NSSortDescriptor(keyPath: \JournalEntry.date, ascending: true)
@@ -261,9 +262,9 @@ struct MonthLogView: View {
         // Fetch future entries scheduled for this month
         let futureRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
         futureRequest.predicate = NSPredicate(
-            format: "isFutureEntry == YES AND scheduledDate >= %@ AND scheduledDate <= %@",
+            format: "isFutureEntry == YES AND scheduledDate >= %@ AND scheduledDate < %@",
             startDate as NSDate,
-            endDate as NSDate
+            endDateInclusive as NSDate
         )
         futureRequest.sortDescriptors = [
             NSSortDescriptor(keyPath: \JournalEntry.scheduledDate, ascending: true)

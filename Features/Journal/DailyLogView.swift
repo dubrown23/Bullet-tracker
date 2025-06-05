@@ -16,6 +16,7 @@ final class DailyLogViewModel {
     // MARK: - Properties
     
     var entries: [JournalEntry] = []
+    var migratedFutureEntries: [JournalEntry] = []
     var selectedDate = Date()
     var showingNewEntrySheet = false
     var selectedEntry: JournalEntry? = nil
@@ -24,7 +25,25 @@ final class DailyLogViewModel {
     
     /// Loads journal entries for the selected date
     func loadEntries() {
-        entries = CoreDataManager.shared.fetchEntriesForDate(selectedDate)
+        let allEntries = CoreDataManager.shared.fetchEntriesForDate(selectedDate)
+        
+        // Filter out special entries (reviews/outlooks) - they shouldn't appear in daily log
+        let nonSpecialEntries = allEntries.filter { !$0.isSpecialEntry }
+        
+        // Separate entries that came from Future Log (they have scheduledDate but are no longer future entries)
+        migratedFutureEntries = nonSpecialEntries.filter { entry in
+            // An entry is from Future Log if it was migrated and has a scheduled date
+            // but is no longer marked as a future entry
+            return entry.hasMigrated &&
+                   entry.scheduledDate != nil &&
+                   entry.isFutureEntry == false
+        }
+        
+        // All other entries go in the main list
+        entries = nonSpecialEntries.filter { entry in
+            // Include if it's NOT in the migrated future entries list
+            return !migratedFutureEntries.contains(where: { $0.id == entry.id })
+        }
     }
     
     /// Deletes journal entries at the specified indices
@@ -34,6 +53,12 @@ final class DailyLogViewModel {
             let entry = entries[index]
             CoreDataManager.shared.deleteJournalEntry(entry)
         }
+        loadEntries()
+    }
+    
+    /// Deletes a migrated future entry
+    func deleteMigratedFutureEntry(_ entry: JournalEntry) {
+        CoreDataManager.shared.deleteJournalEntry(entry)
         loadEntries()
     }
     
@@ -70,6 +95,7 @@ struct DailyLogView: View {
     // MARK: - State Properties
     
     @State private var viewModel = DailyLogViewModel()
+    @EnvironmentObject private var migrationManager: MigrationManager
     
     // MARK: - Body
     
@@ -78,7 +104,7 @@ struct DailyLogView: View {
             VStack(spacing: 0) {
                 datePicker
                 
-                if viewModel.entries.isEmpty {
+                if viewModel.entries.isEmpty && viewModel.migratedFutureEntries.isEmpty {
                     emptyStateView
                 } else {
                     entriesList
@@ -141,6 +167,35 @@ struct DailyLogView: View {
     /// List view displaying journal entries
     private var entriesList: some View {
         List {
+            // From Future Log section
+            if !viewModel.migratedFutureEntries.isEmpty {
+                Section {
+                    ForEach(viewModel.migratedFutureEntries) { entry in
+                        EntryRowView(entry: entry)
+                            .listRowBackground(Color.blue.opacity(0.05))
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                viewModel.selectedEntry = entry
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    viewModel.deleteMigratedFutureEntry(entry)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                    }
+                } header: {
+                    HStack {
+                        Image(systemName: "calendar.badge.clock")
+                        Text("From Future Log")
+                            .font(.headline)
+                    }
+                    .foregroundStyle(.blue)
+                }
+            }
+            
+            // Regular entries section
             ForEach(viewModel.entries) { entry in
                 EntryRowView(entry: entry)
                     .contentShape(Rectangle())
@@ -169,6 +224,30 @@ struct DailyLogView: View {
                 Label("Add Entry", systemImage: "plus")
             }
         }
+        
+        #if DEBUG
+        ToolbarItem(placement: .navigationBarLeading) {
+            Menu {
+                Button("Reset Daily Migration") {
+                    migrationManager.resetMigrationDateForTesting()
+                    // Force migration to run again
+                    migrationManager.performDailyMigration()
+                    // Reload entries
+                    viewModel.loadEntries()
+                }
+                
+                Button("Force Month Migration") {
+                    // Create some test entries for last month if needed
+                    createTestEntriesForLastMonth()
+                    // Force month-end migration
+                    migrationManager.performMonthEndMigration()
+                }
+            } label: {
+                Image(systemName: "ladybug")
+                    .foregroundStyle(.orange)
+            }
+        }
+        #endif
     }
     
     // MARK: - Helper Views
@@ -186,6 +265,42 @@ struct DailyLogView: View {
         }
         .tint(entry.taskStatus == "completed" ? .orange : .green)
     }
+    
+    // MARK: - Debug Helpers
+    
+    #if DEBUG
+    private func createTestEntriesForLastMonth() {
+        let calendar = Calendar.current
+        guard let lastMonth = calendar.date(byAdding: .month, value: -1, to: Date()) else { return }
+        
+        // Create a few test entries
+        _ = CoreDataManager.shared.createJournalEntry(
+            content: "Test task from last month",
+            entryType: "task",
+            taskStatus: "completed",
+            date: lastMonth,
+            priority: false
+        )
+        
+        _ = CoreDataManager.shared.createJournalEntry(
+            content: "Test event from last month",
+            entryType: "event",
+            taskStatus: nil,
+            date: lastMonth,
+            priority: false
+        )
+        
+        _ = CoreDataManager.shared.createJournalEntry(
+            content: "Test note from last month",
+            entryType: "note",
+            taskStatus: nil,
+            date: lastMonth,
+            priority: false
+        )
+        
+        print("📝 Created test entries for \(lastMonth.formatted(date: .abbreviated, time: .omitted))")
+    }
+    #endif
 }
 
 // MARK: - Preview
@@ -193,4 +308,5 @@ struct DailyLogView: View {
 #Preview {
     DailyLogView()
         .environment(\.managedObjectContext, CoreDataManager.shared.container.viewContext)
+        .environmentObject(MigrationManager.shared)
 }

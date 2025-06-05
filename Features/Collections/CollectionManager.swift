@@ -107,6 +107,64 @@ class CollectionManager {
         return getOrCreateMonthlyLogCollection()
     }
     
+    /// One-time cleanup to remove old automatic year/month collections
+    /// One-time cleanup to remove old automatic year/month collections
+    func cleanupOldAutomaticCollections() {
+        let context = coreDataManager.container.viewContext
+        let fetchRequest: NSFetchRequest<Collection> = Collection.fetchRequest()
+        
+        // Find collections that match old patterns
+        fetchRequest.predicate = NSPredicate(format: "isAutomatic == true AND (name CONTAINS '-' OR (name MATCHES '^[0-9]{4}$' AND name != %@))", String(Calendar.current.component(.year, from: Date())))
+        
+        do {
+            let oldCollections = try context.fetch(fetchRequest)
+            
+            if !oldCollections.isEmpty {
+                #if DEBUG
+                print("🧹 Found \(oldCollections.count) old automatic collections to clean up")
+                #endif
+                
+                for collection in oldCollections {
+                    // Don't delete if it has journal entries
+                    if let entries = collection.entries, entries.count > 0 {
+                        #if DEBUG
+                        print("⚠️ Skipping '\(collection.name ?? "")' - has \(entries.count) journal entries")
+                        #endif
+                        continue
+                    }
+                    
+                    // Don't delete if it has habits
+                    if let habits = collection.habits, habits.count > 0 {
+                        #if DEBUG
+                        print("⚠️ Skipping '\(collection.name ?? "")' - has \(habits.count) habits")
+                        #endif
+                        continue
+                    }
+                    
+                    // Don't delete Future Log or Monthly Log
+                    if let name = collection.name,
+                       (name == "Future Log" || name == "Monthly Log") {
+                        continue
+                    }
+                    
+                    #if DEBUG
+                    print("🗑️ Deleting old collection: \(collection.name ?? "")")
+                    #endif
+                    context.delete(collection)
+                }
+                
+                try context.save()
+                #if DEBUG
+                print("✅ Cleanup complete")
+                #endif
+            }
+        } catch {
+            #if DEBUG
+            print("❌ Error during cleanup: \(error)")
+            #endif
+        }
+    }
+    
     // MARK: - Private Methods
     
     /// Creates an automatic collection with proper sorting and configuration

@@ -752,7 +752,6 @@ extension CoreDataManager {
         }
     }
 }
-
 // MARK: - Collection Sorting
 
 extension CoreDataManager {
@@ -773,6 +772,174 @@ extension CoreDataManager {
             print("❌ Error fetching sorted collections: \(error)")
             #endif
             return []
+        }
+    }
+}
+// MARK: - Migration Support Methods
+
+extension CoreDataManager {
+    /// Fetches incomplete tasks from before a specific date
+    func fetchIncompleteTasks(before date: Date) -> [JournalEntry] {
+        let fetchRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
+        fetchRequest.predicate = NSPredicate(
+            format: "entryType == %@ AND taskStatus == %@ AND date < %@ AND hasMigrated == false",
+            EntryType.task.rawValue,
+            TaskStatus.pending.rawValue,
+            date as NSDate
+        )
+        fetchRequest.sortDescriptors = [NSSortDescriptor(key: "date", ascending: true)]
+        
+        do {
+            return try container.viewContext.fetch(fetchRequest)
+        } catch {
+            #if DEBUG
+            print("❌ Error fetching incomplete tasks: \(error)")
+            #endif
+            return []
+        }
+    }
+    
+    /// Creates a migrated copy of a task
+    func createMigratedTask(from originalTask: JournalEntry, to date: Date) -> JournalEntry {
+        let newTask = JournalEntry(context: container.viewContext)
+        newTask.id = UUID()
+        newTask.date = date
+        newTask.entryType = originalTask.entryType
+        newTask.taskStatus = TaskStatus.pending.rawValue
+        newTask.priority = originalTask.priority
+        newTask.collection = originalTask.collection
+        
+        // Add migration prefix if not already present
+        let originalContent = originalTask.content ?? ""
+        if !originalContent.hasPrefix("→ ") {
+            newTask.content = "→ \(originalContent)"
+        } else {
+            newTask.content = originalContent
+        }
+        
+        // Track original date
+        if let existingOriginalDate = originalTask.originalDate {
+            newTask.originalDate = existingOriginalDate
+        } else {
+            newTask.originalDate = originalTask.date
+        }
+        
+        // Copy tags
+        if let tags = originalTask.tags as? Set<Tag> {
+            for tag in tags {
+                newTask.addToTags(tag)
+            }
+        }
+        
+        // Mark original as migrated
+        originalTask.hasMigrated = true
+        
+        return newTask
+    }
+    
+    /// Fetches future entries that are due by a specific date
+    func fetchDueFutureEntries(by date: Date) -> [JournalEntry] {
+        let fetchRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
+        fetchRequest.predicate = NSPredicate(
+            format: "isFutureEntry == true AND scheduledDate <= %@ AND hasMigrated == false",
+            date as NSDate
+        )
+        
+        do {
+            return try container.viewContext.fetch(fetchRequest)
+        } catch {
+            #if DEBUG
+            print("❌ Error fetching due future entries: \(error)")
+            #endif
+            return []
+        }
+    }
+    
+    /// Creates a daily log copy of a future entry
+    func createDailyEntryFromFuture(_ futureEntry: JournalEntry) -> JournalEntry {
+        let dailyEntry = JournalEntry(context: container.viewContext)
+        dailyEntry.id = UUID()
+        dailyEntry.content = futureEntry.content
+        dailyEntry.entryType = futureEntry.entryType
+        dailyEntry.taskStatus = futureEntry.taskStatus
+        dailyEntry.priority = futureEntry.priority
+        dailyEntry.collection = futureEntry.collection
+        dailyEntry.date = futureEntry.scheduledDate ?? Date()
+        dailyEntry.isFutureEntry = false
+        
+        // Copy tags
+        if let tags = futureEntry.tags as? Set<Tag> {
+            for tag in tags {
+                dailyEntry.addToTags(tag)
+            }
+        }
+        
+        // Mark future entry as migrated (but keep it in Future Log)
+        futureEntry.hasMigrated = true
+        
+        return dailyEntry
+    }
+    
+    /// Batch save with error handling
+    func performBatchSave() {
+        guard container.viewContext.hasChanges else { return }
+        
+        do {
+            try container.viewContext.save()
+            #if DEBUG
+            print("✅ Batch save completed successfully")
+            #endif
+        } catch {
+            #if DEBUG
+            print("❌ Error during batch save: \(error)")
+            #endif
+            // Rollback changes on error
+            container.viewContext.rollback()
+        }
+    }
+    
+    /// Gets the last migration date from UserDefaults
+    func getLastMigrationDate() -> Date? {
+        UserDefaults.standard.object(forKey: "lastMigrationDate") as? Date
+    }
+    
+    /// Sets the last migration date in UserDefaults
+    func setLastMigrationDate(_ date: Date) {
+        UserDefaults.standard.set(date, forKey: "lastMigrationDate")
+    }
+}
+
+// MARK: - Year Collection Management (Phase 5)
+
+extension CoreDataManager {
+    /// Gets or creates a year collection
+    func getOrCreateYearCollection(year: Int) -> Collection? {
+        let fetchRequest: NSFetchRequest<Collection> = Collection.fetchRequest()
+        let yearString = String(year)
+        fetchRequest.predicate = NSPredicate(format: "name == %@ AND isAutomatic == %@",
+                                           yearString, NSNumber(value: true))
+        fetchRequest.fetchLimit = 1
+        
+        do {
+            if let existingCollection = try container.viewContext.fetch(fetchRequest).first {
+                return existingCollection
+            } else {
+                // Create new year collection
+                let yearCollection = Collection(context: container.viewContext)
+                yearCollection.id = UUID()
+                yearCollection.name = yearString
+                yearCollection.isAutomatic = true
+                yearCollection.collectionType = "year"
+                yearCollection.sortOrder = Int32(year)
+                
+                saveContext()
+                return yearCollection
+            }
+        } catch {
+            #if DEBUG
+            print("❌ Error getting/creating year collection: \(error)")
+            #endif
+            return nil
         }
     }
 }

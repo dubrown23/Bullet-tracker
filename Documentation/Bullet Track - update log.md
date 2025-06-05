@@ -216,20 +216,84 @@ Tags: #bugfix #habits #navigation #ui
   - Used navigation callbacks pattern for month switching
   - Maintained backward compatibility throughout migration
 Tags: #feature #bulletjournal #futureLog #monthlyLog #navigation #ui #phase1 #phase2 #phase3
-
 ---
-## Phase 4 Preparation Notes
-Ready for Phase 4: Migration Engine implementation
-- Need to implement automatic task migration (incomplete tasks → next day)
-- Need to implement future entry migration (scheduled entries → daily log)
-- Will require background processing and careful state management
-- Estimated complexity: 5-6 hours (most complex phase)
-- All prerequisites from Phases 1-3 are complete and tested
-- **Identified issues**:
-  - Future entries currently show in Daily Log (will be fixed in Phase 4)
+## 06.05.2025 - Phase 4 Complete: Migration Engine & Cleanup
+- **Implemented Phase 4 Migration Engine**:
+  - Created MigrationManager.swift to handle all migration logic
+  - Tasks now migrate daily when app comes to foreground
+  - Incomplete tasks from previous days get "→" prefix and carry forward
+  - Added age indicators: • (1 day), •• (2-3 days), ••• (4+ days)
+  - Tasks 5+ days old trigger alert to move to Future Log
+  - Added original date tracking showing "from May 31, 2025" under migrated tasks
+- **Fixed migration issues**:
+  - Corrected Calendar.endOfDay extension to prevent crashes
+  - Fixed checkForOldTasks to properly identify old tasks (removed incorrect content filter)
+  - Fixed duplicate entry display in DailyLogView with proper ID-based filtering
+  - Added "Reset Migration" debug button for testing
+- **Future entry migration**:
+  - Future entries scheduled for today automatically appear in Daily Log
+  - "From Future Log" section shows migrated future entries with blue background
+  - Original future entries remain in Future Log marked as migrated
+- **UI consistency cleanup**:
+  - Updated EditEntryView to match NewEntryView's simple text picker style
+  - Removed old bullet journal symbols (•, -, ○) from entry type pickers
+  - Consistent use of plain text labels instead of mixing symbols
+- **Collection cleanup**:
+  - Added cleanupOldAutomaticCollections() to remove old month collections
+  - Successfully removed "2025-06 June" style collections
+  - Preserved current year (2025) and core collections (Future Log, Monthly Log)
+  - Fixed Collection entity reference (entries not journalEntries)
+- **Current structure**:
+  - Index → Future Log → Monthly Log → 2025 (year) → User Collections
+  - Migration system fully operational
+  - Ready for Phase 5: Reviews & Outlooks
   
-Tags: #feature #coredata #journal #migration #refactor #ui #futureLog #parser
-
+  ---
+## 06.05.2025 - Phase 4 Extended: Year/Month Archive Migration
+- **Extended Phase 4 with month-end archive system**:
+  - Created YearLogView.swift to display months within year collections
+  - Created MonthArchiveView.swift to show archived entries for each month
+  - Added month-end migration to MigrationManager that archives ALL entries to year/month structure
+  - Month archives created as "2025/May" format collections
+- **Implemented hierarchical year/month structure**:
+  - Year collection (2025) now contains nested month collections
+  - Tapping year shows list of months with entry counts
+  - Each month shows all archived entries (tasks, events, notes) from that month
+  - Fixed Collections view to hide month archives from main list (only visible inside year)
+- **Added debug tools**:
+  - "Force Month Migration" button in Daily Log for testing
+  - Creates test entries and triggers month-end archive
+  - Successfully tested migration of entries to year/month structure
+- **Migration system now complete**:
+  - Daily: Incomplete tasks → next day
+  - Monthly: ALL entries → year/month archive for review
+  - Future Log: Scheduled entries → Daily Log when due
+- **Phase 4 FULLY COMPLETE** with enhanced migration system
+Tags: #feature #migration #archive #journal #coredata #phase4complete
+---
+## 06.05.2025 - Phase 5: Reviews & Outlooks Implementation Complete
+- **Added monthly review and outlook special entry types**:
+  - New entry types "📝 Review" and "📅 Outlook" in entry picker
+  - Full-screen editor with templates and word count
+  - Auto-save every 30 seconds
+  - One draft allowed per type per month
+- **Implemented special entry display**:
+  - Purple background for reviews, green for outlooks
+  - Special entries appear at top of month archives
+  - "Read more" navigation to detail view
+  - Draft badges for unpublished entries
+- **Fixed entry filtering**:
+  - Special entries excluded from Daily Log view
+  - Monthly Log shows only current month entries
+  - Special entries excluded from daily migration
+- **Corrected storage location**:
+  - Special entries save to month archive collections (2025/May)
+  - Proper duplicate prevention (one review/outlook per month)
+- **Preserved all Phase 4 functionality**:
+  - Daily task migration unchanged
+  - Month-end archiving unchanged
+  - Future Log migration unchanged
+Tags: #feature #journal #phase5 #reviews #outlooks #specialentries
 ---
 
 ## [TEMPLATE] MM.DD.YYYY - Code Update

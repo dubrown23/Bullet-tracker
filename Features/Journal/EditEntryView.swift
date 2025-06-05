@@ -20,8 +20,8 @@ struct EditEntryView: View {
     // MARK: - State Properties
     
     @State private var content: String = ""
-    @State private var type: EntryType = .task
-    @State private var taskStatus: TaskStatus = .pending
+    @State private var entryType: String = "task"
+    @State private var taskStatus: String = "pending"
     @State private var selectedCollection: Collection?
     @State private var tagsText: String = ""
     @State private var priority: Bool = false
@@ -34,23 +34,19 @@ struct EditEntryView: View {
         NavigationStack {
             Form {
                 Section(header: Text("Entry Details")) {
-                    Picker("Type", selection: $type) {
-                        ForEach(EntryType.allCases) { type in
-                            HStack {
-                                Text(type.symbol)
-                                Text(type.rawValue.capitalized)
-                            }.tag(type)
-                        }
+                    Picker("Type", selection: $entryType) {
+                        Text("Task").tag("task")
+                        Text("Event").tag("event")
+                        Text("Note").tag("note")
                     }
+                    .pickerStyle(.segmented)
                     
-                    if type == .task {
+                    if entryType == "task" {
                         Picker("Status", selection: $taskStatus) {
-                            ForEach(TaskStatus.allCases) { status in
-                                HStack {
-                                    Text(status.symbol)
-                                    Text(status.rawValue.capitalized)
-                                }.tag(status)
-                            }
+                            Text("Pending").tag("pending")
+                            Text("Completed").tag("completed")
+                            Text("Migrated").tag("migrated")
+                            Text("Scheduled").tag("scheduled")
                         }
                         
                         Toggle("Priority", isOn: $priority)
@@ -113,15 +109,8 @@ struct EditEntryView: View {
     
     private func loadEntryData() {
         content = entry.content ?? ""
-        
-        if let entryType = entry.entryType, let type = EntryType(rawValue: entryType) {
-            self.type = type
-        }
-        
-        if let status = entry.taskStatus, let taskStatus = TaskStatus(rawValue: status) {
-            self.taskStatus = taskStatus
-        }
-        
+        entryType = entry.entryType ?? "task"
+        taskStatus = entry.taskStatus ?? "pending"
         selectedCollection = entry.collection
         priority = entry.priority
         
@@ -145,8 +134,8 @@ struct EditEntryView: View {
         CoreDataManager.shared.updateJournalEntry(
             entry,
             content: content,
-            entryType: type.rawValue,
-            taskStatus: type == .task ? taskStatus.rawValue : nil,
+            entryType: entryType,
+            taskStatus: entryType == "task" ? taskStatus : nil,
             priority: priority,
             collection: selectedCollection,
             tags: tags

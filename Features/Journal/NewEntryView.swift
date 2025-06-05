@@ -33,6 +33,13 @@ struct NewEntryView: View {
     @State private var selectedFutureDate: Date?
     @State private var showDatePicker: Bool = false
     
+    // Special entry properties (Phase 5)
+    @State private var isSpecialEntry: Bool = false
+    @State private var specialEntryType: String = "review"
+    @State private var targetMonth: Date = Date()
+    @State private var showExtendedEditor: Bool = false
+    @State private var isDraft: Bool = false
+    
     // MARK: - Computed Properties
     
     /// Determines if the save button should be disabled
@@ -58,7 +65,9 @@ struct NewEntryView: View {
                 entryDetailsSection
                 
                 // Schedule for later section
-                scheduleSection
+                if !isSpecialEntry {
+                    scheduleSection
+                }
             }
             .navigationTitle("New Entry")
             .toolbar {
@@ -66,6 +75,33 @@ struct NewEntryView: View {
             }
             .onAppear {
                 loadCollections()
+            }
+            .sheet(isPresented: $showExtendedEditor) {
+                SpecialEntryEditorView(
+                    content: $content,
+                    specialType: specialEntryType,
+                    targetMonth: targetMonth,
+                    isDraft: $isDraft,
+                    onSave: {
+                        saveEntry()
+                    }
+                )
+            }
+            .onChange(of: entryType) { newValue in
+                // Check if this is a special entry type
+                if newValue == "review" || newValue == "outlook" {
+                    isSpecialEntry = true
+                    specialEntryType = newValue
+                    // Set default target month to current month
+                    let calendar = Calendar.current
+                    targetMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+                    // Open extended editor automatically
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        showExtendedEditor = true
+                    }
+                } else {
+                    isSpecialEntry = false
+                }
             }
         }
     }
@@ -76,15 +112,54 @@ struct NewEntryView: View {
         Section(header: Text("Entry Details")) {
             entryTypePicker
             
-            if entryType == "task" && !scheduleForLater {
-                taskControls
+            if isSpecialEntry {
+                // Month selector for special entries
+                monthSelector
+            } else {
+                // Regular entry controls
+                if entryType == "task" && !scheduleForLater {
+                    taskControls
+                }
+                
+                contentField
+                tagsField
+                
+                if !collections.isEmpty && !scheduleForLater {
+                    collectionPicker
+                }
             }
+        }
+    }
+    
+    private var monthSelector: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Select Month")
+                .font(.caption)
+                .foregroundColor(.secondary)
             
-            contentField
-            tagsField
+            Picker("Month", selection: $targetMonth) {
+                ForEach(SpecialEntryTemplates.availableMonths(), id: \.self) { month in
+                    Text(SpecialEntryTemplates.monthDisplayString(for: month))
+                        .tag(month)
+                }
+            }
+            .pickerStyle(.menu)
             
-            if !collections.isEmpty && !scheduleForLater {
-                collectionPicker
+            // Edit button to reopen editor
+            Button(action: {
+                showExtendedEditor = true
+            }) {
+                HStack {
+                    Image(systemName: "pencil.circle.fill")
+                    Text(content.isEmpty ? "Write \(specialEntryType == "review" ? "Review" : "Outlook")" : "Edit \(specialEntryType == "review" ? "Review" : "Outlook")")
+                }
+            }
+            .buttonStyle(.bordered)
+            
+            if isDraft {
+                Label("Draft", systemImage: "doc.badge.clock")
+                    .font(.caption)
+                    .foregroundColor(.orange)
             }
         }
     }
@@ -150,6 +225,8 @@ struct NewEntryView: View {
             Text("Task").tag("task")
             Text("Event").tag("event")
             Text("Note").tag("note")
+            Text("📝 Review").tag("review")
+            Text("📅 Outlook").tag("outlook")
         }
         .pickerStyle(.segmented)
     }
@@ -220,7 +297,9 @@ struct NewEntryView: View {
     private func saveEntry() {
         let context = CoreDataManager.shared.container.viewContext
         
-        if scheduleForLater {
+        if isSpecialEntry {
+            saveSpecialEntry(in: context)
+        } else if scheduleForLater {
             saveFutureEntry(in: context)
         } else {
             saveRegularEntry(in: context)
@@ -229,6 +308,71 @@ struct NewEntryView: View {
         dismiss()
     }
     
+    /// Saves a special entry (review or outlook)
+    private func saveSpecialEntry(in context: NSManagedObjectContext) {
+        // Check for ANY existing entry of same type for same month (draft or published)
+        let fetchRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
+        let calendar = Calendar.current
+        let monthStart = calendar.dateInterval(of: .month, for: targetMonth)?.start ?? targetMonth
+        let monthEnd = calendar.dateInterval(of: .month, for: targetMonth)?.end ?? targetMonth
+        
+        fetchRequest.predicate = NSPredicate(
+            format: "isSpecialEntry == %@ AND specialEntryType == %@ AND targetMonth >= %@ AND targetMonth < %@",
+            NSNumber(value: true),
+            specialEntryType,
+            monthStart as NSDate,
+            monthEnd as NSDate
+        )
+        
+        do {
+            let existingEntries = try context.fetch(fetchRequest)
+            
+            // Delete ALL existing entries for this type/month (not just drafts)
+            for existingEntry in existingEntries {
+                context.delete(existingEntry)
+            }
+            
+            // Create new entry
+            let entry = JournalEntry(context: context)
+            entry.id = UUID()
+            entry.content = content
+            entry.date = Date()
+            entry.entryType = "note" // Base type
+            entry.isSpecialEntry = true
+            entry.specialEntryType = specialEntryType
+            entry.targetMonth = targetMonth
+            entry.isDraft = isDraft
+            
+            // Find the appropriate month collection (from Phase 4 archives)
+            let year = calendar.component(.year, from: targetMonth)
+            let month = calendar.component(.month, from: targetMonth)
+            let monthName = targetMonth.formatted(.dateTime.month(.wide))
+            let monthCollectionName = "\(year)/\(monthName)"
+            
+            // Try to find existing month collection
+            let collectionFetch: NSFetchRequest<Collection> = Collection.fetchRequest()
+            collectionFetch.predicate = NSPredicate(format: "name == %@", monthCollectionName)
+            collectionFetch.fetchLimit = 1
+            
+            if let monthCollection = try context.fetch(collectionFetch).first {
+                entry.collection = monthCollection
+            } else {
+                // If no month collection exists, use year collection
+                if let yearCollection = CoreDataManager.shared.getOrCreateYearCollection(year: year) {
+                    entry.collection = yearCollection
+                }
+            }
+            
+            try context.save()
+            #if DEBUG
+            print("Special entry saved successfully to collection: \(entry.collection?.name ?? "none")")
+            #endif
+        } catch {
+            #if DEBUG
+            print("Error saving special entry: \(error)")
+            #endif
+        }
+    }
     /// Saves a future entry
     private func saveFutureEntry(in context: NSManagedObjectContext) {
         let entry = JournalEntry(context: context)

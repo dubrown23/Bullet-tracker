@@ -179,6 +179,10 @@ struct SimpleCollectionsView: View {
             // For the single Monthly Log, use the container that handles navigation
             MonthlyLogContainerView()
             
+        case "year":
+            // For year collections, use the new YearLogView
+            YearLogView(yearCollection: collection)
+            
         case "month":
             // Handle old month collections for backward compatibility
             if let name = collection.name {
@@ -200,7 +204,7 @@ struct SimpleCollectionsView: View {
             }
             
         default:
-            // For all other collections (year, user collections), use the standard view
+            // For all other collections (user collections), use the standard view
             CollectionDetailView(collection: collection)
         }
     }
@@ -233,9 +237,14 @@ struct SimpleCollectionsView: View {
     
     // MARK: - Computed Properties
     
-    /// Filters out the Future Log from automatic collections to avoid duplication
+    /// Filters out the Future Log and month archives from automatic collections
     private var filteredAutomaticCollections: [Collection] {
-        automaticCollections.filter { $0.collectionType != "future" }
+        automaticCollections.filter { collection in
+            // Exclude Future Log (shown separately)
+            // Exclude month archives (shown inside year collections)
+            collection.collectionType != "future" &&
+            !(collection.name?.contains("/") ?? false)
+        }
     }
     
     // MARK: - Toolbar Components
