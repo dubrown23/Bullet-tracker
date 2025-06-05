@@ -14,6 +14,9 @@ struct BulletTrackerApp: App {
     /// Shared Core Data manager instance
     private let coreDataManager = CoreDataManager.shared
     
+    /// Collection manager for automatic collections
+    private let collectionManager = CollectionManager()
+    
     // MARK: - Initialization
     
     init() {
@@ -41,6 +44,9 @@ struct BulletTrackerApp: App {
         
         // Create default collections on first launch
         coreDataManager.setupDefaultData()
+        
+        // Create automatic time-based collections (Future Log, Year, Month)
+        collectionManager.createCurrentTimeCollections()
         
         #if DEBUG
         print("🔍 Checking CloudKit status...")

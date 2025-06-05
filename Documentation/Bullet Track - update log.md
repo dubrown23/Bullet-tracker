@@ -152,6 +152,86 @@ Tags: #navigation #refactor #ui #structure #cleanup
 Tags: #bugfix #habits #navigation #ui
 
 ---
+
+## 06.04.2025 - Digital Bullet Journal Phases 1 & 2: Foundation to Future Log
+- **Started implementation of digital bullet journal transformation**
+- **Phase 1 - Foundation & Data Model**:
+  - Successfully updated Core Data model with new attributes:
+    - JournalEntry: Added `scheduledDate`, `isFutureEntry`, `hasMigrated`, `isSpecialEntry`, `specialEntryType`, `originalDate`
+    - Collection: Added `isAutomatic`, `sortOrder`, `collectionType`
+  - Fixed CloudKit compatibility issue: All Boolean attributes now have explicit default values
+  - Updated CoreDataManager with new methods:
+    - Added `fetchFutureEntriesForMonth()` for retrieving scheduled entries
+    - Added `migrateIncompleteTasks()` for daily task migration
+    - Added `migrateDueFutureEntries()` for future entry migration
+    - Added `fetchAllCollectionsSorted()` for proper collection ordering
+  - Refactored collection management:
+    - Created new CollectionManager.swift for separation of concerns
+    - Automatic creation of Future Log, Year, and Month collections
+    - Collections now properly sorted (Future Log first, then by date)
+  - Updated UI to handle automatic collections:
+    - SimpleCollectionsView now separates automatic "Logs" from user collections
+    - Different icons for collection types (calendar.badge.clock for Future Log)
+    - Prevented deletion of automatic collections
+- **Phase 2 - Future Log Implementation**:
+  - Created FutureEntryParser to handle @mention date parsing:
+    - Supports formats: @december, @dec, @12, @dec-25, @12/25/2025, @dec-2026
+    - Case-insensitive with smart next occurrence logic
+    - Fixed dictionary duplicate key crash with "may" month
+  - Built complete FutureLogView:
+    - Month-grouped display of future entries
+    - Empty state with clear call-to-action
+    - Add/Edit/Delete functionality
+  - Implemented entry types (Task/Event/Note):
+    - Added back `entryType` usage from existing Core Data model
+    - Set default value "note" in Core Data
+    - Type-specific icons: circle (task), calendar (event), note.text (note)
+    - Events show inline dates to save space (e.g., "Wedding · Aug 8")
+  - Updated UI organization:
+    - Restructured Collections tab: Index (top), Future Log, Logs, Your Collections
+    - Filtered duplicate Future Log from automatic collections
+    - Cleaner date display format (Aug 8 instead of Day 8)
+  - Added "Schedule for Later" to Daily Log:
+    - Toggle in NewEntryView for future scheduling
+    - Real-time @mention parsing with green confirmation
+    - Alternative manual date picker
+    - Saves to Future Log collection instead of daily entries
+- **Phase 3: Collection Tab Transformation & Monthly Log**:
+  - Created MonthLogView with list view showing entries grouped by day
+  - Implemented "From Future Log" section showing scheduled entries
+  - Added month navigation with previous/next chevrons
+  - Fixed navigation bar UI with centered title and balanced layout
+  - **Implemented Single Monthly Log system**:
+    - Created MonthlyLogContainerView for navigation state management
+    - Updated CollectionManager to create single "Monthly Log" instead of individual months
+    - Modified SimpleCollectionsView to route to container
+    - Prevents Collections tab from getting cluttered with 24+ month collections
+- **Bug Fixes & UI Improvements**:
+  - Updated EntryRowView to use digital icons (circle, calendar, note) instead of traditional bullet journal symbols (—, •, ○)
+  - Fixed navigation bar centering issues in MonthLogView
+  - Added backward compatibility for existing month collections
+  - Ensured Future Log entries display in correct month views
+- **Architecture Decisions**:
+  - Chose Single Monthly Log pattern over individual month collections for scalability
+  - Used navigation callbacks pattern for month switching
+  - Maintained backward compatibility throughout migration
+Tags: #feature #bulletjournal #futureLog #monthlyLog #navigation #ui #phase1 #phase2 #phase3
+
+---
+## Phase 4 Preparation Notes
+Ready for Phase 4: Migration Engine implementation
+- Need to implement automatic task migration (incomplete tasks → next day)
+- Need to implement future entry migration (scheduled entries → daily log)
+- Will require background processing and careful state management
+- Estimated complexity: 5-6 hours (most complex phase)
+- All prerequisites from Phases 1-3 are complete and tested
+- **Identified issues**:
+  - Future entries currently show in Daily Log (will be fixed in Phase 4)
+  
+Tags: #feature #coredata #journal #migration #refactor #ui #futureLog #parser
+
+---
+
 ## [TEMPLATE] MM.DD.YYYY - Code Update
 - 
 - 

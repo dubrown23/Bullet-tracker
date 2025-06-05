@@ -24,18 +24,18 @@ struct EntryRowView: View {
     
     var body: some View {
         HStack(alignment: .top) {
-            // Entry symbol
+            // Entry icon - using our digital system
             if entry.entryType == EntryType.task.rawValue {
                 Button(action: toggleTaskStatus) {
-                    Text(getSymbol())
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(entry.priority ? .red : .primary)
+                    Image(systemName: getIcon())
+                        .font(.system(size: 18))
+                        .foregroundStyle(getIconColor())
                         .frame(width: 30)
                 }
             } else {
-                Text(getSymbol())
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.primary)
+                Image(systemName: getIcon())
+                    .font(.system(size: 18))
+                    .foregroundStyle(getIconColor())
                     .frame(width: 30)
             }
             
@@ -88,7 +88,43 @@ struct EntryRowView: View {
     
     // MARK: - Helper Methods
     
-    /// Returns the appropriate symbol for the entry type and status
+    /// Returns the appropriate SF Symbol icon for the entry type
+    private func getIcon() -> String {
+        switch entry.entryType ?? "note" {
+        case EntryType.task.rawValue:
+            if entry.taskStatus == TaskStatus.completed.rawValue {
+                return "checkmark.circle.fill"
+            } else {
+                return "circle"
+            }
+        case EntryType.event.rawValue:
+            return "calendar"
+        case EntryType.note.rawValue:
+            return "note.text"
+        default:
+            return "note.text"
+        }
+    }
+    
+    /// Returns the appropriate color for the icon
+    private func getIconColor() -> Color {
+        switch entry.entryType ?? "note" {
+        case EntryType.task.rawValue:
+            if entry.taskStatus == TaskStatus.completed.rawValue {
+                return .green
+            } else {
+                return entry.priority ? .red : .blue
+            }
+        case EntryType.event.rawValue:
+            return .orange
+        case EntryType.note.rawValue:
+            return .gray
+        default:
+            return .gray
+        }
+    }
+    
+    /// Returns the traditional bullet journal symbol (kept for reference but not used)
     private func getSymbol() -> String {
         if entry.entryType == EntryType.task.rawValue {
             if let status = entry.taskStatus {

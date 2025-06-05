@@ -27,11 +27,27 @@ struct NewEntryView: View {
     @State private var selectedCollection: Collection?
     @State private var collections: [Collection] = []
     
+    // Future entry properties
+    @State private var scheduleForLater: Bool = false
+    @State private var parsedDate: Date?
+    @State private var selectedFutureDate: Date?
+    @State private var showDatePicker: Bool = false
+    
     // MARK: - Computed Properties
     
     /// Determines if the save button should be disabled
     private var isSaveDisabled: Bool {
-        content.isEmpty
+        if scheduleForLater {
+            // For future entries, need content and a valid date
+            return content.isEmpty || (!hasValidFutureDate)
+        } else {
+            // For regular entries, just need content
+            return content.isEmpty
+        }
+    }
+    
+    private var hasValidFutureDate: Bool {
+        parsedDate != nil || selectedFutureDate != nil
     }
     
     // MARK: - Body
@@ -40,6 +56,9 @@ struct NewEntryView: View {
         NavigationStack {
             Form {
                 entryDetailsSection
+                
+                // Schedule for later section
+                scheduleSection
             }
             .navigationTitle("New Entry")
             .toolbar {
@@ -57,15 +76,71 @@ struct NewEntryView: View {
         Section(header: Text("Entry Details")) {
             entryTypePicker
             
-            if entryType == "task" {
+            if entryType == "task" && !scheduleForLater {
                 taskControls
             }
             
             contentField
             tagsField
             
-            if !collections.isEmpty {
+            if !collections.isEmpty && !scheduleForLater {
                 collectionPicker
+            }
+        }
+    }
+    
+    private var scheduleSection: some View {
+        Section(header: Text("Scheduling")) {
+            Toggle("Schedule for Later", isOn: $scheduleForLater)
+                .onChange(of: scheduleForLater) { newValue in
+                    if !newValue {
+                        // Reset future date fields when toggled off
+                        parsedDate = nil
+                        selectedFutureDate = nil
+                        showDatePicker = false
+                    }
+                }
+            
+            if scheduleForLater {
+                // Show parsed date feedback
+                if let date = parsedDate {
+                    HStack {
+                        Image(systemName: "calendar.badge.checkmark")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                        Text("Scheduled for \(date, format: .dateTime.month(.wide).day().year())")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                    }
+                }
+                
+                // Manual date picker option
+                Toggle("Choose specific date", isOn: $showDatePicker)
+                
+                if showDatePicker {
+                    DatePicker("Future Date",
+                             selection: Binding(
+                                get: { selectedFutureDate ?? Date() },
+                                set: { selectedFutureDate = $0 }
+                             ),
+                             in: Date()...,
+                             displayedComponents: .date)
+                        .datePickerStyle(GraphicalDatePickerStyle())
+                }
+                
+                // Tips for @mentions
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Tips:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("• Use @december or @dec in your content")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("• Use @dec-25 for a specific date")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 4)
             }
         }
     }
@@ -93,7 +168,14 @@ struct NewEntryView: View {
     }
     
     private var contentField: some View {
-        TextField("Content", text: $content)
+        TextField(scheduleForLater ? "Content (use @month to schedule)" : "Content", text: $content)
+            .onChange(of: content) { newValue in
+                if scheduleForLater && !showDatePicker {
+                    // Parse for @mentions as user types
+                    let result = FutureEntryParser.parseFutureDate(from: newValue)
+                    parsedDate = result.scheduledDate
+                }
+            }
     }
     
     private var tagsField: some View {
@@ -138,6 +220,62 @@ struct NewEntryView: View {
     private func saveEntry() {
         let context = CoreDataManager.shared.container.viewContext
         
+        if scheduleForLater {
+            saveFutureEntry(in: context)
+        } else {
+            saveRegularEntry(in: context)
+        }
+        
+        dismiss()
+    }
+    
+    /// Saves a future entry
+    private func saveFutureEntry(in context: NSManagedObjectContext) {
+        let entry = JournalEntry(context: context)
+        entry.id = UUID()
+        entry.date = Date()
+        entry.entryType = entryType
+        entry.isFutureEntry = true
+        entry.priority = priority
+        
+        // Process content and date
+        if showDatePicker, let manualDate = selectedFutureDate {
+            // Using manual date picker
+            entry.content = content
+            entry.scheduledDate = manualDate
+        } else if let parsed = parsedDate {
+            // Using @mention parsing
+            let result = FutureEntryParser.parseFutureDate(from: content)
+            entry.content = result.cleanText
+            entry.scheduledDate = parsed
+        }
+        
+        // Find and assign to Future Log collection
+        let fetchRequest: NSFetchRequest<Collection> = Collection.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "name == %@", "Future Log")
+        fetchRequest.fetchLimit = 1
+        
+        do {
+            if let futureLogCollection = try context.fetch(fetchRequest).first {
+                entry.collection = futureLogCollection
+            }
+            
+            // Process tags
+            processTags(for: entry, in: context)
+            
+            try context.save()
+            #if DEBUG
+            print("Future entry saved successfully")
+            #endif
+        } catch {
+            #if DEBUG
+            print("Error saving future entry: \(error)")
+            #endif
+        }
+    }
+    
+    /// Saves a regular entry (existing functionality)
+    private func saveRegularEntry(in context: NSManagedObjectContext) {
         let entry = createJournalEntry(in: context)
         processTags(for: entry, in: context)
         
@@ -151,8 +289,6 @@ struct NewEntryView: View {
             print("Error saving entry: \(error)")
             #endif
         }
-        
-        dismiss()
     }
     
     /// Creates a new journal entry with the current form data

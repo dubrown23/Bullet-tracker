@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		77731D4E2DF07A5B00A1F37C /* CollectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */; };
+		77731D502DF07FF500A1F37C /* FutureEntryParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D4F2DF07FF500A1F37C /* FutureEntryParser.swift */; };
+		77731D522DF0872800A1F37C /* FutureLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D512DF0872800A1F37C /* FutureLogView.swift */; };
+		77731D542DF0A06D00A1F37C /* MonthLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D532DF0A06D00A1F37C /* MonthLogView.swift */; };
+		77731D562DF0B8A700A1F37C /* MonthlyLogContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D552DF0B8A700A1F37C /* MonthlyLogContainerView.swift */; };
 		77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535962DD62DAE008BBCD8 /* BackupManager.swift */; };
 		77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */; };
 		77DB37272DEBD47E004E2ED9 /* Bullet Track - update log.md in Resources */ = {isa = PBXBuildFile; fileRef = 77DB37262DEBD47E004E2ED9 /* Bullet Track - update log.md */; };
@@ -64,6 +69,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionManager.swift; sourceTree = "<group>"; };
+		77731D4F2DF07FF500A1F37C /* FutureEntryParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureEntryParser.swift; sourceTree = "<group>"; };
+		77731D512DF0872800A1F37C /* FutureLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureLogView.swift; sourceTree = "<group>"; };
+		77731D532DF0A06D00A1F37C /* MonthLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthLogView.swift; sourceTree = "<group>"; };
+		77731D552DF0B8A700A1F37C /* MonthlyLogContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthlyLogContainerView.swift; sourceTree = "<group>"; };
 		7783B25B2DD2894B0008E0F3 /* Bullet Tracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Bullet Tracker.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7783B26D2DD2894D0008E0F3 /* Bullet TrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Bullet TrackerTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7783B2772DD2894D0008E0F3 /* Bullet TrackerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Bullet TrackerUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -185,6 +195,10 @@
 		77DB37F32DEBFBB9004E2ED9 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				77731D552DF0B8A700A1F37C /* MonthlyLogContainerView.swift */,
+				77731D532DF0A06D00A1F37C /* MonthLogView.swift */,
+				77731D512DF0872800A1F37C /* FutureLogView.swift */,
+				77731D4F2DF07FF500A1F37C /* FutureEntryParser.swift */,
 				77DB37AF2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift */,
 				77DB37B42DEBFBB4004E2ED9 /* ContentView.swift */,
 			);
@@ -295,6 +309,7 @@
 				77DB37B02DEBFBB4004E2ED9 /* CollectionDetailView.swift */,
 				77DB37B12DEBFBB4004E2ED9 /* CollectionsView.swift */,
 				77DB37C82DEBFBB4004E2ED9 /* SimpleCollectionsView.swift */,
+				77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */,
 				77DB37CB2DEBFBB4004E2ED9 /* TestCollectionsView.swift */,
 			);
 			path = Collections;
@@ -455,6 +470,7 @@
 			isa = PBXSourcesBuildPhase;
 			files = (
 				77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */,
+				77731D542DF0A06D00A1F37C /* MonthLogView.swift in Sources */,
 				77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */,
 				77DB37CD2DEBFBB4004E2ED9 /* HabitTrackerViewModel.swift in Sources */,
 				77DB37CE2DEBFBB4004E2ED9 /* SettingsView.swift in Sources */,
@@ -472,16 +488,20 @@
 				77DB37DA2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift in Sources */,
 				77DB37DB2DEBFBB4004E2ED9 /* DataExportManager.swift in Sources */,
 				77DB37DC2DEBFBB4004E2ED9 /* HabitRowLabelView.swift in Sources */,
+				77731D4E2DF07A5B00A1F37C /* CollectionManager.swift in Sources */,
 				77DB37DD2DEBFBB4004E2ED9 /* HabitStatsView.swift in Sources */,
 				77DB37DE2DEBFBB4004E2ED9 /* SimpleCollectionsView.swift in Sources */,
+				77731D562DF0B8A700A1F37C /* MonthlyLogContainerView.swift in Sources */,
 				77DB37DF2DEBFBB4004E2ED9 /* EntryRowView.swift in Sources */,
 				77DB37E02DEBFBB4004E2ED9 /* ContentView.swift in Sources */,
 				77DB37E12DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift in Sources */,
 				77DB37E22DEBFBB4004E2ED9 /* TempEntryView.swift in Sources */,
+				77731D522DF0872800A1F37C /* FutureLogView.swift in Sources */,
 				77DB37E32DEBFBB4004E2ED9 /* EditEntryView.swift in Sources */,
 				77DB37E42DEBFBB4004E2ED9 /* NewEntryView.swift in Sources */,
 				77DB37E62DEBFBB4004E2ED9 /* Color+Hex.swift in Sources */,
 				77DB37E72DEBFBB4004E2ED9 /* HabitTrackerView.swift in Sources */,
+				77731D502DF07FF500A1F37C /* FutureEntryParser.swift in Sources */,
 				77DB37E82DEBFBB4004E2ED9 /* TestCollectionsView.swift in Sources */,
 				77DB37E92DEBFBB4004E2ED9 /* EditHabitView.swift in Sources */,
 				77DB37EA2DEBFBB4004E2ED9 /* AddHabitView.swift in Sources */,

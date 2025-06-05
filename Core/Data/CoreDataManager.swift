@@ -102,27 +102,10 @@ class CoreDataManager {
     
     /// Sets up default data on first launch
     func setupDefaultData() {
-        let collectionsFetchRequest: NSFetchRequest<Collection> = Collection.fetchRequest()
-        
-        do {
-            let existingCollections = try container.viewContext.fetch(collectionsFetchRequest)
-            
-            guard existingCollections.isEmpty else { return }
-            
-            // Create default collections
-            let defaultCollections = ["Daily Log", "Monthly Log", "Future Log", "Habit Tracker"]
-            for collectionName in defaultCollections {
-                _ = createCollection(name: collectionName)
-            }
-            
-            #if DEBUG
-            print("✅ Created default collections")
-            #endif
-        } catch {
-            #if DEBUG
-            print("❌ Error checking for existing collections: \(error)")
-            #endif
-        }
+        // No longer create default collections - we use automatic collections now
+        #if DEBUG
+        print("✅ Default data setup complete (no collections created)")
+        #endif
     }
 }
 
@@ -638,6 +621,158 @@ private extension CoreDataManager {
             
         default:
             return false
+        }
+    }
+}
+
+// MARK: - Future Entry Management
+
+extension CoreDataManager {
+    /// Fetches future entries scheduled for a specific month
+    func fetchFutureEntriesForMonth(year: Int, month: Int) -> [JournalEntry] {
+        let calendar = Calendar.current
+        let startComponents = DateComponents(year: year, month: month, day: 1)
+        guard let startDate = calendar.date(from: startComponents) else { return [] }
+        
+        let endComponents = DateComponents(month: 1)
+        guard let endDate = calendar.date(byAdding: endComponents, to: startDate) else { return [] }
+        
+        let fetchRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "isFutureEntry == true AND scheduledDate >= %@ AND scheduledDate < %@ AND hasMigrated == false",
+                                           startDate as NSDate, endDate as NSDate)
+        fetchRequest.sortDescriptors = [NSSortDescriptor(key: "scheduledDate", ascending: true)]
+        
+        do {
+            return try container.viewContext.fetch(fetchRequest)
+        } catch {
+            #if DEBUG
+            print("❌ Error fetching future entries: \(error)")
+            #endif
+            return []
+        }
+    }
+    
+    /// Migrates incomplete tasks from one date to another
+    func migrateIncompleteTasks(from: Date, to: Date) {
+        let calendar = Calendar.current
+        let fromStart = calendar.startOfDay(for: from)
+        let fromEnd = calendar.date(byAdding: .day, value: 1, to: fromStart)!
+        
+        let fetchRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "entryType == %@ AND taskStatus == %@ AND date >= %@ AND date < %@ AND hasMigrated == false",
+                                           "task", "pending", fromStart as NSDate, fromEnd as NSDate)
+        
+        do {
+            let tasks = try container.viewContext.fetch(fetchRequest)
+            
+            #if DEBUG
+            if !tasks.isEmpty {
+                print("📋 Migrating \(tasks.count) incomplete tasks from \(fromStart) to \(to)")
+            }
+            #endif
+            
+            for task in tasks {
+                // Mark old task as migrated
+                task.hasMigrated = true
+                
+                // Create new task for today
+                let newTask = JournalEntry(context: container.viewContext)
+                newTask.id = UUID()
+                newTask.content = task.content
+                newTask.entryType = task.entryType
+                newTask.taskStatus = "pending"
+                newTask.date = to
+                newTask.collection = task.collection
+                newTask.priority = task.priority
+                
+                // If this is the first migration, set originalDate
+                if task.originalDate == nil {
+                    newTask.originalDate = task.date
+                } else {
+                    newTask.originalDate = task.originalDate
+                }
+                
+                // Copy tags
+                if let tags = task.tags {
+                    for tag in tags {
+                        newTask.addToTags(tag as! Tag)
+                    }
+                }
+            }
+            
+            if !tasks.isEmpty {
+                saveContext()
+            }
+        } catch {
+            #if DEBUG
+            print("❌ Error migrating tasks: \(error)")
+            #endif
+        }
+    }
+    
+    /// Migrates future entries that are due
+    func migrateDueFutureEntries() {
+        let today = Date()
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: today)
+        
+        let fetchRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "isFutureEntry == true AND scheduledDate <= %@ AND hasMigrated == false",
+                                           todayStart as NSDate)
+        
+        do {
+            let dueEntries = try container.viewContext.fetch(fetchRequest)
+            
+            #if DEBUG
+            if !dueEntries.isEmpty {
+                print("📅 Migrating \(dueEntries.count) due future entries")
+            }
+            #endif
+            
+            for entry in dueEntries {
+                // Mark as migrated
+                entry.hasMigrated = true
+                entry.isFutureEntry = false
+                
+                // Update date to scheduled date or today if no scheduled date
+                if let scheduledDate = entry.scheduledDate {
+                    entry.date = scheduledDate
+                } else {
+                    entry.date = todayStart
+                }
+            }
+            
+            if !dueEntries.isEmpty {
+                saveContext()
+            }
+        } catch {
+            #if DEBUG
+            print("❌ Error migrating future entries: \(error)")
+            #endif
+        }
+    }
+}
+
+// MARK: - Collection Sorting
+
+extension CoreDataManager {
+    /// Fetches all collections sorted by type and order
+    func fetchAllCollectionsSorted() -> [Collection] {
+        let fetchRequest: NSFetchRequest<Collection> = Collection.fetchRequest()
+        
+        // Sort by sortOrder first, then by name
+        fetchRequest.sortDescriptors = [
+            NSSortDescriptor(key: "sortOrder", ascending: true),
+            NSSortDescriptor(key: "name", ascending: true)
+        ]
+        
+        do {
+            return try container.viewContext.fetch(fetchRequest)
+        } catch {
+            #if DEBUG
+            print("❌ Error fetching sorted collections: \(error)")
+            #endif
+            return []
         }
     }
 }

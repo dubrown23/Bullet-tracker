@@ -11,26 +11,37 @@ import CoreData
 struct SimpleCollectionsView: View {
     // MARK: - State Properties
     
-    @State private var collections: [Collection] = []
+    @State private var automaticCollections: [Collection] = []
+    @State private var userCollections: [Collection] = []
     @State private var showingAddAlert = false
     @State private var newCollectionName = ""
     @State private var showingDeleteAlert = false
     @State private var collectionToDelete: Collection?
-    
-    // MARK: - Constants
-    
-    private let defaultCollectionNames = ["Daily Log", "Monthly Log", "Future Log", "Projects", "Ideas"]
     
     // MARK: - Body
     
     var body: some View {
         NavigationStack {
             List {
-                specialCollectionsSection
-                userCollectionsSection
+                // Index section - always at top
+                indexSection
                 
-                if collections.isEmpty {
-                    defaultCollectionsSection
+                // Future Log section - below Index
+                futureLogSection
+                
+                // Auto-generated logs (Year/Month) - filtered to exclude Future Log
+                if !filteredAutomaticCollections.isEmpty {
+                    automaticCollectionsSection
+                }
+                
+                // User collections
+                if !userCollections.isEmpty {
+                    userCollectionsSection
+                }
+                
+                // Empty state only if no user collections (automatic ones always exist)
+                if userCollections.isEmpty && filteredAutomaticCollections.isEmpty {
+                    emptyStateSection
                 }
             }
             .listStyle(.insetGrouped)
@@ -56,36 +67,65 @@ struct SimpleCollectionsView: View {
     
     // MARK: - View Components
     
-    private var specialCollectionsSection: some View {
-        Section(header: Text("Special Collections")) {
+    private var indexSection: some View {
+        Section {
             NavigationLink(destination: IndexView()) {
-                indexRow
+                HStack {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .foregroundStyle(.blue)
+                        .font(.title3)
+                        .frame(width: 32, height: 32)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Index")
+                            .font(.headline)
+                        
+                        Text("Search and browse all entries")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
             }
         }
     }
     
-    private var indexRow: some View {
-        HStack {
-            Image(systemName: "doc.text.magnifyingglass")
-                .foregroundStyle(.blue)
-                .font(.title3)
-                .frame(width: 32, height: 32)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Index")
-                    .font(.headline)
-                
-                Text("Search and browse all entries")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    private var futureLogSection: some View {
+        Section {
+            NavigationLink(destination: FutureLogView()) {
+                HStack {
+                    Image(systemName: "calendar.badge.plus")
+                        .foregroundStyle(.blue)
+                        .font(.title3)
+                        .frame(width: 32, height: 32)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Future Log")
+                            .font(.headline)
+                        
+                        Text("Schedule tasks and events for future months")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
             }
         }
-        .padding(.vertical, 4)
+    }
+    
+    private var automaticCollectionsSection: some View {
+        Section(header: Text("Logs")) {
+            ForEach(filteredAutomaticCollections) { collection in
+                NavigationLink(destination: destinationView(for: collection)) {
+                    collectionRow(for: collection)
+                }
+            }
+        }
     }
     
     private var userCollectionsSection: some View {
         Section(header: Text("Your Collections")) {
-            ForEach(collections) { collection in
+            ForEach(userCollections) { collection in
                 NavigationLink(destination: CollectionDetailView(collection: collection)) {
                     collectionRow(for: collection)
                         .contextMenu {
@@ -93,13 +133,13 @@ struct SimpleCollectionsView: View {
                         }
                 }
             }
-            .onDelete(perform: deleteCollections)
+            .onDelete(perform: deleteUserCollections)
         }
     }
     
     private func collectionRow(for collection: Collection) -> some View {
         HStack {
-            Image(systemName: "folder.fill")
+            Image(systemName: iconForCollection(collection))
                 .foregroundStyle(.blue)
                 .font(.title3)
                 .frame(width: 32, height: 32)
@@ -116,6 +156,55 @@ struct SimpleCollectionsView: View {
         .padding(.vertical, 4)
     }
     
+    private func iconForCollection(_ collection: Collection) -> String {
+        switch collection.collectionType {
+        case "future":
+            return "calendar.badge.clock"
+        case "year":
+            return "calendar"
+        case "month":
+            return "calendar.day.timeline.left"
+        case "monthly":
+            return "calendar.day.timeline.left"
+        default:
+            return "folder.fill"
+        }
+    }
+    
+    @ViewBuilder
+    private func destinationView(for collection: Collection) -> some View {
+        // Check collection type
+        switch collection.collectionType {
+        case "monthly":
+            // For the single Monthly Log, use the container that handles navigation
+            MonthlyLogContainerView()
+            
+        case "month":
+            // Handle old month collections for backward compatibility
+            if let name = collection.name {
+                let components = name.split(separator: " ")
+                if let yearMonth = components.first {
+                    let parts = yearMonth.split(separator: "-")
+                    if parts.count == 2,
+                       let year = Int(parts[0]),
+                       let month = Int(parts[1]) {
+                        MonthLogView(year: year, month: month)
+                    } else {
+                        CollectionDetailView(collection: collection)
+                    }
+                } else {
+                    CollectionDetailView(collection: collection)
+                }
+            } else {
+                CollectionDetailView(collection: collection)
+            }
+            
+        default:
+            // For all other collections (year, user collections), use the standard view
+            CollectionDetailView(collection: collection)
+        }
+    }
+    
     private func deleteContextMenu(for collection: Collection) -> some View {
         Button(role: .destructive) {
             collectionToDelete = collection
@@ -125,20 +214,28 @@ struct SimpleCollectionsView: View {
         }
     }
     
-    private var defaultCollectionsSection: some View {
+    private var emptyStateSection: some View {
         Section {
-            Button {
-                createDefaultCollections()
-            } label: {
-                Text("Create Default Collections")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundStyle(.white)
-                    .cornerRadius(10)
+            VStack(spacing: 16) {
+                Text("No collections yet")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                
+                Text("Create a collection to organize your journal entries")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
-            .padding(.vertical)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
         }
+    }
+    
+    // MARK: - Computed Properties
+    
+    /// Filters out the Future Log from automatic collections to avoid duplication
+    private var filteredAutomaticCollections: [Collection] {
+        automaticCollections.filter { $0.collectionType != "future" }
     }
     
     // MARK: - Toolbar Components
@@ -198,62 +295,43 @@ struct SimpleCollectionsView: View {
         print("Loading collections...")
         #endif
         
-        let context = CoreDataManager.shared.container.viewContext
-        let request: NSFetchRequest<Collection> = Collection.fetchRequest()
-        request.sortDescriptors = [NSSortDescriptor(key: "name", ascending: true)]
+        let collections = CoreDataManager.shared.fetchAllCollectionsSorted()
         
-        do {
-            collections = try context.fetch(request)
-            #if DEBUG
-            print("Found \(collections.count) collections")
-            #endif
-        } catch {
-            #if DEBUG
-            print("Failed to fetch collections: \(error)")
-            #endif
-        }
+        // Separate automatic and user collections
+        automaticCollections = collections.filter { $0.isAutomatic }
+        userCollections = collections.filter { !$0.isAutomatic }
+        
+        #if DEBUG
+        print("Found \(automaticCollections.count) automatic collections and \(userCollections.count) user collections")
+        #endif
     }
     
     /// Adds a new collection with the specified name
     private func addCollection(name: String) {
         guard !name.isEmpty else { return }
         
-        let context = CoreDataManager.shared.container.viewContext
-        let newCollection = Collection(context: context)
-        newCollection.id = UUID()
-        newCollection.name = name
-        
-        do {
-            try context.save()
-            loadCollections()
-        } catch {
-            #if DEBUG
-            print("Failed to save collection: \(error)")
-            #endif
-        }
+        _ = CoreDataManager.shared.createCollection(name: name)
+        loadCollections()
     }
     
     /// Deletes the specified collection
     private func deleteCollection(_ collection: Collection) {
-        let context = CoreDataManager.shared.container.viewContext
-        context.delete(collection)
+        // Don't delete automatic collections
+        guard !collection.isAutomatic else { return }
         
-        do {
-            try context.save()
-            loadCollections()
-        } catch {
-            #if DEBUG
-            print("Failed to delete collection: \(error)")
-            #endif
-        }
+        CoreDataManager.shared.deleteCollection(collection)
+        loadCollections()
     }
     
-    /// Deletes collections at the specified offsets
-    private func deleteCollections(at offsets: IndexSet) {
+    /// Deletes user collections at the specified offsets
+    private func deleteUserCollections(at offsets: IndexSet) {
         let context = CoreDataManager.shared.container.viewContext
         
         for index in offsets {
-            context.delete(collections[index])
+            let collection = userCollections[index]
+            // Don't delete automatic collections
+            guard !collection.isAutomatic else { continue }
+            context.delete(collection)
         }
         
         do {
@@ -263,13 +341,6 @@ struct SimpleCollectionsView: View {
             #if DEBUG
             print("Error deleting collections: \(error)")
             #endif
-        }
-    }
-    
-    /// Creates default collections for new users
-    private func createDefaultCollections() {
-        for name in defaultCollectionNames {
-            addCollection(name: name)
         }
     }
     
