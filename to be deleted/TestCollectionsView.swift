@@ -1,4 +1,4 @@
-//
+/*
 //  TestCollectionsView.swift
 //  Bullet Tracker
 //
@@ -59,3 +59,4 @@ struct TestCollectionsView: View {
         #endif
     }
 }
+*/

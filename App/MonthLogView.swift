@@ -23,6 +23,10 @@ struct MonthLogView: View {
     @State private var showingNewEntry = false
     @State private var selectedEntry: JournalEntry?
     
+    // MARK: - Environment
+    
+    @Environment(\.managedObjectContext) private var viewContext
+    
     // MARK: - Computed Properties
     
     private var monthName: String {
@@ -37,20 +41,26 @@ struct MonthLogView: View {
         "\(monthName) \(year)"
     }
     
-    private var previousMonth: (year: Int, month: Int) {
-        if month == 1 {
-            return (year - 1, 12)
-        } else {
-            return (year, month - 1)
-        }
+    private var isCurrentMonth: Bool {
+        let calendar = Calendar.current
+        let now = Date()
+        let currentYear = calendar.component(.year, from: now)
+        let currentMonth = calendar.component(.month, from: now)
+        return year == currentYear && month == currentMonth
     }
     
-    private var nextMonth: (year: Int, month: Int) {
-        if month == 12 {
-            return (year + 1, 1)
-        } else {
-            return (year, month + 1)
+    private var isPastMonth: Bool {
+        let calendar = Calendar.current
+        let now = Date()
+        let currentYear = calendar.component(.year, from: now)
+        let currentMonth = calendar.component(.month, from: now)
+        
+        if year < currentYear {
+            return true
+        } else if year == currentYear && month < currentMonth {
+            return true
         }
+        return false
     }
     
     private var firstDayOfMonth: Date {
@@ -109,17 +119,19 @@ struct MonthLogView: View {
             
             Image(systemName: "calendar.badge.minus")
                 .font(.system(size: 60))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
             
             Text("No entries for \(monthYearTitle)")
                 .font(.title3)
                 .fontWeight(.medium)
             
-            Button(action: { showingNewEntry = true }) {
-                Label("Add Entry", systemImage: "plus.circle.fill")
-                    .font(.headline)
+            if !isPastMonth {
+                Button(action: { showingNewEntry = true }) {
+                    Label("Add Entry", systemImage: "plus.circle.fill")
+                        .font(.headline)
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
             
             Spacer()
         }
@@ -164,7 +176,7 @@ struct MonthLogView: View {
                     // Entry type icon
                     Image(systemName: getEntryIcon(for: entry))
                         .font(.system(size: 16))
-                        .foregroundColor(getEntryColor(for: entry))
+                        .foregroundStyle(getEntryColor(for: entry))
                         .frame(width: 24)
                     
                     VStack(alignment: .leading, spacing: 4) {
@@ -175,7 +187,7 @@ struct MonthLogView: View {
                         if let scheduledDate = entry.scheduledDate {
                             Text(scheduledDate, format: .dateTime.month(.abbreviated).day())
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     
@@ -194,12 +206,12 @@ struct MonthLogView: View {
                 Text("From Future Log")
                     .textCase(.uppercase)
             }
-            .foregroundColor(.secondary)
+            .foregroundStyle(.secondary)
         }
     }
     
     // MARK: - Toolbar
-    
+        
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .principal) {
@@ -209,7 +221,7 @@ struct MonthLogView: View {
                 }) {
                     Image(systemName: "chevron.left")
                         .imageScale(.medium)
-                        .foregroundColor(.accentColor)
+                        .foregroundStyle(Color.accentColor)  // Changed this line
                 }
                 
                 Text(monthYearTitle)
@@ -221,15 +233,17 @@ struct MonthLogView: View {
                 }) {
                     Image(systemName: "chevron.right")
                         .imageScale(.medium)
-                        .foregroundColor(.accentColor)
+                        .foregroundStyle(Color.accentColor)  // Changed this line
                 }
             }
         }
         
         ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: { showingNewEntry = true }) {
-                Image(systemName: "plus")
-                    .imageScale(.large)
+            if !isPastMonth {
+                Button(action: { showingNewEntry = true }) {
+                    Image(systemName: "plus")
+                        .imageScale(.large)
+                }
             }
         }
     }
@@ -237,7 +251,81 @@ struct MonthLogView: View {
     // MARK: - Helper Methods
     
     private func loadEntries() {
-        // Fetch regular journal entries for this month
+        if isPastMonth {
+            // For past months, load from archive collection
+            loadFromArchiveCollection()
+        } else {
+            // For current/future months, load by date range
+            loadByDateRange()
+        }
+    }
+    
+    private func loadFromArchiveCollection() {
+        // Use the same method as MigrationManager to get month name
+        let calendar = Calendar.current
+        let monthNameFromSymbols = calendar.monthSymbols[month - 1]  // 0-based array
+        let archiveCollectionName = "\(year)/\(monthNameFromSymbols)"
+        
+        #if DEBUG
+        print("🔍 Looking for archive collection: \(archiveCollectionName)")
+        #endif
+        
+        let fetchRequest: NSFetchRequest<Collection> = Collection.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "name == %@ AND isAutomatic == true", archiveCollectionName)
+        fetchRequest.fetchLimit = 1
+        
+        do {
+            let collections = try viewContext.fetch(fetchRequest)
+            #if DEBUG
+            print("📚 Found \(collections.count) collections matching '\(archiveCollectionName)'")
+            #endif
+            
+            if let archiveCollection = collections.first {
+                // Get all entries from this collection
+                if let entries = archiveCollection.entries as? Set<JournalEntry> {
+                    // Separate regular entries from future entries
+                    let allEntries = Array(entries)
+                    
+                    #if DEBUG
+                    print("📚 Archive collection has \(allEntries.count) total entries")
+                    #endif
+                    
+                    // Filter out special entries and separate future entries
+                    journalEntries = allEntries.filter {
+                        !$0.isSpecialEntry && !$0.isFutureEntry
+                    }.sorted { ($0.date ?? Date()) < ($1.date ?? Date()) }
+                    
+                    // Future entries that were scheduled for this month
+                    futureEntries = allEntries.filter {
+                        $0.isFutureEntry
+                    }.sorted { ($0.scheduledDate ?? Date()) < ($1.scheduledDate ?? Date()) }
+                    
+                    #if DEBUG
+                    print("📚 Loaded \(journalEntries.count) regular entries and \(futureEntries.count) future entries from archive: \(archiveCollectionName)")
+                    #endif
+                } else {
+                    journalEntries = []
+                    futureEntries = []
+                }
+            } else {
+                // No archive collection found
+                journalEntries = []
+                futureEntries = []
+                #if DEBUG
+                print("📚 No archive collection found for: \(archiveCollectionName)")
+                #endif
+            }
+        } catch {
+            #if DEBUG
+            print("❌ Error loading archive collection: \(error)")
+            #endif
+            journalEntries = []
+            futureEntries = []
+        }
+    }
+    
+    private func loadByDateRange() {
+        // Original date-based loading for current/future months
         let calendar = Calendar.current
         let startComponents = DateComponents(year: year, month: month, day: 1)
         guard let startDate = calendar.date(from: startComponents),
@@ -245,8 +333,6 @@ struct MonthLogView: View {
         
         // Add one day to endDate to include the entire last day
         guard let endDateInclusive = calendar.date(byAdding: .day, value: 1, to: endDate) else { return }
-        
-        let context = CoreDataManager.shared.container.viewContext
         
         // Fetch journal entries for this month (excluding special entries)
         let journalRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
@@ -271,11 +357,15 @@ struct MonthLogView: View {
         ]
         
         do {
-            journalEntries = try context.fetch(journalRequest)
-            futureEntries = try context.fetch(futureRequest)
+            journalEntries = try viewContext.fetch(journalRequest)
+            futureEntries = try viewContext.fetch(futureRequest)
+            
+            #if DEBUG
+            print("📅 Loaded \(journalEntries.count) entries for current month: \(monthYearTitle)")
+            #endif
         } catch {
             #if DEBUG
-            print("Error fetching entries: \(error)")
+            print("❌ Error fetching entries: \(error)")
             #endif
         }
     }
@@ -328,7 +418,7 @@ struct MonthLogView: View {
             loadEntries()
         } catch {
             #if DEBUG
-            print("Error deleting entry: \(error)")
+            print("❌ Error deleting entry: \(error)")
             #endif
         }
     }

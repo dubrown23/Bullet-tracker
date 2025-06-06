@@ -1,4 +1,6 @@
-//
+
+/*
+ //
 //  SimplestEntryView.swift
 //  Bullet Tracker
 //
@@ -88,3 +90,4 @@ struct SimplestEntryView: View {
         }
     }
 }
+*/

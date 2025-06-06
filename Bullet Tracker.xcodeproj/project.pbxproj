@@ -30,13 +30,11 @@
 		77DB37D02DEBFBB4004E2ED9 /* IndexView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C52DEBFBB4004E2ED9 /* IndexView.swift */; };
 		77DB37D12DEBFBB4004E2ED9 /* CoreDataManager+HabitDetails.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B62DEBFBB4004E2ED9 /* CoreDataManager+HabitDetails.swift */; };
 		77DB37D22DEBFBB4004E2ED9 /* HabitCheckboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37BD2DEBFBB4004E2ED9 /* HabitCheckboxView.swift */; };
-		77DB37D32DEBFBB4004E2ED9 /* SimplestEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C92DEBFBB4004E2ED9 /* SimplestEntryView.swift */; };
 		77DB37D42DEBFBB4004E2ED9 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B32DEBFBB4004E2ED9 /* Constants.swift */; };
 		77DB37D52DEBFBB4004E2ED9 /* DailyLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B72DEBFBB4004E2ED9 /* DailyLogView.swift */; };
 		77DB37D62DEBFBB4004E2ED9 /* CoreDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B52DEBFBB4004E2ED9 /* CoreDataManager.swift */; };
 		77DB37D72DEBFBB4004E2ED9 /* EntryListItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37BB2DEBFBB4004E2ED9 /* EntryListItem.swift */; };
 		77DB37D82DEBFBB4004E2ED9 /* CollectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B02DEBFBB4004E2ED9 /* CollectionDetailView.swift */; };
-		77DB37D92DEBFBB4004E2ED9 /* CollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B12DEBFBB4004E2ED9 /* CollectionsView.swift */; };
 		77DB37DA2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37AF2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift */; };
 		77DB37DB2DEBFBB4004E2ED9 /* DataExportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B82DEBFBB4004E2ED9 /* DataExportManager.swift */; };
 		77DB37DC2DEBFBB4004E2ED9 /* HabitRowLabelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C12DEBFBB4004E2ED9 /* HabitRowLabelView.swift */; };
@@ -45,12 +43,10 @@
 		77DB37DF2DEBFBB4004E2ED9 /* EntryRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37BC2DEBFBB4004E2ED9 /* EntryRowView.swift */; };
 		77DB37E02DEBFBB4004E2ED9 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B42DEBFBB4004E2ED9 /* ContentView.swift */; };
 		77DB37E12DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37BE2DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift */; };
-		77DB37E22DEBFBB4004E2ED9 /* TempEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37CA2DEBFBB4004E2ED9 /* TempEntryView.swift */; };
 		77DB37E32DEBFBB4004E2ED9 /* EditEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B92DEBFBB4004E2ED9 /* EditEntryView.swift */; };
 		77DB37E42DEBFBB4004E2ED9 /* NewEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C62DEBFBB4004E2ED9 /* NewEntryView.swift */; };
 		77DB37E62DEBFBB4004E2ED9 /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B22DEBFBB4004E2ED9 /* Color+Hex.swift */; };
 		77DB37E72DEBFBB4004E2ED9 /* HabitTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C32DEBFBB4004E2ED9 /* HabitTrackerView.swift */; };
-		77DB37E82DEBFBB4004E2ED9 /* TestCollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37CB2DEBFBB4004E2ED9 /* TestCollectionsView.swift */; };
 		77DB37E92DEBFBB4004E2ED9 /* EditHabitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37BA2DEBFBB4004E2ED9 /* EditHabitView.swift */; };
 		77DB37EA2DEBFBB4004E2ED9 /* AddHabitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37AB2DEBFBB4004E2ED9 /* AddHabitView.swift */; };
 		77DB37EB2DEBFBB4004E2ED9 /* HabitProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C02DEBFBB4004E2ED9 /* HabitProgressView.swift */; };
@@ -98,7 +94,6 @@
 		77DB37AB2DEBFBB4004E2ED9 /* AddHabitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddHabitView.swift; sourceTree = "<group>"; };
 		77DB37AF2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bullet_TrackerApp.swift; sourceTree = "<group>"; };
 		77DB37B02DEBFBB4004E2ED9 /* CollectionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionDetailView.swift; sourceTree = "<group>"; };
-		77DB37B12DEBFBB4004E2ED9 /* CollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionsView.swift; sourceTree = "<group>"; };
 		77DB37B22DEBFBB4004E2ED9 /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
 		77DB37B32DEBFBB4004E2ED9 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		77DB37B42DEBFBB4004E2ED9 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -122,13 +117,15 @@
 		77DB37C62DEBFBB4004E2ED9 /* NewEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewEntryView.swift; sourceTree = "<group>"; };
 		77DB37C72DEBFBB4004E2ED9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		77DB37C82DEBFBB4004E2ED9 /* SimpleCollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleCollectionsView.swift; sourceTree = "<group>"; };
-		77DB37C92DEBFBB4004E2ED9 /* SimplestEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimplestEntryView.swift; sourceTree = "<group>"; };
-		77DB37CA2DEBFBB4004E2ED9 /* TempEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempEntryView.swift; sourceTree = "<group>"; };
-		77DB37CB2DEBFBB4004E2ED9 /* TestCollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestCollectionsView.swift; sourceTree = "<group>"; };
 		77DB38042DEC0768004E2ED9 /* feature list.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "feature list.md"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		77166BBB2DF31B850071BED6 /* to be deleted */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "to be deleted";
+			sourceTree = "<group>";
+		};
 		7783B25D2DD2894B0008E0F3 /* Bullet Tracker */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Bullet Tracker";
@@ -165,6 +162,48 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		77166BBC2DF328B10071BED6 /* Journal */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Journal;
+			sourceTree = "<group>";
+		};
+		77166BBD2DF328D60071BED6 /* Habits */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Habits;
+			sourceTree = "<group>";
+		};
+		77166BBF2DF328FA0071BED6 /* Collections */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Collections;
+			sourceTree = "<group>";
+		};
+		77166BC12DF329530071BED6 /* Data */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Data;
+			sourceTree = "<group>";
+		};
+		77166BC32DF3296D0071BED6 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		77166BC52DF3297D0071BED6 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
 		7783B2522DD2894B0008E0F3 = {
 			isa = PBXGroup;
 			children = (
@@ -174,11 +213,18 @@
 				77DB37F42DEBFBC7004E2ED9 /* Features */,
 				77DB37F62DEBFBEB004E2ED9 /* Extensions */,
 				77DB37F92DEBFC14004E2ED9 /* Resources */,
+				77166BBB2DF31B850071BED6 /* to be deleted */,
 				77DB372A2DEBD5B6004E2ED9 /* Documentation */,
 				7783B25D2DD2894B0008E0F3 /* Bullet Tracker */,
 				7783B2702DD2894D0008E0F3 /* Bullet TrackerTests */,
 				7783B27A2DD2894D0008E0F3 /* Bullet TrackerUITests */,
 				7783B25C2DD2894B0008E0F3 /* Products */,
+				77166BBD2DF328D60071BED6 /* Habits */,
+				77166BBC2DF328B10071BED6 /* Journal */,
+				77166BBF2DF328FA0071BED6 /* Collections */,
+				77166BC12DF329530071BED6 /* Data */,
+				77166BC32DF3296D0071BED6 /* Settings */,
+				77166BC52DF3297D0071BED6 /* Utilities */,
 			);
 			sourceTree = "<group>";
 		};
@@ -307,8 +353,6 @@
 				77DB37B92DEBFBB4004E2ED9 /* EditEntryView.swift */,
 				77DB37C52DEBFBB4004E2ED9 /* IndexView.swift */,
 				77DB37C62DEBFBB4004E2ED9 /* NewEntryView.swift */,
-				77DB37C92DEBFBB4004E2ED9 /* SimplestEntryView.swift */,
-				77DB37CA2DEBFBB4004E2ED9 /* TempEntryView.swift */,
 			);
 			path = Journal;
 			sourceTree = "<group>";
@@ -325,10 +369,8 @@
 			isa = PBXGroup;
 			children = (
 				77DB37B02DEBFBB4004E2ED9 /* CollectionDetailView.swift */,
-				77DB37B12DEBFBB4004E2ED9 /* CollectionsView.swift */,
 				77DB37C82DEBFBB4004E2ED9 /* SimpleCollectionsView.swift */,
 				77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */,
-				77DB37CB2DEBFBB4004E2ED9 /* TestCollectionsView.swift */,
 			);
 			path = Collections;
 			sourceTree = "<group>";
@@ -367,6 +409,7 @@
 			buildRules = (
 			);
 			fileSystemSynchronizedGroups = (
+				77166BBB2DF31B850071BED6 /* to be deleted */,
 				7783B25D2DD2894B0008E0F3 /* Bullet Tracker */,
 			);
 			name = "Bullet Tracker";
@@ -498,14 +541,12 @@
 				77DB37D02DEBFBB4004E2ED9 /* IndexView.swift in Sources */,
 				77DB37D12DEBFBB4004E2ED9 /* CoreDataManager+HabitDetails.swift in Sources */,
 				77DB37D22DEBFBB4004E2ED9 /* HabitCheckboxView.swift in Sources */,
-				77DB37D32DEBFBB4004E2ED9 /* SimplestEntryView.swift in Sources */,
 				77166BB92DF1F94D0071BED6 /* SpecialEntryDetailView.swift in Sources */,
 				77DB37D42DEBFBB4004E2ED9 /* Constants.swift in Sources */,
 				77DB37D52DEBFBB4004E2ED9 /* DailyLogView.swift in Sources */,
 				77DB37D62DEBFBB4004E2ED9 /* CoreDataManager.swift in Sources */,
 				77DB37D72DEBFBB4004E2ED9 /* EntryListItem.swift in Sources */,
 				77DB37D82DEBFBB4004E2ED9 /* CollectionDetailView.swift in Sources */,
-				77DB37D92DEBFBB4004E2ED9 /* CollectionsView.swift in Sources */,
 				77DB37DA2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift in Sources */,
 				77166BB72DF1F7C90071BED6 /* SpecialEntryEditorView.swift in Sources */,
 				77DB37DB2DEBFBB4004E2ED9 /* DataExportManager.swift in Sources */,
@@ -517,7 +558,6 @@
 				77DB37DF2DEBFBB4004E2ED9 /* EntryRowView.swift in Sources */,
 				77DB37E02DEBFBB4004E2ED9 /* ContentView.swift in Sources */,
 				77DB37E12DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift in Sources */,
-				77DB37E22DEBFBB4004E2ED9 /* TempEntryView.swift in Sources */,
 				77731D582DF1C6DE00A1F37C /* MigrationManager.swift in Sources */,
 				77731D522DF0872800A1F37C /* FutureLogView.swift in Sources */,
 				77DB37E32DEBFBB4004E2ED9 /* EditEntryView.swift in Sources */,
@@ -526,7 +566,6 @@
 				77166BB32DF1DE290071BED6 /* MonthArchiveView.swift in Sources */,
 				77DB37E72DEBFBB4004E2ED9 /* HabitTrackerView.swift in Sources */,
 				77731D502DF07FF500A1F37C /* FutureEntryParser.swift in Sources */,
-				77DB37E82DEBFBB4004E2ED9 /* TestCollectionsView.swift in Sources */,
 				77DB37E92DEBFBB4004E2ED9 /* EditHabitView.swift in Sources */,
 				77DB37EA2DEBFBB4004E2ED9 /* AddHabitView.swift in Sources */,
 				77DB37EB2DEBFBB4004E2ED9 /* HabitProgressView.swift in Sources */,

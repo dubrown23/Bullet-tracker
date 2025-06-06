@@ -32,8 +32,6 @@ class MigrationManager: ObservableObject {
     
     /// Performs daily migration when app comes to foreground
     func performDailyMigration() {
-        let context = coreDataManager.container.viewContext
-        
         // Check if we've already migrated today
         let lastMigration = UserDefaults.standard.object(forKey: lastMigrationKey) as? Date ?? Date.distantPast
         let calendar = Calendar.current

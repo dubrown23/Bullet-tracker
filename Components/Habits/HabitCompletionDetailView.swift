@@ -369,13 +369,6 @@ struct HabitCompletionDetailView: View {
         
         // For workout habits with success state, save structured data as JSON
         if isWorkoutHabit() && (!useMultipleStates() || completionState == 1) {
-            // Extract the actual user notes (after separator) for JSON storage
-            let separator = "\n─────────────────────\n"
-            var notesToSave = details
-            if let separatorRange = details.range(of: separator) {
-                notesToSave = String(details[separatorRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            
             var workoutData: [String: Any] = [
                 "types": Array(selectedWorkoutTypes),
                 "type": selectedWorkoutTypes.first ?? "",  // Keep single type for backward compatibility

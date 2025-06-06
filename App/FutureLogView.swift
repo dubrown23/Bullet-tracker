@@ -248,7 +248,7 @@ struct AddFutureEntryView: View {
                         TextField("Entry content (use @month to schedule)", text: $entryContent, axis: .vertical)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                             .lineLimit(3...6)
-                            .onChange(of: entryContent) { newValue in
+                            .onChange(of: entryContent) { _, newValue in
                                 // Parse for @mentions as user types
                                 let result = FutureEntryParser.parseFutureDate(from: newValue)
                                 parsedDate = result.scheduledDate

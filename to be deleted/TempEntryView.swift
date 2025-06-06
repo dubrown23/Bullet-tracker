@@ -1,4 +1,5 @@
-//
+/*
+ //
 //  TempEntryView.swift
 //  Bullet Tracker
 //
@@ -103,3 +104,4 @@ struct TempEntryView: View {
         dismiss()
     }
 }
+*/

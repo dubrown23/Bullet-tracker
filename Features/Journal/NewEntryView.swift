@@ -87,7 +87,7 @@ struct NewEntryView: View {
                     }
                 )
             }
-            .onChange(of: entryType) { newValue in
+            .onChange(of: entryType) { _, newValue in
                 // Check if this is a special entry type
                 if newValue == "review" || newValue == "outlook" {
                     isSpecialEntry = true
@@ -95,10 +95,7 @@ struct NewEntryView: View {
                     // Set default target month to current month
                     let calendar = Calendar.current
                     targetMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
-                    // Open extended editor automatically
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        showExtendedEditor = true
-                    }
+                    // Don't auto-open the editor anymore
                 } else {
                     isSpecialEntry = false
                 }
@@ -132,34 +129,61 @@ struct NewEntryView: View {
     }
     
     private var monthSelector: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Select Month")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            Picker("Month", selection: $targetMonth) {
-                ForEach(SpecialEntryTemplates.availableMonths(), id: \.self) { month in
-                    Text(SpecialEntryTemplates.monthDisplayString(for: month))
-                        .tag(month)
+        VStack(alignment: .leading, spacing: 12) {
+            // Month picker
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Target Month")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                Picker("Month", selection: $targetMonth) {
+                    ForEach(SpecialEntryTemplates.availableMonths(), id: \.self) { month in
+                        Text(SpecialEntryTemplates.monthDisplayString(for: month))
+                            .tag(month)
+                    }
                 }
+                .pickerStyle(.menu)
             }
-            .pickerStyle(.menu)
             
-            // Edit button to reopen editor
+            // Edit button to open editor
             Button(action: {
                 showExtendedEditor = true
             }) {
                 HStack {
-                    Image(systemName: "pencil.circle.fill")
+                    Image(systemName: specialEntryType == "review" ? "doc.text.magnifyingglass" : "calendar.badge.plus")
                     Text(content.isEmpty ? "Write \(specialEntryType == "review" ? "Review" : "Outlook")" : "Edit \(specialEntryType == "review" ? "Review" : "Outlook")")
+                    Spacer()
+                    if !content.isEmpty {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            
+            // Show content preview if exists
+            if !content.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Preview")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    Text(content)
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(Color(UIColor.secondarySystemBackground))
+                        .cornerRadius(8)
                 }
             }
-            .buttonStyle(.bordered)
             
             if isDraft {
-                Label("Draft", systemImage: "doc.badge.clock")
+                Label("Draft - not published", systemImage: "doc.badge.clock")
                     .font(.caption)
-                    .foregroundColor(.orange)
+                    .foregroundStyle(.orange)
             }
         }
     }
@@ -167,7 +191,7 @@ struct NewEntryView: View {
     private var scheduleSection: some View {
         Section(header: Text("Scheduling")) {
             Toggle("Schedule for Later", isOn: $scheduleForLater)
-                .onChange(of: scheduleForLater) { newValue in
+                .onChange(of: scheduleForLater) { _, newValue in
                     if !newValue {
                         // Reset future date fields when toggled off
                         parsedDate = nil
@@ -182,10 +206,10 @@ struct NewEntryView: View {
                     HStack {
                         Image(systemName: "calendar.badge.checkmark")
                             .font(.caption)
-                            .foregroundColor(.green)
+                            .foregroundStyle(.green)
                         Text("Scheduled for \(date, format: .dateTime.month(.wide).day().year())")
                             .font(.caption)
-                            .foregroundColor(.green)
+                            .foregroundStyle(.green)
                     }
                 }
                 
@@ -207,13 +231,13 @@ struct NewEntryView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Tips:")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     Text("• Use @december or @dec in your content")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     Text("• Use @dec-25 for a specific date")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.top, 4)
             }
@@ -246,7 +270,7 @@ struct NewEntryView: View {
     
     private var contentField: some View {
         TextField(scheduleForLater ? "Content (use @month to schedule)" : "Content", text: $content)
-            .onChange(of: content) { newValue in
+            .onChange(of: content) { _, newValue in
                 if scheduleForLater && !showDatePicker {
                     // Parse for @mentions as user types
                     let result = FutureEntryParser.parseFutureDate(from: newValue)
@@ -345,7 +369,7 @@ struct NewEntryView: View {
             
             // Find the appropriate month collection (from Phase 4 archives)
             let year = calendar.component(.year, from: targetMonth)
-            let month = calendar.component(.month, from: targetMonth)
+            let _ = calendar.component(.month, from: targetMonth)
             let monthName = targetMonth.formatted(.dateTime.month(.wide))
             let monthCollectionName = "\(year)/\(monthName)"
             

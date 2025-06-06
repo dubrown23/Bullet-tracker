@@ -5,14 +5,6 @@
 //  Created by Dustin Brown on 6/4/25.
 //
 
-
-//
-//  MonthlyLogContainerView.swift
-//  Bullet Tracker
-//
-//  Created on June 4, 2025
-//
-
 import SwiftUI
 
 struct MonthlyLogContainerView: View {
@@ -33,54 +25,36 @@ struct MonthlyLogContainerView: View {
     // MARK: - Body
     
     var body: some View {
-        MonthLogViewWrapper(year: currentYear, month: currentMonth)
-            .id("\(currentYear)-\(currentMonth)") // Force view refresh on navigation
-    }
-}
-
-// Wrapper to handle navigation state
-struct MonthLogViewWrapper: View {
-    let year: Int
-    let month: Int
-    
-    @State private var navigationYear: Int
-    @State private var navigationMonth: Int
-    
-    init(year: Int, month: Int) {
-        self.year = year
-        self.month = month
-        _navigationYear = State(initialValue: year)
-        _navigationMonth = State(initialValue: month)
-    }
-    
-    var body: some View {
         MonthLogView(
-            year: navigationYear,
-            month: navigationMonth,
+            year: currentYear,
+            month: currentMonth,
             onNavigatePrevious: navigateToPreviousMonth,
             onNavigateNext: navigateToNextMonth
         )
+        .id("\(currentYear)-\(currentMonth)") // Force view refresh on navigation
     }
+    
+    // MARK: - Navigation Methods
     
     private func navigateToPreviousMonth() {
         let calendar = Calendar.current
-        let components = DateComponents(year: navigationYear, month: navigationMonth)
+        let components = DateComponents(year: currentYear, month: currentMonth)
         
         if let currentDate = calendar.date(from: components),
            let newDate = calendar.date(byAdding: .month, value: -1, to: currentDate) {
-            navigationYear = calendar.component(.year, from: newDate)
-            navigationMonth = calendar.component(.month, from: newDate)
+            currentYear = calendar.component(.year, from: newDate)
+            currentMonth = calendar.component(.month, from: newDate)
         }
     }
     
     private func navigateToNextMonth() {
         let calendar = Calendar.current
-        let components = DateComponents(year: navigationYear, month: navigationMonth)
+        let components = DateComponents(year: currentYear, month: currentMonth)
         
         if let currentDate = calendar.date(from: components),
            let newDate = calendar.date(byAdding: .month, value: 1, to: currentDate) {
-            navigationYear = calendar.component(.year, from: newDate)
-            navigationMonth = calendar.component(.month, from: newDate)
+            currentYear = calendar.component(.year, from: newDate)
+            currentMonth = calendar.component(.month, from: newDate)
         }
     }
 }

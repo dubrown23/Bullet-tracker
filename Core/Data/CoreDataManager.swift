@@ -54,7 +54,7 @@ class CoreDataManager {
     
     /// Loads the persistent stores
     private func loadPersistentStores() {
-        container.loadPersistentStores { [weak self] (storeDescription, error) in
+        container.loadPersistentStores { (storeDescription, error) in
             if let error = error as NSError? {
                 fatalError("Unresolved error \(error), \(error.userInfo)")
             }

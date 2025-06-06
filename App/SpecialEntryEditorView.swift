@@ -42,7 +42,7 @@ struct SpecialEntryEditorView: View {
     }
     
     private var placeholderText: String {
-        specialType == "review" 
+        specialType == "review"
             ? "Reflect on your month..."
             : "Plan for the month ahead..."
     }
@@ -56,7 +56,7 @@ struct SpecialEntryEditorView: View {
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $content)
                         .padding(4)
-                        .onChange(of: content) { newValue in
+                        .onChange(of: content) { _, _ in
                             updateWordCount()
                             scheduleAutoSave()
                         }

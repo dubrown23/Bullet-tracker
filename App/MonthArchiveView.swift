@@ -49,7 +49,7 @@ struct MonthArchiveView: View {
                 EditEntryView(entry: entry)
             }
         }
-        .onChange(of: selectedEntry) { _ in
+        .onChange(of: selectedEntry) { _, _ in
             loadEntries()
         }
     }

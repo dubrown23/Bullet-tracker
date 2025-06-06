@@ -1,4 +1,5 @@
-//
+/*
+ //
 //  CollectionsView.swift
 //  Bullet Tracker
 //
@@ -241,3 +242,4 @@ struct CollectionsView: View {
         }
     }
 }
+*/
