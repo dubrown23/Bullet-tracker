@@ -295,7 +295,140 @@ Tags: #feature #migration #archive #journal #coredata #phase4complete
   - Future Log migration unchanged
 Tags: #feature #journal #phase5 #reviews #outlooks #specialentries
 ---
+## 06.06.2025 - Phase 6 Polish & Code Organization
+### Phase 6 Implementation - Polish & Edge Cases
+- **Fixed Phase 5 Bugs**:
+  - Review/Outlook month selector now allows selection before opening editor
+  - YearLogView only shows months with actual entries (removed empty months)
+  - MonthLogView now correctly loads entries from archive collections for past months
+  - Fixed month navigation to properly update when switching between months
+- **UI Polish**:
+  - Removed duplicate chevron icons in YearLogView
+  - Improved empty state messages across views
+  - Added proper loading from archive collections vs date-based queries
 
+### iOS 17+ Warning Fixes
+- **Fixed all deprecation warnings**:
+  - Updated 10+ files to use new `onChange(of:)` syntax with two parameters
+  - Fixed unused variable warnings across multiple files
+  - Resolved self capture warnings in closures
+  - Project now builds with zero warnings
+
+### Code Cleanup & File Removal
+- **Identified and removed obsolete files**:
+  - Deleted TestCollectionsView (test file)
+  - Deleted CollectionsView (replaced by SimpleCollectionsView)
+  - Deleted TempEntryView and SimplestEntryView (old iterations)
+  - Kept all actively used components and extensions
+- **Verification process**: Used search → comment → build method to ensure safe deletion
+
+### Major Code Reorganization
+- **Simplified folder structure** from deeply nested to feature-based organization:
+  - App/ - Main app files and ContentView
+  - Journal/ - All journal-related views (Daily, Future, Monthly logs)
+  - Habits/ - All habit tracking views and components
+  - Collections/ - Collection management views
+  - Data/ - Core Data and backup managers
+  - Settings/ - Settings view
+  - Utilities/ - Helper files, parsers, and managers
+- **Benefits**:
+  - Reduced nesting from 4+ levels to maximum 2 levels
+  - Feature-based organization matches app functionality
+  - Easier navigation and file discovery
+  - Clear separation between views and utilities
+- **Files reorganized**: 50+ files moved to new structure
+- **Old structure removed**: Deleted empty Core/, Components/, Features/, Extensions/ folders
+
+Tags: #phase6 #polish #organization #cleanup #refactor #warnings #structure
+
+---
+
+## 06.07.2025 - Major Code Optimization Audit COMPLETE ✅
+- **Completed comprehensive code audit** focusing on Swift best practices and native API usage
+- **Reviewed ALL 40 files** across multiple chat sessions
+- **Removed 82+ DEBUG statements** throughout the codebase
+- **Created 3 new shared components** for better code reuse
+
+### Critical Infrastructure (8 files)
+- **CoreDataManager.swift**: Already optimal, removed 21 DEBUG prints in final pass
+- **CoreDataManager+HabitDetails.swift**: Removed 1 DEBUG print
+- **Bullet_TrackerApp.swift**: Removed redundant `onAppear`, simplified init, removed 1 DEBUG
+- **MigrationManager.swift**: Removed 18 DEBUG prints, kept Calendar extension
+- **CollectionManager.swift**: Removed 11 DEBUG prints, consolidated fetch logic
+- **BackupManager.swift**: Removed 9 DEBUG prints, fixed unused variable warning
+- **BackupRestoreViewModel.swift**: Removed 4 DEBUG prints only
+- **MonthlyLogContainerView.swift**: Minor optimizations, stored calendar instance
+
+### Primary Views (5 files)
+- **ContentView.swift**: Already optimal, no changes
+- **HabitTrackerView.swift**: Added static DateFormatters, extracted dateColumn view
+- **HabitTrackerViewModel.swift**: Removed 8 DEBUG prints, simplified predicate logic
+- **DailyLogView.swift**: Removed DEBUG code/toolbar, optimized filtering with single-pass
+- **SimpleCollectionsView.swift**: Removed 3 DEBUG prints, extracted reusable components
+
+### Habit Forms - MAJOR REFACTOR (2 files → 4 files)
+- **AddHabitView.swift & EditHabitView.swift**: 
+  - Extracted 500+ lines of duplicate code into shared components
+  - Created `HabitFormView.swift` for shared form logic
+  - Created `IconSelectorView.swift` in Utilities folder
+  - Reduced AddHabitView from 600+ to ~90 lines
+  - Reduced EditHabitView from 300+ to ~140 lines
+
+### Habit Components (6 files)
+- **HabitCheckboxView.swift**: Removed 5 DEBUG prints, converted to computed properties
+- **HabitStatsView.swift**: Removed 1 DEBUG print, added static DateFormatters
+- **HabitCompletionDetailView.swift**: Removed 1 DEBUG, static formatter, computed properties
+- **HabitDetailIndicatorView.swift**: Converted to stateless with computed properties
+- **HabitRowLabelView.swift**: Already optimal, no changes needed
+- **HabitProgressView.swift**: Made responsive with GeometryReader, computed properties
+
+### Journal System (11 files)
+- **FutureLogView.swift**: Static formatter, removed 3 DEBUG prints, extracted constants
+- **MonthLogView.swift**: Removed 7 DEBUG prints, static formatter, entry type config
+- **MonthArchiveView.swift**: Removed state management, all computed properties
+- **YearLogView.swift**: Removed 1 DEBUG, converted to computed properties
+- **IndexView.swift**: Added search debouncing, removed 2 DEBUG prints
+- **NewEntryView.swift & EditEntryView.swift**: Removed 6 DEBUG prints, improved organization
+- **EntryListItem.swift**: Static formatter (major performance win)
+- **EntryRowView.swift**: Removed 1 DEBUG, extracted constants, simplified logic
+- **SpecialEntryDetailView.swift**: Added constants, simplified color handling
+- **SpecialEntryEditorView.swift**: Modern async/await for auto-save, @FocusState
+
+### Collections & Settings (3 files)
+- **CollectionDetailView.swift**: Removed 1 DEBUG, converted to computed property
+- **SettingsView.swift**: Removed 11 DEBUG prints, @MainActor, modern patterns
+- **HabitConstants.swift**: Created for shared habit-related constants
+
+### Utility Files (6 files)
+- **Color+Hex.swift**: Already optimal
+- **Constants.swift**: Already optimal
+- **FutureEntryParser.swift**: Changed to struct, static regex (major performance win)
+- **SpecialEntryTemplates.swift**: Static formatter, enum-based organization
+- **DataExportManager.swift**: Removed 19 DEBUG prints, 3 static formatters
+- **IconSelectorView.swift**: Created new for icon selection
+
+### Key Optimizations Applied
+- **Static DateFormatters**: 15+ instances optimized (huge performance gains)
+- **Computed Properties**: Replaced 30+ @State variables
+- **Component Extraction**: Created 3 major reusable components
+- **Single-Pass Algorithms**: Optimized collection operations throughout
+- **Modern Swift Patterns**: async/await, @MainActor, @FocusState
+- **Removed ALL DEBUG statements**: 82+ total removed
+
+### Final Statistics
+- ✅ **Total Files Reviewed**: 40/40 (100%)
+- ✅ **Total Files Modified**: 36
+- ✅ **Files Already Optimal**: 4
+- ✅ **New Files Created**: 3
+- ✅ **Total DEBUG Statements Removed**: 82+
+- ✅ **Static Formatters Created**: 15+
+- ✅ **Lines of Code Eliminated**: 500+ (through refactoring)
+
+**PROJECT OPTIMIZATION COMPLETE** 🎉
+
+Tags: #optimization #refactor #performance #cleanup #debug #complete
+
+---
 ## [TEMPLATE] MM.DD.YYYY - Code Update
 - 
 - 

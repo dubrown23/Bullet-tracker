@@ -1,5 +1,5 @@
 # 🎯 BULLET TRACKER MASTER CONTEXT
-(June 3, 2025 - v1.3)
+(June 7, 2025 - v1.4)
 
 ## 🔧 General App Overview
 - **App Name**: Bullet Tracker
@@ -13,6 +13,7 @@
 - **Platforms**: iOS (iPhone, iPad)
 - **Distribution**: [Current distribution method - App Store/TestFlight]
 - **UI Design**: Clean interface focused on habit tracking with multi-state completions
+- **Code Quality**: Production-ready with modern Swift patterns and zero DEBUG statements
 
 ## 📊 Data Architecture
 
@@ -27,12 +28,14 @@
 - Relationships: habit (many-to-one with Habit)
 
 **Collection**: Organization container for journal entries
-- Properties: id, name, icon, color
+- Properties: id, name, icon, color, isAutomatic, sortOrder, collectionType
 - Relationships: habits (one-to-many - deprecated), journalEntries (one-to-many)
+- Note: Automatic collections created for Future Log, Years, and Monthly Log
 
 **JournalEntry**: Bullet journal entries
-- Properties: id, content, type (task/event/note), status, date
+- Properties: id, content, type (task/event/note), status, date, scheduledDate, isFutureEntry, hasMigrated, isSpecialEntry, specialEntryType, originalDate
 - Relationships: collection (many-to-one), tags (many-to-many)
+- Special Types: "review" and "outlook" for monthly planning
 
 **Tag**: Metadata for entries
 - Properties: id, name, color
@@ -64,6 +67,9 @@
   • Habits tab (HabitTrackerView) - Primary feature
   • Collections tab (SimpleCollectionsView)
   • Settings tab (SettingsView)
+- **Journal Flow Hierarchy**:
+  • Future Log → Monthly Log → Daily Log
+  • Year Archives → Month Archives
 - **Note**: Index is now accessible as a Special Collection within Collections tab
 
 ### Key UI Patterns
@@ -73,6 +79,8 @@
 - **Entry Types**: Visual differentiation for tasks, events, and notes
 - **Sync Status**: Visual indicator in settings when iCloud sync is enabled
 - **Traffic Light Colors**: Universal green/yellow/red for habit states with habit color borders
+- **Future Entry Parsing**: @mention support for scheduling (@december, @dec-25)
+- **Migration Indicators**: Age dots (•, ••, •••) for old tasks
 
 ### Habit Tracking System
 - **Completion States**:
@@ -90,19 +98,42 @@
   • Red X when checked (indicates failure/relapse)
   • No multi-state support (simple toggle only)
 
+### Digital Bullet Journal System
+- **Future Log**:
+  • Central scheduling for future entries
+  • @mention parsing for dates
+  • Month-grouped display
+- **Monthly Log**:
+  • Single navigable log with month switching
+  • Shows entries from Future Log when due
+  • Calendar view of current month
+- **Daily Log**:
+  • Today's entries and migrated tasks
+  • Quick entry creation
+  • "Schedule for Later" option
+- **Migration System**:
+  • Daily: Incomplete tasks → next day with age indicators
+  • Monthly: All entries → year/month archives
+  • Future: Scheduled entries → Daily Log when due
+- **Special Entries**:
+  • Monthly Reviews (📝)
+  • Monthly Outlooks (📅)
+  • Full-screen editors with templates
+
 ## 📱 Major Features and Views
 
 ### Core Navigation
 - **ContentView**: Root container with 4-tab navigation
-- **DailyLogView**: Daily journal entries with calendar picker
+- **DailyLogView**: Daily journal entries with calendar picker and migration display
 - **HabitTrackerView**: Main habit tracking grid with multi-state support
 - **SimpleCollectionsView**: Organization of journal entries with Index access
 - **IndexView**: Search and browse all entries (accessed via Collections)
 - **SettingsView**: App configuration, backup management, and sync settings
 
 ### Habit Management
-- **AddHabitView**: Creation of new habits (collection assignment removed)
-- **EditHabitView**: Modification of existing habits (collection assignment removed)
+- **AddHabitView**: Creation of new habits (uses shared HabitFormView)
+- **EditHabitView**: Modification of existing habits (uses shared HabitFormView)
+- **HabitFormView**: Shared form component for habit creation/editing
 - **HabitDetailView**: Detailed view of habit with statistics
 - **HabitCheckboxView**: Interactive multi-state completion indicator
 - **HabitDetailIndicatorView**: Visual summary of habit details
@@ -110,10 +141,17 @@
 - **HabitCompletionDetailView**: Log details with workout tracking
 
 ### Journal Features
-- **NewEntryView**: Creation of new journal entries
+- **NewEntryView**: Creation of new journal entries with "Schedule for Later"
 - **EditEntryView**: Full entry editing with type, status, tags
 - **EntryRowView**: Display of journal entries with type-specific formatting
 - **EntryListItem**: Compact entry display for lists
+- **FutureLogView**: Future entry management with @mention parsing
+- **MonthLogView**: Current month view with navigation
+- **MonthlyLogContainerView**: Navigation state management for months
+- **YearLogView**: Year archive with month listing
+- **MonthArchiveView**: Archived entries for specific months
+- **SpecialEntryEditorView**: Full-screen editor for reviews/outlooks
+- **SpecialEntryDetailView**: Display for review/outlook entries
 
 ### Workout Tracking
 - **WorkoutDetailView**: Integrated into HabitCompletionDetailView
@@ -143,6 +181,7 @@
 ### Backup & Restore
 - **BackupManager**: Core Data serialization and restoration
 - **BackupRestoreViewModel**: UI management for backup operations
+- **DataExportManager**: Export functionality for data archiving
 - **File Format**: JSON with complete app data structure
 - **Naming Convention**: "BulletTracker_Backup_YYYY-MM-DD_HHMMSS.json"
 
@@ -156,19 +195,21 @@
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Core Data Stack | ✅ Fully Working | |
+| Core Data Stack | ✅ Fully Working | Enhanced with journal attributes |
 | Habit Tracking | ✅ Fully Implemented | Including negative habits |
 | Multi-State Completions | ✅ Fully Implemented | |
 | Multiple Workout Types | ✅ Fully Implemented | |
-| Journal Entries | ✅ Working | Collection assignment functional |
-| Collections | ✅ Working | Separated from habits |
-| Navigation Structure | ✅ Restructured | 4-tab system with Habits primary |
+| Digital Bullet Journal | ✅ Fully Implemented | Future Log, Monthly Log, Daily Log |
+| Journal Entries | ✅ Enhanced | With scheduling and special types |
+| Collections | ✅ Enhanced | Automatic collections for journal flow |
+| Navigation Structure | ✅ Restructured | 4-tab system with journal hierarchy |
 | Statistics View | ✅ Fully Implemented | |
 | Backup System | ✅ Fully Implemented | |
 | iCloud Sync | ✅ Fully Implemented | |
+| Migration System | ✅ Fully Implemented | Daily and monthly migrations |
+| Code Optimization | ✅ Complete | Production-ready, zero DEBUG |
 | Dark Mode Support | 🔧 Needs Review | |
 | iPad Optimization | 📋 Planned | |
-| Daily Log Integration | 🔧 Needs Design | Entry organization unclear |
 | Analytics Dashboard | 📋 Next Priority | Workout detail visualization |
 
 ## 🎨 UI/UX Standards
@@ -183,6 +224,9 @@
   • Negative Habit Checked: Red with X
 - **Habit Border**: Always shows habit's custom color
 - **System Colors**: Use semantic colors for adaptability
+- **Special Entry Colors**:
+  • Reviews: Purple background
+  • Outlooks: Green background
 
 ### Component Patterns
 - **Checkbox States**: Visual cycling through tap gestures
@@ -191,6 +235,16 @@
 - **Entry Formatting**: Type-specific visual treatments
 - **Sync Status**: Green checkmark with "Syncing with iCloud" text
 - **Date Range Picker**: Shows 4-day range ending on selected date
+- **Migration Indicators**: Age dots for task age visualization
+- **@Mention Parsing**: Real-time date parsing with green confirmation
+
+### Modern Swift Patterns
+- **Static DateFormatters**: 15+ instances for performance
+- **Computed Properties**: Replaced 30+ @State variables where appropriate
+- **async/await**: Modern concurrency for auto-save
+- **@MainActor**: Proper main thread handling
+- **@FocusState**: Keyboard and focus management
+- **Single-Pass Algorithms**: Optimized collection operations
 
 ## 🔨 Important Developer Notes
 
@@ -201,6 +255,7 @@
 - **Performance**: Use proper predicates for fetch requests
 - **CloudKit Requirements**: All entities must have UUID identifiers
 - **Deprecated Relationships**: Habit-Collection relationship no longer used
+- **Automatic Collections**: Created and managed by CollectionManager
 
 ### State Management
 - **Multi-State Logic**: Cycle through states in consistent order
@@ -208,6 +263,7 @@
 - **Statistics Calculation**: Account for habit frequency and start date
 - **Sync State**: Monitor UserDefaults for "iCloudSyncEnabled" preference
 - **Date Updates**: Use scenePhase to detect new days without restart
+- **Navigation State**: MonthlyLogContainerView manages month navigation
 
 ### Data Migration Patterns
 ```swift
@@ -234,6 +290,17 @@ if iCloudEnabled {
 } else {
     container = NSPersistentContainer(name: "Bullet_Tracker")
 }
+```
+
+### Migration System Patterns
+```swift
+// Daily migration for incomplete tasks
+// Tasks get "→" prefix and age indicators (•, ••, •••)
+// 5+ day old tasks prompt for Future Log migration
+
+// Monthly migration archives all entries
+// Creates year/month collection structure
+// Preserves all entry data for review
 ```
 
 ### Common Challenges & Solutions
@@ -264,39 +331,41 @@ if iCloudEnabled {
 - Solution: Monitor scenePhase for app becoming active
 - Check if date changed and update accordingly
 
+**Future Entry Parsing**:
+- Case-insensitive month recognition
+- Smart next occurrence logic
+- Supports multiple date formats
+
 ## 📅 Development Roadmap
 
 ### Immediate Priorities
-1. **Daily Log Integration** (Design Phase):
-   - Determine entry organization strategy
-   - Auto-collection assignment vs manual
-   - Integration with existing journal workflow
-
-2. **Analytics Dashboard** (Next Implementation):
+1. **Analytics Dashboard** (Next Implementation):
    - Visualize workout details from habit entries
    - Show trends and patterns
    - Aggregate statistics across time periods
+   - Habit correlation analysis
 
 ### Short-Term Goals
 - Dark mode color consistency fixes
 - Performance optimization for large datasets
 - iPad-optimized layouts with better space usage
-- Enhanced entry organization system
 - Deduplication logic for CloudKit sync conflicts
+- Widget support for quick tracking
 
 ### Medium-Term Goals
+- Apple Watch companion app
 - Calendar integration for habit scheduling
 - Print view for physical bullet journals
-- Enhanced journal features (templates, quick actions)
-- Habit correlation analysis
+- Sharing and collaboration features
 - Export formats beyond JSON
+- Shortcuts integration
 
 ### Long-Term Vision
-- Apple Watch companion app
-- Sharing and collaboration features
 - Advanced analytics with ML insights
-- Widget support for quick habit tracking
-- Shortcuts integration
+- Health app integration
+- Habit recommendations based on patterns
+- Team/family tracking features
+- API for third-party integrations
 
 ## 🔧 Technical Debt & Known Issues
 - Dark mode color consistency needs review
@@ -304,8 +373,8 @@ if iCloudEnabled {
 - Performance optimization needed for habits with many entries
 - Statistics calculation could be more efficient with caching
 - iCloud sync setting change requires app restart (Core Data limitation)
-- Journal entries need better organization system
 - Collection assignment for habits deprecated but relationship still in Core Data
+- Year/month archive collections could benefit from lazy loading
 
 ## 📝 Code Organization Patterns
 
@@ -314,22 +383,51 @@ if iCloudEnabled {
 BulletTracker/
 ├── App/
 │   ├── Bullet_TrackerApp.swift
-│   └── ContentView.swift
-├── Core/
-│   ├── Data/
-│   │   ├── CoreDataManager.swift
-│   │   └── BackupManager.swift
-│   └── Models/
-│       └── Constants.swift
-├── Features/
-│   ├── Habits/
-│   ├── Journal/
-│   ├── Collections/
-│   └── Settings/
-├── Components/
-│   ├── Habits/
-│   └── Journal/
-├── Extensions/
+│   ├── ContentView.swift
+│   └── SettingsView.swift
+├── Journal/
+│   ├── DailyLogView.swift
+│   ├── FutureLogView.swift
+│   ├── MonthLogView.swift
+│   ├── MonthlyLogContainerView.swift
+│   ├── YearLogView.swift
+│   ├── MonthArchiveView.swift
+│   ├── NewEntryView.swift
+│   ├── EditEntryView.swift
+│   ├── EntryRowView.swift
+│   ├── EntryListItem.swift
+│   ├── SpecialEntryEditorView.swift
+│   └── SpecialEntryDetailView.swift
+├── Habits/
+│   ├── HabitFormView.swift
+│   ├── AddHabitView.swift
+│   ├── EditHabitView.swift
+│   ├── HabitTrackerView.swift
+│   ├── HabitTrackerViewModel.swift
+│   ├── HabitCheckboxView.swift
+│   ├── HabitCompletionDetailView.swift
+│   ├── HabitDetailIndicatorView.swift
+│   ├── HabitRowLabelView.swift
+│   ├── HabitProgressView.swift
+│   └── HabitStatsView.swift
+├── Collections/
+│   ├── SimpleCollectionsView.swift
+│   ├── CollectionDetailView.swift
+│   └── IndexView.swift
+├── Data/
+│   ├── CoreDataManager.swift
+│   ├── CoreDataManager+HabitDetails.swift
+│   ├── BackupManager.swift
+│   ├── BackupRestoreViewModel.swift
+│   └── DataExportManager.swift
+├── Utilities/
+│   ├── IconSelectorView.swift
+│   ├── FutureEntryParser.swift
+│   ├── SpecialEntryTemplates.swift
+│   ├── CollectionManager.swift
+│   ├── MigrationManager.swift
+│   ├── Constants.swift
+│   ├── HabitConstants.swift
 │   └── Color+Hex.swift
 └── Resources/
     └── Assets.xcassets
@@ -340,18 +438,35 @@ BulletTracker/
 - **View Models**: [Feature]ViewModel (e.g., HabitTrackerViewModel)
 - **Managers**: [Function]Manager (e.g., CoreDataManager)
 - **Extensions**: [Type]+[Feature] (e.g., Color+Hex)
+- **Parsers**: [Feature]Parser (e.g., FutureEntryParser)
+- **Shared Components**: [Feature]View for reusable UI
 
 ### Key Implementation Files
 - **CoreDataManager.swift**: Container selection and CloudKit configuration
 - **HabitTrackerView.swift**: Main habit tracking interface with date update logic
 - **ContentView.swift**: Tab navigation structure
-- **SimpleCollectionsView.swift**: Collections with Index as special collection
+- **SimpleCollectionsView.swift**: Collections with automatic journal collections
+- **MigrationManager.swift**: Daily and monthly migration logic
+- **CollectionManager.swift**: Automatic collection creation and management
+- **FutureEntryParser.swift**: @mention date parsing with static regex
+- **HabitFormView.swift**: Shared form component for habit create/edit
 
 ## 🐛 Recent Bug Fixes
 1. **Delete Habit Context Menu**: Fixed issue where delete opened edit view
 2. **Date Update Bug**: Habit tracker now updates when app becomes active
 3. **Navigation Structure**: Habits elevated to primary tab
 4. **Collection Assignment**: Removed from habit creation/editing
+5. **Future Entry Parsing**: Fixed "may" month dictionary crash
+6. **Month Navigation**: Fixed empty month display in archives
+7. **Special Entry Storage**: Corrected to save in month archives
+
+## 🎉 Major Achievements
+- **Full Digital Bullet Journal**: Complete Future Log → Monthly Log → Daily Log flow
+- **Production-Ready Code**: 82+ DEBUG statements removed, optimized throughout
+- **Code Reuse**: 500+ lines eliminated through shared components
+- **Modern Swift**: async/await, @MainActor, static formatters throughout
+- **Seamless Sync**: iCloud integration working flawlessly
+- **Smart Migration**: Automatic daily and monthly task/entry migration
 
 ✅ This Master Context file should be referenced for all future development.
-(Version 1.3 — June 3, 2025)
+(Version 1.4 — June 7, 2025) 

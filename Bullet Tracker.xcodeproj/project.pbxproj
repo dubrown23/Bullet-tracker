@@ -12,6 +12,8 @@
 		77166BB52DF1F4D00071BED6 /* SpecialEntryTemplates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BB42DF1F4D00071BED6 /* SpecialEntryTemplates.swift */; };
 		77166BB72DF1F7C90071BED6 /* SpecialEntryEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BB62DF1F7C90071BED6 /* SpecialEntryEditorView.swift */; };
 		77166BB92DF1F94D0071BED6 /* SpecialEntryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BB82DF1F94D0071BED6 /* SpecialEntryDetailView.swift */; };
+		77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */; };
+		77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */; };
 		77731D4E2DF07A5B00A1F37C /* CollectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */; };
 		77731D502DF07FF500A1F37C /* FutureEntryParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D4F2DF07FF500A1F37C /* FutureEntryParser.swift */; };
 		77731D522DF0872800A1F37C /* FutureLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D512DF0872800A1F37C /* FutureLogView.swift */; };
@@ -76,6 +78,8 @@
 		77166BB42DF1F4D00071BED6 /* SpecialEntryTemplates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpecialEntryTemplates.swift; sourceTree = "<group>"; };
 		77166BB62DF1F7C90071BED6 /* SpecialEntryEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpecialEntryEditorView.swift; sourceTree = "<group>"; };
 		77166BB82DF1F94D0071BED6 /* SpecialEntryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpecialEntryDetailView.swift; sourceTree = "<group>"; };
+		77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitFormView.swift; sourceTree = "<group>"; };
+		77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconSelectorView.swift; sourceTree = "<group>"; };
 		77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionManager.swift; sourceTree = "<group>"; };
 		77731D4F2DF07FF500A1F37C /* FutureEntryParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureEntryParser.swift; sourceTree = "<group>"; };
 		77731D512DF0872800A1F37C /* FutureLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureLogView.swift; sourceTree = "<group>"; };
@@ -121,11 +125,6 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		77166BBB2DF31B850071BED6 /* to be deleted */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "to be deleted";
-			sourceTree = "<group>";
-		};
 		7783B25D2DD2894B0008E0F3 /* Bullet Tracker */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Bullet Tracker";
@@ -165,6 +164,19 @@
 		77166BBC2DF328B10071BED6 /* Journal */ = {
 			isa = PBXGroup;
 			children = (
+				77166BB82DF1F94D0071BED6 /* SpecialEntryDetailView.swift */,
+				77166BB62DF1F7C90071BED6 /* SpecialEntryEditorView.swift */,
+				77166BB22DF1DE290071BED6 /* MonthArchiveView.swift */,
+				77166BB02DF1DC910071BED6 /* YearLogView.swift */,
+				77731D552DF0B8A700A1F37C /* MonthlyLogContainerView.swift */,
+				77731D532DF0A06D00A1F37C /* MonthLogView.swift */,
+				77731D512DF0872800A1F37C /* FutureLogView.swift */,
+				77DB37B72DEBFBB4004E2ED9 /* DailyLogView.swift */,
+				77DB37B92DEBFBB4004E2ED9 /* EditEntryView.swift */,
+				77DB37C52DEBFBB4004E2ED9 /* IndexView.swift */,
+				77DB37C62DEBFBB4004E2ED9 /* NewEntryView.swift */,
+				77DB37BB2DEBFBB4004E2ED9 /* EntryListItem.swift */,
+				77DB37BC2DEBFBB4004E2ED9 /* EntryRowView.swift */,
 			);
 			path = Journal;
 			sourceTree = "<group>";
@@ -172,6 +184,17 @@
 		77166BBD2DF328D60071BED6 /* Habits */ = {
 			isa = PBXGroup;
 			children = (
+				77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */,
+				77DB37AB2DEBFBB4004E2ED9 /* AddHabitView.swift */,
+				77DB37BA2DEBFBB4004E2ED9 /* EditHabitView.swift */,
+				77DB37C02DEBFBB4004E2ED9 /* HabitProgressView.swift */,
+				77DB37C22DEBFBB4004E2ED9 /* HabitStatsView.swift */,
+				77DB37C32DEBFBB4004E2ED9 /* HabitTrackerView.swift */,
+				77DB37C42DEBFBB4004E2ED9 /* HabitTrackerViewModel.swift */,
+				77DB37BD2DEBFBB4004E2ED9 /* HabitCheckboxView.swift */,
+				77DB37BE2DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift */,
+				77DB37BF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift */,
+				77DB37C12DEBFBB4004E2ED9 /* HabitRowLabelView.swift */,
 			);
 			path = Habits;
 			sourceTree = "<group>";
@@ -179,6 +202,8 @@
 		77166BBF2DF328FA0071BED6 /* Collections */ = {
 			isa = PBXGroup;
 			children = (
+				77DB37B02DEBFBB4004E2ED9 /* CollectionDetailView.swift */,
+				77DB37C82DEBFBB4004E2ED9 /* SimpleCollectionsView.swift */,
 			);
 			path = Collections;
 			sourceTree = "<group>";
@@ -186,20 +211,25 @@
 		77166BC12DF329530071BED6 /* Data */ = {
 			isa = PBXGroup;
 			children = (
+				77DB37B52DEBFBB4004E2ED9 /* CoreDataManager.swift */,
+				77DB37B62DEBFBB4004E2ED9 /* CoreDataManager+HabitDetails.swift */,
+				77B535962DD62DAE008BBCD8 /* BackupManager.swift */,
+				77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */,
 			);
 			path = Data;
-			sourceTree = "<group>";
-		};
-		77166BC32DF3296D0071BED6 /* Settings */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Settings;
 			sourceTree = "<group>";
 		};
 		77166BC52DF3297D0071BED6 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */,
+				77731D4F2DF07FF500A1F37C /* FutureEntryParser.swift */,
+				77DB37B32DEBFBB4004E2ED9 /* Constants.swift */,
+				77DB37B22DEBFBB4004E2ED9 /* Color+Hex.swift */,
+				77166BB42DF1F4D00071BED6 /* SpecialEntryTemplates.swift */,
+				77DB37B82DEBFBB4004E2ED9 /* DataExportManager.swift */,
+				77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */,
+				77731D572DF1C6DE00A1F37C /* MigrationManager.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -208,23 +238,16 @@
 			isa = PBXGroup;
 			children = (
 				77DB37F32DEBFBB9004E2ED9 /* App */,
-				77DB37F72DEBFBFE004E2ED9 /* Core */,
-				77DB37F82DEBFC07004E2ED9 /* Components */,
-				77DB37F42DEBFBC7004E2ED9 /* Features */,
-				77DB37F62DEBFBEB004E2ED9 /* Extensions */,
-				77DB37F92DEBFC14004E2ED9 /* Resources */,
-				77166BBB2DF31B850071BED6 /* to be deleted */,
+				77166BBD2DF328D60071BED6 /* Habits */,
+				77166BBC2DF328B10071BED6 /* Journal */,
+				77166BBF2DF328FA0071BED6 /* Collections */,
+				77166BC12DF329530071BED6 /* Data */,
+				77166BC52DF3297D0071BED6 /* Utilities */,
 				77DB372A2DEBD5B6004E2ED9 /* Documentation */,
 				7783B25D2DD2894B0008E0F3 /* Bullet Tracker */,
 				7783B2702DD2894D0008E0F3 /* Bullet TrackerTests */,
 				7783B27A2DD2894D0008E0F3 /* Bullet TrackerUITests */,
 				7783B25C2DD2894B0008E0F3 /* Products */,
-				77166BBD2DF328D60071BED6 /* Habits */,
-				77166BBC2DF328B10071BED6 /* Journal */,
-				77166BBF2DF328FA0071BED6 /* Collections */,
-				77166BC12DF329530071BED6 /* Data */,
-				77166BC32DF3296D0071BED6 /* Settings */,
-				77166BC52DF3297D0071BED6 /* Utilities */,
 			);
 			sourceTree = "<group>";
 		};
@@ -253,146 +276,11 @@
 		77DB37F32DEBFBB9004E2ED9 /* App */ = {
 			isa = PBXGroup;
 			children = (
-				77166BB82DF1F94D0071BED6 /* SpecialEntryDetailView.swift */,
-				77166BB62DF1F7C90071BED6 /* SpecialEntryEditorView.swift */,
-				77166BB42DF1F4D00071BED6 /* SpecialEntryTemplates.swift */,
-				77166BB22DF1DE290071BED6 /* MonthArchiveView.swift */,
-				77166BB02DF1DC910071BED6 /* YearLogView.swift */,
-				77731D572DF1C6DE00A1F37C /* MigrationManager.swift */,
-				77731D552DF0B8A700A1F37C /* MonthlyLogContainerView.swift */,
-				77731D532DF0A06D00A1F37C /* MonthLogView.swift */,
-				77731D512DF0872800A1F37C /* FutureLogView.swift */,
-				77731D4F2DF07FF500A1F37C /* FutureEntryParser.swift */,
 				77DB37AF2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift */,
+				77DB37C72DEBFBB4004E2ED9 /* SettingsView.swift */,
 				77DB37B42DEBFBB4004E2ED9 /* ContentView.swift */,
 			);
 			path = App;
-			sourceTree = "<group>";
-		};
-		77DB37F42DEBFBC7004E2ED9 /* Features */ = {
-			isa = PBXGroup;
-			children = (
-				77DB37FC2DEBFC78004E2ED9 /* Habits */,
-				77DB37FD2DEBFC83004E2ED9 /* Journal */,
-				77DB37FF2DEBFC95004E2ED9 /* Collections */,
-				77DB37FE2DEBFC8C004E2ED9 /* Settings */,
-			);
-			path = Features;
-			sourceTree = "<group>";
-		};
-		77DB37F62DEBFBEB004E2ED9 /* Extensions */ = {
-			isa = PBXGroup;
-			children = (
-				77DB37B22DEBFBB4004E2ED9 /* Color+Hex.swift */,
-			);
-			path = Extensions;
-			sourceTree = "<group>";
-		};
-		77DB37F72DEBFBFE004E2ED9 /* Core */ = {
-			isa = PBXGroup;
-			children = (
-				77DB37FA2DEBFC5D004E2ED9 /* Data */,
-				77DB37FB2DEBFC68004E2ED9 /* Models */,
-			);
-			path = Core;
-			sourceTree = "<group>";
-		};
-		77DB37F82DEBFC07004E2ED9 /* Components */ = {
-			isa = PBXGroup;
-			children = (
-				77DB38002DEBFCAA004E2ED9 /* Habits */,
-				77DB38012DEBFCB6004E2ED9 /* Journal */,
-			);
-			path = Components;
-			sourceTree = "<group>";
-		};
-		77DB37F92DEBFC14004E2ED9 /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Resources;
-			sourceTree = "<group>";
-		};
-		77DB37FA2DEBFC5D004E2ED9 /* Data */ = {
-			isa = PBXGroup;
-			children = (
-				77DB37B52DEBFBB4004E2ED9 /* CoreDataManager.swift */,
-				77DB37B62DEBFBB4004E2ED9 /* CoreDataManager+HabitDetails.swift */,
-				77DB37B82DEBFBB4004E2ED9 /* DataExportManager.swift */,
-				77B535962DD62DAE008BBCD8 /* BackupManager.swift */,
-				77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */,
-			);
-			path = Data;
-			sourceTree = "<group>";
-		};
-		77DB37FB2DEBFC68004E2ED9 /* Models */ = {
-			isa = PBXGroup;
-			children = (
-				77DB37B32DEBFBB4004E2ED9 /* Constants.swift */,
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
-		77DB37FC2DEBFC78004E2ED9 /* Habits */ = {
-			isa = PBXGroup;
-			children = (
-				77DB37AB2DEBFBB4004E2ED9 /* AddHabitView.swift */,
-				77DB37BA2DEBFBB4004E2ED9 /* EditHabitView.swift */,
-				77DB37C02DEBFBB4004E2ED9 /* HabitProgressView.swift */,
-				77DB37C22DEBFBB4004E2ED9 /* HabitStatsView.swift */,
-				77DB37C32DEBFBB4004E2ED9 /* HabitTrackerView.swift */,
-				77DB37C42DEBFBB4004E2ED9 /* HabitTrackerViewModel.swift */,
-			);
-			path = Habits;
-			sourceTree = "<group>";
-		};
-		77DB37FD2DEBFC83004E2ED9 /* Journal */ = {
-			isa = PBXGroup;
-			children = (
-				77DB37B72DEBFBB4004E2ED9 /* DailyLogView.swift */,
-				77DB37B92DEBFBB4004E2ED9 /* EditEntryView.swift */,
-				77DB37C52DEBFBB4004E2ED9 /* IndexView.swift */,
-				77DB37C62DEBFBB4004E2ED9 /* NewEntryView.swift */,
-			);
-			path = Journal;
-			sourceTree = "<group>";
-		};
-		77DB37FE2DEBFC8C004E2ED9 /* Settings */ = {
-			isa = PBXGroup;
-			children = (
-				77DB37C72DEBFBB4004E2ED9 /* SettingsView.swift */,
-			);
-			path = Settings;
-			sourceTree = "<group>";
-		};
-		77DB37FF2DEBFC95004E2ED9 /* Collections */ = {
-			isa = PBXGroup;
-			children = (
-				77DB37B02DEBFBB4004E2ED9 /* CollectionDetailView.swift */,
-				77DB37C82DEBFBB4004E2ED9 /* SimpleCollectionsView.swift */,
-				77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */,
-			);
-			path = Collections;
-			sourceTree = "<group>";
-		};
-		77DB38002DEBFCAA004E2ED9 /* Habits */ = {
-			isa = PBXGroup;
-			children = (
-				77DB37BD2DEBFBB4004E2ED9 /* HabitCheckboxView.swift */,
-				77DB37BE2DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift */,
-				77DB37BF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift */,
-				77DB37C12DEBFBB4004E2ED9 /* HabitRowLabelView.swift */,
-			);
-			path = Habits;
-			sourceTree = "<group>";
-		};
-		77DB38012DEBFCB6004E2ED9 /* Journal */ = {
-			isa = PBXGroup;
-			children = (
-				77DB37BB2DEBFBB4004E2ED9 /* EntryListItem.swift */,
-				77DB37BC2DEBFBB4004E2ED9 /* EntryRowView.swift */,
-			);
-			path = Journal;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -409,7 +297,6 @@
 			buildRules = (
 			);
 			fileSystemSynchronizedGroups = (
-				77166BBB2DF31B850071BED6 /* to be deleted */,
 				7783B25D2DD2894B0008E0F3 /* Bullet Tracker */,
 			);
 			name = "Bullet Tracker";
@@ -530,9 +417,11 @@
 		7783B2572DD2894B0008E0F3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
+				77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */,
 				77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */,
 				77731D542DF0A06D00A1F37C /* MonthLogView.swift in Sources */,
 				77166BB12DF1DC910071BED6 /* YearLogView.swift in Sources */,
+				77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */,
 				77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */,
 				77166BB52DF1F4D00071BED6 /* SpecialEntryTemplates.swift in Sources */,
 				77DB37CD2DEBFBB4004E2ED9 /* HabitTrackerViewModel.swift in Sources */,
