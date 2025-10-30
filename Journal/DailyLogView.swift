@@ -6,13 +6,14 @@
 //
 
 import SwiftUI
+@preconcurrency import CoreData
 import Observation
 
 // MARK: - View Model
 
 /// Handles Core Data operations and state management for the daily log view
 @Observable
-final class DailyLogViewModel {
+final class DailyLogViewModel: ObservableObject {
     // MARK: - Properties
     
     var entries: [JournalEntry] = []
@@ -20,27 +21,45 @@ final class DailyLogViewModel {
     var selectedDate = Date()
     var showingNewEntrySheet = false
     var selectedEntry: JournalEntry? = nil
+    var isLoading = false
+    
+    // MARK: - Cached Properties
+    
+    private var lastLoadedDate: Date?
+    private var cachedEntriesCount: Int = 0
+    private var cachedMigratedCount: Int = 0
+    
+    // MARK: - Computed Properties
+    
+    var hasEntries: Bool {
+        cachedEntriesCount > 0 || cachedMigratedCount > 0
+    }
+    
+    var totalEntriesCount: Int {
+        cachedEntriesCount + cachedMigratedCount
+    }
     
     // MARK: - Public Methods
     
     /// Loads journal entries for the selected date
     func loadEntries() {
-        let allEntries = CoreDataManager.shared.fetchEntriesForDate(selectedDate)
-        
-        // Filter out special entries and separate migrated future entries in one pass
-        var regularEntries: [JournalEntry] = []
-        var migratedEntries: [JournalEntry] = []
-        
-        for entry in allEntries where !entry.isSpecialEntry {
-            if entry.hasMigrated && entry.scheduledDate != nil && !entry.isFutureEntry {
-                migratedEntries.append(entry)
-            } else {
-                regularEntries.append(entry)
-            }
+        // Skip if we already loaded for this date
+        if let lastDate = lastLoadedDate,
+           Calendar.current.isDate(lastDate, inSameDayAs: selectedDate) {
+            return
         }
         
-        entries = regularEntries
-        migratedFutureEntries = migratedEntries
+        isLoading = true
+        
+        Task { @MainActor in
+            await loadEntriesAsync()
+        }
+    }
+    
+    /// Force reload entries (used after modifications)
+    func reloadEntries() {
+        lastLoadedDate = nil
+        loadEntries()
     }
     
     /// Deletes journal entries at the specified indices
@@ -50,13 +69,23 @@ final class DailyLogViewModel {
             let entry = entries[index]
             CoreDataManager.shared.deleteJournalEntry(entry)
         }
-        loadEntries()
+        
+        // Update cache counts
+        cachedEntriesCount -= offsets.count
+        
+        // Remove from array without reloading
+        entries.remove(atOffsets: offsets)
     }
     
     /// Deletes a migrated future entry
     func deleteMigratedFutureEntry(_ entry: JournalEntry) {
         CoreDataManager.shared.deleteJournalEntry(entry)
-        loadEntries()
+        
+        // Update cache and array
+        if let index = migratedFutureEntries.firstIndex(of: entry) {
+            migratedFutureEntries.remove(at: index)
+            cachedMigratedCount -= 1
+        }
     }
     
     /// Toggles the completion status of a task entry
@@ -72,12 +101,53 @@ final class DailyLogViewModel {
         let context = CoreDataManager.shared.container.viewContext
         do {
             try context.save()
+            
+            // Trigger view update without full reload
+            if let index = entries.firstIndex(of: entry) {
+                // Force SwiftUI to recognize the change
+                entries[index] = entry
+            }
         } catch {
-            // Silent failure - view will show previous state
+            // Revert on failure
+            entry.taskStatus = (entry.taskStatus == "completed") ? "pending" : "completed"
+        }
+    }
+    
+    // MARK: - Private Methods
+    
+    /// Asynchronously loads entries with optimized filtering
+    @MainActor
+    private func loadEntriesAsync() async {
+        let context = CoreDataManager.shared.container.viewContext
+        let selectedDate = self.selectedDate
+        
+        let (regular, migrated) = await context.perform { () -> ([JournalEntry], [JournalEntry]) in
+            let allEntries = CoreDataManager.shared.fetchEntriesForDate(selectedDate)
+            
+            // Filter and separate in one pass
+            var regularEntries: [JournalEntry] = []
+            var migratedEntries: [JournalEntry] = []
+            
+            regularEntries.reserveCapacity(allEntries.count)
+            
+            for entry in allEntries where !entry.isSpecialEntry {
+                if entry.hasMigrated && entry.scheduledDate != nil && !entry.isFutureEntry {
+                    migratedEntries.append(entry)
+                } else {
+                    regularEntries.append(entry)
+                }
+            }
+            
+            return (regularEntries, migratedEntries)
         }
         
-        // Reload entries to refresh the view
-        loadEntries()
+        // Update on main thread
+        self.entries = regular
+        self.migratedFutureEntries = migrated
+        self.cachedEntriesCount = regular.count
+        self.cachedMigratedCount = migrated.count
+        self.lastLoadedDate = selectedDate
+        self.isLoading = false
     }
 }
 
@@ -86,7 +156,7 @@ final class DailyLogViewModel {
 struct DailyLogView: View {
     // MARK: - State Properties
     
-    @State private var viewModel = DailyLogViewModel()
+    @StateObject private var viewModel = DailyLogViewModel()
     @EnvironmentObject private var migrationManager: MigrationManager
     
     // MARK: - Body
@@ -96,7 +166,9 @@ struct DailyLogView: View {
             VStack(spacing: 0) {
                 datePicker
                 
-                if viewModel.entries.isEmpty && viewModel.migratedFutureEntries.isEmpty {
+                if viewModel.isLoading {
+                    loadingView
+                } else if !viewModel.hasEntries {
                     emptyStateView
                 } else {
                     entriesList
@@ -105,11 +177,7 @@ struct DailyLogView: View {
             .navigationTitle("Daily Log")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        viewModel.showingNewEntrySheet = true
-                    } label: {
-                        Label("Add Entry", systemImage: "plus")
-                    }
+                    addButton
                 }
             }
             .onAppear {
@@ -118,13 +186,13 @@ struct DailyLogView: View {
             .sheet(isPresented: $viewModel.showingNewEntrySheet) {
                 NewEntryView(date: viewModel.selectedDate)
                     .onDisappear {
-                        viewModel.loadEntries()
+                        viewModel.reloadEntries()
                     }
             }
             .sheet(item: $viewModel.selectedEntry) { entry in
                 EditEntryView(entry: entry)
                     .onDisappear {
-                        viewModel.loadEntries()
+                        viewModel.reloadEntries()
                     }
             }
         }
@@ -140,6 +208,16 @@ struct DailyLogView: View {
             .onChange(of: viewModel.selectedDate) { _, _ in
                 viewModel.loadEntries()
             }
+    }
+    
+    /// Loading indicator
+    private var loadingView: some View {
+        VStack {
+            Spacer()
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle())
+            Spacer()
+        }
     }
     
     /// Empty state view shown when no entries exist for the selected date
@@ -163,6 +241,20 @@ struct DailyLogView: View {
         }
     }
     
+    /// Add button with entry count badge
+    private var addButton: some View {
+        Button {
+            viewModel.showingNewEntrySheet = true
+        } label: {
+            if viewModel.totalEntriesCount > 0 {
+                Label("\(viewModel.totalEntriesCount)", systemImage: "plus")
+                    .labelStyle(.titleAndIcon)
+            } else {
+                Label("Add Entry", systemImage: "plus")
+            }
+        }
+    }
+    
     /// List view displaying journal entries
     private var entriesList: some View {
         List {
@@ -170,19 +262,7 @@ struct DailyLogView: View {
             if !viewModel.migratedFutureEntries.isEmpty {
                 Section {
                     ForEach(viewModel.migratedFutureEntries) { entry in
-                        EntryRowView(entry: entry)
-                            .listRowBackground(Color.blue.opacity(0.05))
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                viewModel.selectedEntry = entry
-                            }
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    viewModel.deleteMigratedFutureEntry(entry)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
+                        migratedEntryRow(entry)
                     }
                 } header: {
                     HStack {
@@ -196,20 +276,44 @@ struct DailyLogView: View {
             
             // Regular entries section
             ForEach(viewModel.entries) { entry in
-                EntryRowView(entry: entry)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        viewModel.selectedEntry = entry
-                    }
-                    .swipeActions(edge: .leading) {
-                        if entry.entryType == "task" {
-                            toggleTaskButton(for: entry)
-                        }
-                    }
+                regularEntryRow(entry)
             }
             .onDelete(perform: viewModel.deleteEntry)
         }
         .listStyle(.plain)
+    }
+    
+    // MARK: - Row Views
+    
+    /// Row view for migrated future entries
+    private func migratedEntryRow(_ entry: JournalEntry) -> some View {
+        EntryRowView(entry: entry)
+            .listRowBackground(Color.blue.opacity(0.05))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                viewModel.selectedEntry = entry
+            }
+            .swipeActions(edge: .trailing) {
+                Button(role: .destructive) {
+                    viewModel.deleteMigratedFutureEntry(entry)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+    }
+    
+    /// Row view for regular entries
+    private func regularEntryRow(_ entry: JournalEntry) -> some View {
+        EntryRowView(entry: entry)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                viewModel.selectedEntry = entry
+            }
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                if entry.entryType == "task" {
+                    toggleTaskButton(for: entry)
+                }
+            }
     }
     
     // MARK: - Helper Views

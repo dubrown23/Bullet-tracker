@@ -11,8 +11,8 @@ struct HabitTrackerView: View {
     @StateObject private var viewModel = HabitTrackerViewModel()
     @State private var isEditMode: EditMode = .inactive
     @State private var lastDateCheck = Date()
-    @Environment(\.presentationMode) var presentationMode
-    @Environment(\.scenePhase) var scenePhase
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     
     var body: some View {
         contentView
@@ -20,7 +20,7 @@ struct HabitTrackerView: View {
             .navigationBarBackButtonHidden(true) // Hide default back button
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarLeading) {
-                    Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                    Button(action: { dismiss() }) {
                         Image(systemName: "chevron.left")
                             .foregroundColor(.blue)
                             .imageScale(.large)
@@ -318,6 +318,7 @@ struct HabitRowWithEdit: View {
                     HStack(spacing: 12) {
                         ForEach(dates, id: \.self) { date in
                             HabitCheckboxView(habit: habit, date: date)
+                                .environmentObject(viewModel.dataRepository)
                                 .highPriorityGesture(
                                     LongPressGesture(minimumDuration: 0.5)
                                         .onEnded { _ in

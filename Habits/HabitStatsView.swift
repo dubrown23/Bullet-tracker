@@ -126,6 +126,57 @@ private struct DateFormatters {
     }()
 }
 
+// MARK: - Stats Cache
+
+@MainActor
+private class StatsCache {
+    struct CacheKey: Hashable {
+        let habitId: UUID
+        let timeframe: HabitStatsView.Timeframe
+        let endDate: Date
+        
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(habitId)
+            hasher.combine(timeframe.rawValue)
+            // Only consider the date, not time
+            let calendar = Calendar.current
+            let dateComponents = calendar.dateComponents([.year, .month, .day], from: endDate)
+            hasher.combine(dateComponents.year)
+            hasher.combine(dateComponents.month)
+            hasher.combine(dateComponents.day)
+        }
+    }
+    
+    private var cache: [CacheKey: EnhancedHabitProgressView.HabitStats] = [:]
+    private let cacheLimit = 50
+    
+    func get(for habit: Habit, timeframe: HabitStatsView.Timeframe, endDate: Date) -> EnhancedHabitProgressView.HabitStats? {
+        guard let habitId = habit.id else { return nil }
+        let key = CacheKey(habitId: habitId, timeframe: timeframe, endDate: endDate)
+        return cache[key]
+    }
+    
+    func set(_ stats: EnhancedHabitProgressView.HabitStats, for habit: Habit, timeframe: HabitStatsView.Timeframe, endDate: Date) {
+        guard let habitId = habit.id else { return }
+        let key = CacheKey(habitId: habitId, timeframe: timeframe, endDate: endDate)
+        
+        // Limit cache size
+        if cache.count >= cacheLimit {
+            // Remove oldest entry (simple FIFO)
+            if let firstKey = cache.keys.first {
+                cache.removeValue(forKey: firstKey)
+            }
+        }
+        
+        cache[key] = stats
+    }
+    
+    func invalidate(for habit: Habit) {
+        guard let habitId = habit.id else { return }
+        cache = cache.filter { $0.key.habitId != habitId }
+    }
+}
+
 // MARK: - Enhanced Habit Progress View
 
 struct EnhancedHabitProgressView: View {
@@ -138,6 +189,11 @@ struct EnhancedHabitProgressView: View {
     // MARK: - State Properties
     
     @State private var stats = HabitStats()
+    @State private var isLoading = false
+    
+    // MARK: - Static Cache
+    
+    private static let statsCache = StatsCache()
     
     // MARK: - Supporting Types
     
@@ -150,6 +206,7 @@ struct EnhancedHabitProgressView: View {
         var failureCount: Int = 0
         var totalDays: Int = 0
         var useMultipleStates: Bool = false
+        var isCalculated: Bool = false
     }
     
     // MARK: - Body
@@ -160,10 +217,16 @@ struct EnhancedHabitProgressView: View {
                 .font(.subheadline)
                 .bold()
             
-            if stats.useMultipleStates {
-                multiStateProgressView
-            } else {
-                simpleProgressView
+            if isLoading {
+                ProgressView()
+                    .progressViewStyle(LinearProgressViewStyle())
+                    .frame(height: 8)
+            } else if stats.isCalculated {
+                if stats.useMultipleStates {
+                    multiStateProgressView
+                } else {
+                    simpleProgressView
+                }
             }
         }
         .onAppear {
@@ -280,54 +343,73 @@ struct EnhancedHabitProgressView: View {
     // MARK: - Helper Methods
     
     private func loadStats() {
-        stats.useMultipleStates = (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
-        
         let endDate = Date()
-        let startDate = timeframe.getStartDate(from: endDate)
         
-        // Calculate expected days more efficiently
-        stats.totalDays = calculateExpectedDays(from: startDate, to: endDate)
-        
-        guard stats.totalDays > 0 else {
-            resetStats()
+        // Check cache first
+        if let cachedStats = Self.statsCache.get(for: habit, timeframe: timeframe, endDate: endDate) {
+            stats = cachedStats
             return
         }
         
-        // Fetch entries
-        let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        fetchRequest.predicate = NSPredicate(
-            format: "habit == %@ AND date >= %@ AND date <= %@",
-            habit, startDate as NSDate, endDate as NSDate
-        )
+        // Load stats in background
+        isLoading = true
         
-        do {
-            let entries = try CoreDataManager.shared.container.viewContext.fetch(fetchRequest)
-            calculateStats(from: entries)
-        } catch {
-            resetStats()
+        Task { @MainActor in
+            let startDate = timeframe.getStartDate(from: endDate)
+            
+            stats.useMultipleStates = (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
+            
+            // Calculate expected days
+            stats.totalDays = calculateExpectedDays(from: startDate, to: endDate)
+            
+            guard stats.totalDays > 0 else {
+                stats.isCalculated = true
+                isLoading = false
+                return
+            }
+            
+            // Fetch entries
+            let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
+            fetchRequest.predicate = NSPredicate(
+                format: "habit == %@ AND date >= %@ AND date <= %@",
+                habit, startDate as NSDate, endDate as NSDate
+            )
+            
+            do {
+                let entries = try CoreDataManager.shared.container.viewContext.fetch(fetchRequest)
+                calculateStats(from: entries)
+                
+                // Cache the result
+                Self.statsCache.set(stats, for: habit, timeframe: timeframe, endDate: endDate)
+            } catch {
+                resetStats()
+            }
+            
+            isLoading = false
         }
     }
     
     private func calculateExpectedDays(from startDate: Date, to endDate: Date) -> Int {
         let calendar = Calendar.current
-        let components = calendar.dateComponents([.day], from: startDate, to: endDate)
-        let totalDays = (components.day ?? 0) + 1
         
-        // For daily habits, return total days
+        // For daily habits, use simple calculation
         if habit.frequency == "daily" {
-            return totalDays
+            let components = calendar.dateComponents([.day], from: startDate, to: endDate)
+            return (components.day ?? 0) + 1
         }
         
-        // For other frequencies, count specific days
+        // For other frequencies, optimize with stride
         var count = 0
         let startWeekday = calendar.component(.weekday, from: habit.startDate ?? Date())
         let customDays = parseCustomDays()
         
-        // Use dateInterval for more efficient iteration
-        guard let interval = calendar.dateInterval(of: .day, for: startDate) else { return 0 }
-        var currentDate = interval.start
+        // Use stride for efficient date iteration
+        let dayInterval: TimeInterval = 86400 // 24 hours in seconds
+        let startTime = startDate.timeIntervalSinceReferenceDate
+        let endTime = endDate.timeIntervalSinceReferenceDate
         
-        while currentDate <= endDate {
+        for timeInterval in stride(from: startTime, through: endTime, by: dayInterval) {
+            let currentDate = Date(timeIntervalSinceReferenceDate: timeInterval)
             let weekday = calendar.component(.weekday, from: currentDate)
             
             switch habit.frequency {
@@ -342,8 +424,6 @@ struct EnhancedHabitProgressView: View {
             default:
                 break
             }
-            
-            currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate)!
         }
         
         return count
@@ -382,6 +462,7 @@ struct EnhancedHabitProgressView: View {
         stats.successRate = Double(successCount) / total
         stats.partialRate = Double(partialCount) / total
         stats.failureRate = Double(failureCount) / total
+        stats.isCalculated = true
     }
     
     private func resetStats() {

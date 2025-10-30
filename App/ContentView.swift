@@ -12,6 +12,15 @@ struct ContentView: View {
     
     @State private var selectedTab = 0
     
+    // MARK: - Constants
+    
+    private enum Tab: Int, CaseIterable {
+        case daily = 0
+        case habits = 1
+        case collections = 2
+        case settings = 3
+    }
+    
     // MARK: - Body
     
     var body: some View {
@@ -31,7 +40,7 @@ struct ContentView: View {
             .tabItem {
                 Label("Daily", systemImage: "calendar.day.timeline.leading")
             }
-            .tag(0)
+            .tag(Tab.daily.rawValue)
     }
     
     /// Habits tab for tracking daily habits
@@ -42,7 +51,7 @@ struct ContentView: View {
         .tabItem {
             Label("Habits", systemImage: "chart.bar.fill")
         }
-        .tag(1)
+        .tag(Tab.habits.rawValue)
     }
     
     /// Collections tab for organizing entries and accessing index
@@ -51,7 +60,7 @@ struct ContentView: View {
             .tabItem {
                 Label("Collections", systemImage: "folder")
             }
-            .tag(2)
+            .tag(Tab.collections.rawValue)
     }
     
     /// Settings tab for app configuration
@@ -60,6 +69,6 @@ struct ContentView: View {
             .tabItem {
                 Label("Settings", systemImage: "gear")
             }
-            .tag(3)
+            .tag(Tab.settings.rawValue)
     }
 }

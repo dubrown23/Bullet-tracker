@@ -72,11 +72,9 @@ class MigrationManager: ObservableObject {
             let incompleteTasks = try context.fetch(fetchRequest)
             
             if !incompleteTasks.isEmpty {
-                // Batch process in groups of 50
-                for batch in incompleteTasks.chunked(into: 50) {
-                    for task in batch {
-                        migrateTask(task, to: today)
-                    }
+                // Process all tasks in single context operation for better performance
+                for task in incompleteTasks {
+                    migrateTask(task, to: today)
                 }
                 
                 try context.save()

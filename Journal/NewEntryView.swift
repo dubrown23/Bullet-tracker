@@ -8,6 +8,266 @@
 import SwiftUI
 import CoreData
 
+// MARK: - Tag Processing Utility
+
+struct TagProcessor {
+    static func processTags(from text: String, for entry: JournalEntry, in context: NSManagedObjectContext) {
+        guard !text.isEmpty else { return }
+        
+        let tagNames = text
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        
+        for tagName in tagNames {
+            let tag = CoreDataManager.shared.getOrCreateTag(name: tagName)
+            entry.addToTags(tag)
+        }
+    }
+}
+
+// MARK: - View Model
+
+@MainActor
+class NewEntryViewModel: ObservableObject {
+    // MARK: - Published Properties
+    
+    @Published var content: String = ""
+    @Published var entryType: String = "task"
+    @Published var taskStatus: String = "pending"
+    @Published var priority: Bool = false
+    @Published var tagsText: String = ""
+    @Published var selectedCollection: Collection?
+    @Published var collections: [Collection] = []
+    
+    // Future entry properties
+    @Published var scheduleForLater: Bool = false
+    @Published var parsedDate: Date?
+    @Published var selectedFutureDate: Date?
+    @Published var showDatePicker: Bool = false
+    
+    // Special entry properties
+    @Published var isSpecialEntry: Bool = false
+    @Published var specialEntryType: String = "review"
+    @Published var targetMonth: Date = Date()
+    @Published var showExtendedEditor: Bool = false
+    @Published var isDraft: Bool = false
+    
+    // MARK: - Private Properties
+    
+    private let date: Date
+    private var cachedCollections: [Collection]?
+    private let calendar = Calendar.current
+    
+    // MARK: - Computed Properties
+    
+    var isSaveDisabled: Bool {
+        if scheduleForLater {
+            return content.isEmpty || !hasValidFutureDate
+        } else {
+            return content.isEmpty
+        }
+    }
+    
+    var hasValidFutureDate: Bool {
+        parsedDate != nil || selectedFutureDate != nil
+    }
+    
+    // MARK: - Initialization
+    
+    init(date: Date) {
+        self.date = date
+        loadCollections()
+    }
+    
+    // MARK: - Public Methods
+    
+    func updateEntryType(_ newType: String) {
+        entryType = newType
+        
+        if newType == "review" || newType == "outlook" {
+            isSpecialEntry = true
+            specialEntryType = newType
+            targetMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+        } else {
+            isSpecialEntry = false
+        }
+    }
+    
+    func updateScheduleForLater(_ value: Bool) {
+        scheduleForLater = value
+        if !value {
+            parsedDate = nil
+            selectedFutureDate = nil
+            showDatePicker = false
+        }
+    }
+    
+    func updateContent(_ newContent: String) {
+        content = newContent
+        if scheduleForLater && !showDatePicker {
+            let result = FutureEntryParser.parseFutureDate(from: newContent)
+            parsedDate = result.scheduledDate
+        }
+    }
+    
+    func loadCollections() {
+        if let cached = cachedCollections {
+            collections = cached
+        } else {
+            collections = CoreDataManager.shared.fetchAllCollections()
+            cachedCollections = collections
+        }
+    }
+    
+    func saveEntry() {
+        let context = CoreDataManager.shared.container.viewContext
+        
+        if isSpecialEntry {
+            saveSpecialEntry(in: context)
+        } else if scheduleForLater {
+            saveFutureEntry(in: context)
+        } else {
+            saveRegularEntry(in: context)
+        }
+    }
+    
+    // MARK: - Private Save Methods
+    
+    private func saveSpecialEntry(in context: NSManagedObjectContext) {
+        // Remove existing entry for the same month/type
+        removeExistingSpecialEntry(in: context)
+        
+        let entry = JournalEntry(context: context)
+        entry.id = UUID()
+        entry.content = content
+        entry.date = Date()
+        entry.entryType = "note"
+        entry.isSpecialEntry = true
+        entry.specialEntryType = specialEntryType
+        entry.targetMonth = targetMonth
+        entry.isDraft = isDraft
+        
+        // Set collection
+        entry.collection = findAppropriateCollection(for: targetMonth, in: context)
+        
+        do {
+            try context.save()
+        } catch {
+            // Silent failure
+        }
+    }
+    
+    private func saveFutureEntry(in context: NSManagedObjectContext) {
+        let entry = JournalEntry(context: context)
+        entry.id = UUID()
+        entry.date = Date()
+        entry.entryType = entryType
+        entry.isFutureEntry = true
+        entry.priority = priority
+        
+        if showDatePicker, let manualDate = selectedFutureDate {
+            entry.content = content
+            entry.scheduledDate = manualDate
+        } else if let parsed = parsedDate {
+            let result = FutureEntryParser.parseFutureDate(from: content)
+            entry.content = result.cleanText
+            entry.scheduledDate = parsed
+        }
+        
+        // Set Future Log collection
+        entry.collection = findFutureLogCollection(in: context)
+        
+        TagProcessor.processTags(from: tagsText, for: entry, in: context)
+        
+        do {
+            try context.save()
+        } catch {
+            // Silent failure
+        }
+    }
+    
+    private func saveRegularEntry(in context: NSManagedObjectContext) {
+        let entry = JournalEntry(context: context)
+        entry.id = UUID()
+        entry.content = content
+        entry.date = date
+        entry.entryType = entryType
+        entry.priority = priority
+        
+        if entryType == "task" {
+            entry.taskStatus = taskStatus
+        }
+        
+        entry.collection = selectedCollection
+        
+        TagProcessor.processTags(from: tagsText, for: entry, in: context)
+        
+        do {
+            try context.save()
+        } catch {
+            // Silent failure
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func removeExistingSpecialEntry(in context: NSManagedObjectContext) {
+        let fetchRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
+        let monthStart = calendar.dateInterval(of: .month, for: targetMonth)?.start ?? targetMonth
+        let monthEnd = calendar.dateInterval(of: .month, for: targetMonth)?.end ?? targetMonth
+        
+        fetchRequest.predicate = NSPredicate(
+            format: "isSpecialEntry == %@ AND specialEntryType == %@ AND targetMonth >= %@ AND targetMonth < %@",
+            NSNumber(value: true),
+            specialEntryType,
+            monthStart as NSDate,
+            monthEnd as NSDate
+        )
+        
+        do {
+            let existingEntries = try context.fetch(fetchRequest)
+            existingEntries.forEach { context.delete($0) }
+        } catch {
+            // Silent failure
+        }
+    }
+    
+    private func findAppropriateCollection(for date: Date, in context: NSManagedObjectContext) -> Collection? {
+        let year = calendar.component(.year, from: date)
+        let monthName = date.formatted(.dateTime.month(.wide))
+        let monthCollectionName = "\(year)/\(monthName)"
+        
+        let collectionFetch: NSFetchRequest<Collection> = Collection.fetchRequest()
+        collectionFetch.predicate = NSPredicate(format: "name == %@", monthCollectionName)
+        collectionFetch.fetchLimit = 1
+        
+        do {
+            if let monthCollection = try context.fetch(collectionFetch).first {
+                return monthCollection
+            }
+        } catch {
+            // Continue to year collection
+        }
+        
+        return CoreDataManager.shared.getOrCreateYearCollection(year: year)
+    }
+    
+    private func findFutureLogCollection(in context: NSManagedObjectContext) -> Collection? {
+        let fetchRequest: NSFetchRequest<Collection> = Collection.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "name == %@", "Future Log")
+        fetchRequest.fetchLimit = 1
+        
+        do {
+            return try context.fetch(fetchRequest).first
+        } catch {
+            return nil
+        }
+    }
+}
+
+// MARK: - Main View
+
 struct NewEntryView: View {
     // MARK: - Properties
     
@@ -19,40 +279,13 @@ struct NewEntryView: View {
     
     // MARK: - State Properties
     
-    @State private var content: String = ""
-    @State private var entryType: String = "task"
-    @State private var taskStatus: String = "pending"
-    @State private var priority: Bool = false
-    @State private var tagsText: String = ""
-    @State private var selectedCollection: Collection?
-    @State private var collections: [Collection] = []
+    @StateObject private var viewModel: NewEntryViewModel
     
-    // Future entry properties
-    @State private var scheduleForLater: Bool = false
-    @State private var parsedDate: Date?
-    @State private var selectedFutureDate: Date?
-    @State private var showDatePicker: Bool = false
+    // MARK: - Initialization
     
-    // Special entry properties (Phase 5)
-    @State private var isSpecialEntry: Bool = false
-    @State private var specialEntryType: String = "review"
-    @State private var targetMonth: Date = Date()
-    @State private var showExtendedEditor: Bool = false
-    @State private var isDraft: Bool = false
-    
-    // MARK: - Computed Properties
-    
-    /// Determines if the save button should be disabled
-    private var isSaveDisabled: Bool {
-        if scheduleForLater {
-            return content.isEmpty || !hasValidFutureDate
-        } else {
-            return content.isEmpty
-        }
-    }
-    
-    private var hasValidFutureDate: Bool {
-        parsedDate != nil || selectedFutureDate != nil
+    init(date: Date) {
+        self.date = date
+        self._viewModel = StateObject(wrappedValue: NewEntryViewModel(date: date))
     }
     
     // MARK: - Body
@@ -62,7 +295,7 @@ struct NewEntryView: View {
             Form {
                 entryDetailsSection
                 
-                if !isSpecialEntry {
+                if !viewModel.isSpecialEntry {
                     scheduleSection
                 }
             }
@@ -72,24 +305,24 @@ struct NewEntryView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") { saveEntry() }
-                        .disabled(isSaveDisabled)
+                    Button("Save") {
+                        viewModel.saveEntry()
+                        dismiss()
+                    }
+                    .disabled(viewModel.isSaveDisabled)
                 }
             }
-            .onAppear {
-                loadCollections()
-            }
-            .sheet(isPresented: $showExtendedEditor) {
+            .sheet(isPresented: $viewModel.showExtendedEditor) {
                 SpecialEntryEditorView(
-                    content: $content,
-                    specialType: specialEntryType,
-                    targetMonth: targetMonth,
-                    isDraft: $isDraft,
-                    onSave: saveEntry
+                    content: $viewModel.content,
+                    specialType: viewModel.specialEntryType,
+                    targetMonth: viewModel.targetMonth,
+                    isDraft: $viewModel.isDraft,
+                    onSave: {
+                        viewModel.saveEntry()
+                        dismiss()
+                    }
                 )
-            }
-            .onChange(of: entryType) { _, newValue in
-                updateSpecialEntryState(for: newValue)
             }
         }
     }
@@ -100,7 +333,7 @@ struct NewEntryView: View {
         Section(header: Text("Entry Details")) {
             entryTypePicker
             
-            if isSpecialEntry {
+            if viewModel.isSpecialEntry {
                 monthSelector
             } else {
                 regularEntryControls
@@ -110,14 +343,14 @@ struct NewEntryView: View {
     
     private var regularEntryControls: some View {
         Group {
-            if entryType == "task" && !scheduleForLater {
+            if viewModel.entryType == "task" && !viewModel.scheduleForLater {
                 taskControls
             }
             
             contentField
             tagsField
             
-            if !collections.isEmpty && !scheduleForLater {
+            if !viewModel.collections.isEmpty && !viewModel.scheduleForLater {
                 collectionPicker
             }
         }
@@ -130,7 +363,7 @@ struct NewEntryView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 
-                Picker("Month", selection: $targetMonth) {
+                Picker("Month", selection: $viewModel.targetMonth) {
                     ForEach(SpecialEntryTemplates.availableMonths(), id: \.self) { month in
                         Text(SpecialEntryTemplates.monthDisplayString(for: month))
                             .tag(month)
@@ -139,12 +372,12 @@ struct NewEntryView: View {
                 .pickerStyle(.menu)
             }
             
-            Button(action: { showExtendedEditor = true }) {
+            Button(action: { viewModel.showExtendedEditor = true }) {
                 HStack {
-                    Image(systemName: specialEntryType == "review" ? "doc.text.magnifyingglass" : "calendar.badge.plus")
+                    Image(systemName: viewModel.specialEntryType == "review" ? "doc.text.magnifyingglass" : "calendar.badge.plus")
                     Text(buttonTitle)
                     Spacer()
-                    if !content.isEmpty {
+                    if !viewModel.content.isEmpty {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                     }
@@ -152,11 +385,11 @@ struct NewEntryView: View {
             }
             .buttonStyle(.borderedProminent)
             
-            if !content.isEmpty {
+            if !viewModel.content.isEmpty {
                 contentPreview
             }
             
-            if isDraft {
+            if viewModel.isDraft {
                 Label("Draft - not published", systemImage: "doc.badge.clock")
                     .font(.caption)
                     .foregroundStyle(.orange)
@@ -165,8 +398,8 @@ struct NewEntryView: View {
     }
     
     private var buttonTitle: String {
-        let action = content.isEmpty ? "Write" : "Edit"
-        let type = specialEntryType == "review" ? "Review" : "Outlook"
+        let action = viewModel.content.isEmpty ? "Write" : "Edit"
+        let type = viewModel.specialEntryType == "review" ? "Review" : "Outlook"
         return "\(action) \(type)"
     }
     
@@ -176,7 +409,7 @@ struct NewEntryView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             
-            Text(content)
+            Text(viewModel.content)
                 .font(.caption)
                 .foregroundStyle(.primary)
                 .lineLimit(3)
@@ -189,14 +422,12 @@ struct NewEntryView: View {
     
     private var scheduleSection: some View {
         Section(header: Text("Scheduling")) {
-            Toggle("Schedule for Later", isOn: $scheduleForLater)
-                .onChange(of: scheduleForLater) { _, newValue in
-                    if !newValue {
-                        resetFutureDateFields()
-                    }
-                }
+            Toggle("Schedule for Later", isOn: Binding(
+                get: { viewModel.scheduleForLater },
+                set: { viewModel.updateScheduleForLater($0) }
+            ))
             
-            if scheduleForLater {
+            if viewModel.scheduleForLater {
                 futureSchedulingControls
             }
         }
@@ -204,7 +435,7 @@ struct NewEntryView: View {
     
     private var futureSchedulingControls: some View {
         Group {
-            if let date = parsedDate {
+            if let date = viewModel.parsedDate {
                 HStack {
                     Image(systemName: "calendar.badge.checkmark")
                         .font(.caption)
@@ -215,14 +446,14 @@ struct NewEntryView: View {
                 }
             }
             
-            Toggle("Choose specific date", isOn: $showDatePicker)
+            Toggle("Choose specific date", isOn: $viewModel.showDatePicker)
             
-            if showDatePicker {
+            if viewModel.showDatePicker {
                 DatePicker(
                     "Future Date",
                     selection: Binding(
-                        get: { selectedFutureDate ?? Date() },
-                        set: { selectedFutureDate = $0 }
+                        get: { viewModel.selectedFutureDate ?? Date() },
+                        set: { viewModel.selectedFutureDate = $0 }
                     ),
                     in: Date()...,
                     displayedComponents: .date
@@ -252,7 +483,10 @@ struct NewEntryView: View {
     }
     
     private var entryTypePicker: some View {
-        Picker("Type", selection: $entryType) {
+        Picker("Type", selection: Binding(
+            get: { viewModel.entryType },
+            set: { viewModel.updateEntryType($0) }
+        )) {
             Text("Task").tag("task")
             Text("Event").tag("event")
             Text("Note").tag("note")
@@ -264,221 +498,37 @@ struct NewEntryView: View {
     
     private var taskControls: some View {
         Group {
-            Picker("Status", selection: $taskStatus) {
+            Picker("Status", selection: $viewModel.taskStatus) {
                 Text("Pending").tag("pending")
                 Text("Completed").tag("completed")
                 Text("Migrated").tag("migrated")
                 Text("Scheduled").tag("scheduled")
             }
             
-            Toggle("Priority", isOn: $priority)
+            Toggle("Priority", isOn: $viewModel.priority)
         }
     }
     
     private var contentField: some View {
         TextField(
-            scheduleForLater ? "Content (use @month to schedule)" : "Content",
-            text: $content
+            viewModel.scheduleForLater ? "Content (use @month to schedule)" : "Content",
+            text: Binding(
+                get: { viewModel.content },
+                set: { viewModel.updateContent($0) }
+            )
         )
-        .onChange(of: content) { _, newValue in
-            if scheduleForLater && !showDatePicker {
-                let result = FutureEntryParser.parseFutureDate(from: newValue)
-                parsedDate = result.scheduledDate
-            }
-        }
     }
     
     private var tagsField: some View {
-        TextField("Tags (comma separated)", text: $tagsText)
+        TextField("Tags (comma separated)", text: $viewModel.tagsText)
     }
     
     private var collectionPicker: some View {
-        Picker("Collection", selection: $selectedCollection) {
+        Picker("Collection", selection: $viewModel.selectedCollection) {
             Text("None").tag(nil as Collection?)
-            ForEach(collections, id: \.self) { collection in
+            ForEach(viewModel.collections, id: \.self) { collection in
                 Text(collection.name ?? "").tag(collection as Collection?)
             }
         }
-    }
-    
-    // MARK: - Helper Methods
-    
-    private func updateSpecialEntryState(for entryType: String) {
-        if entryType == "review" || entryType == "outlook" {
-            isSpecialEntry = true
-            specialEntryType = entryType
-            let calendar = Calendar.current
-            targetMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
-        } else {
-            isSpecialEntry = false
-        }
-    }
-    
-    private func resetFutureDateFields() {
-        parsedDate = nil
-        selectedFutureDate = nil
-        showDatePicker = false
-    }
-    
-    private func loadCollections() {
-        collections = CoreDataManager.shared.fetchAllCollections()
-    }
-    
-    private func saveEntry() {
-        let context = CoreDataManager.shared.container.viewContext
-        
-        if isSpecialEntry {
-            saveSpecialEntry(in: context)
-        } else if scheduleForLater {
-            saveFutureEntry(in: context)
-        } else {
-            saveRegularEntry(in: context)
-        }
-        
-        dismiss()
-    }
-    
-    private func saveSpecialEntry(in context: NSManagedObjectContext) {
-        let fetchRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
-        let calendar = Calendar.current
-        let monthStart = calendar.dateInterval(of: .month, for: targetMonth)?.start ?? targetMonth
-        let monthEnd = calendar.dateInterval(of: .month, for: targetMonth)?.end ?? targetMonth
-        
-        fetchRequest.predicate = NSPredicate(
-            format: "isSpecialEntry == %@ AND specialEntryType == %@ AND targetMonth >= %@ AND targetMonth < %@",
-            NSNumber(value: true),
-            specialEntryType,
-            monthStart as NSDate,
-            monthEnd as NSDate
-        )
-        
-        do {
-            let existingEntries = try context.fetch(fetchRequest)
-            existingEntries.forEach { context.delete($0) }
-            
-            let entry = JournalEntry(context: context)
-            entry.id = UUID()
-            entry.content = content
-            entry.date = Date()
-            entry.entryType = "note"
-            entry.isSpecialEntry = true
-            entry.specialEntryType = specialEntryType
-            entry.targetMonth = targetMonth
-            entry.isDraft = isDraft
-            
-            // Find appropriate collection
-            let year = calendar.component(.year, from: targetMonth)
-            let monthName = targetMonth.formatted(.dateTime.month(.wide))
-            let monthCollectionName = "\(year)/\(monthName)"
-            
-            let collectionFetch: NSFetchRequest<Collection> = Collection.fetchRequest()
-            collectionFetch.predicate = NSPredicate(format: "name == %@", monthCollectionName)
-            collectionFetch.fetchLimit = 1
-            
-            if let monthCollection = try context.fetch(collectionFetch).first {
-                entry.collection = monthCollection
-            } else if let yearCollection = CoreDataManager.shared.getOrCreateYearCollection(year: year) {
-                entry.collection = yearCollection
-            }
-            
-            try context.save()
-        } catch {
-            // Silent failure
-        }
-    }
-    
-    private func saveFutureEntry(in context: NSManagedObjectContext) {
-        let entry = JournalEntry(context: context)
-        entry.id = UUID()
-        entry.date = Date()
-        entry.entryType = entryType
-        entry.isFutureEntry = true
-        entry.priority = priority
-        
-        if showDatePicker, let manualDate = selectedFutureDate {
-            entry.content = content
-            entry.scheduledDate = manualDate
-        } else if let parsed = parsedDate {
-            let result = FutureEntryParser.parseFutureDate(from: content)
-            entry.content = result.cleanText
-            entry.scheduledDate = parsed
-        }
-        
-        // Find Future Log collection
-        let fetchRequest: NSFetchRequest<Collection> = Collection.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "name == %@", "Future Log")
-        fetchRequest.fetchLimit = 1
-        
-        do {
-            if let futureLogCollection = try context.fetch(fetchRequest).first {
-                entry.collection = futureLogCollection
-            }
-            
-            processTags(for: entry, in: context)
-            try context.save()
-        } catch {
-            // Silent failure
-        }
-    }
-    
-    private func saveRegularEntry(in context: NSManagedObjectContext) {
-        let entry = createJournalEntry(in: context)
-        processTags(for: entry, in: context)
-        
-        do {
-            try context.save()
-        } catch {
-            // Silent failure
-        }
-    }
-    
-    private func createJournalEntry(in context: NSManagedObjectContext) -> JournalEntry {
-        let entry = JournalEntry(context: context)
-        entry.id = UUID()
-        entry.content = content
-        entry.date = date
-        entry.entryType = entryType
-        entry.priority = priority
-        
-        if entryType == "task" {
-            entry.taskStatus = taskStatus
-        }
-        
-        entry.collection = selectedCollection
-        
-        return entry
-    }
-    
-    private func processTags(for entry: JournalEntry, in context: NSManagedObjectContext) {
-        guard !tagsText.isEmpty else { return }
-        
-        let tagNames = tagsText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        
-        for tagName in tagNames {
-            let tag = findOrCreateTag(named: tagName, in: context)
-            entry.addToTags(tag)
-        }
-    }
-    
-    private func findOrCreateTag(named tagName: String, in context: NSManagedObjectContext) -> Tag {
-        let fetchRequest: NSFetchRequest<Tag> = Tag.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "name == %@", tagName)
-        fetchRequest.fetchLimit = 1
-        
-        do {
-            if let existingTag = try context.fetch(fetchRequest).first {
-                return existingTag
-            }
-        } catch {
-            // Continue to create new tag
-        }
-        
-        let newTag = Tag(context: context)
-        newTag.id = UUID()
-        newTag.name = tagName
-        return newTag
     }
 }

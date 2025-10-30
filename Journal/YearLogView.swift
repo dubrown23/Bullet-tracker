@@ -6,12 +6,17 @@
 //
 
 import SwiftUI
-import CoreData
+@preconcurrency import CoreData
 
 struct YearLogView: View {
     // MARK: - Properties
     
     let yearCollection: Collection
+    
+    // MARK: - State Properties
+    
+    @State private var monthCollections: [Collection] = []
+    @State private var isLoading = true
     
     // MARK: - Environment
     
@@ -28,44 +33,68 @@ struct YearLogView: View {
     
     // MARK: - Computed Properties
     
-    private var monthCollections: [Collection] {
+    private var sortedMonthCollections: [Collection] {
+        monthCollections.sorted { $0.sortOrder < $1.sortOrder }
+    }
+    
+    // MARK: - Data Loading
+    
+    private func loadMonthCollections() async {
+        guard let yearName = yearCollection.name else {
+            await MainActor.run {
+                isLoading = false
+            }
+            return
+        }
+        
+        // Create fetch request outside the async context
         let fetchRequest: NSFetchRequest<Collection> = Collection.fetchRequest()
-        
-        guard let yearName = yearCollection.name else { return [] }
-        
         fetchRequest.predicate = NSPredicate(
             format: "name BEGINSWITH %@ AND isAutomatic == true AND entries.@count > 0",
             "\(yearName)/"
         )
         fetchRequest.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
         
-        do {
-            return try viewContext.fetch(fetchRequest)
-        } catch {
-            return []
+        let collections = await viewContext.perform {
+            do {
+                return try self.viewContext.fetch(fetchRequest)
+            } catch {
+                return []
+            }
         }
-    }
-    
-    private var sortedMonthCollections: [Collection] {
-        monthCollections.sorted { $0.sortOrder < $1.sortOrder }
+        
+        await MainActor.run {
+            monthCollections = collections
+            isLoading = false
+        }
     }
     
     // MARK: - Body
     
     var body: some View {
-        List {
-            ForEach(sortedMonthCollections, id: \.self) { collection in
-                NavigationLink(destination: monthArchiveView(for: collection)) {
-                    monthRow(collection: collection)
+        Group {
+            if isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(sortedMonthCollections, id: \.self) { collection in
+                        NavigationLink(destination: monthArchiveView(for: collection)) {
+                            monthRow(collection: collection)
+                        }
+                    }
+                }
+                .overlay {
+                    if monthCollections.isEmpty {
+                        emptyYearView
+                    }
                 }
             }
         }
         .navigationTitle(yearCollection.name ?? "Year")
         .navigationBarTitleDisplayMode(.large)
-        .overlay {
-            if monthCollections.isEmpty {
-                emptyYearView
-            }
+        .task {
+            await loadMonthCollections()
         }
     }
     

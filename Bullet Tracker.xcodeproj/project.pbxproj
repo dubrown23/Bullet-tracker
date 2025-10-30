@@ -14,6 +14,10 @@
 		77166BB92DF1F94D0071BED6 /* SpecialEntryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BB82DF1F94D0071BED6 /* SpecialEntryDetailView.swift */; };
 		77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */; };
 		77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */; };
+		77166BCD2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations in Resources */ = {isa = PBXBuildFile; fileRef = 77166BCC2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations */; };
+		774843FF2EB2D27A007F3B9B /* HabitDataRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */; };
+		774844032EB38B01007F3B9B /* HabitTrackerViewModelClean.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774844022EB38B01007F3B9B /* HabitTrackerViewModelClean.swift */; };
+		774844052EB38E75007F3B9B /* HabitTrackerViewModelClean 2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774844042EB38E75007F3B9B /* HabitTrackerViewModelClean 2.swift */; };
 		77731D4E2DF07A5B00A1F37C /* CollectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */; };
 		77731D502DF07FF500A1F37C /* FutureEntryParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D4F2DF07FF500A1F37C /* FutureEntryParser.swift */; };
 		77731D522DF0872800A1F37C /* FutureLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D512DF0872800A1F37C /* FutureLogView.swift */; };
@@ -80,6 +84,10 @@
 		77166BB82DF1F94D0071BED6 /* SpecialEntryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpecialEntryDetailView.swift; sourceTree = "<group>"; };
 		77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitFormView.swift; sourceTree = "<group>"; };
 		77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconSelectorView.swift; sourceTree = "<group>"; };
+		77166BCC2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Bullet Tracker - Future Optimizations"; sourceTree = "<group>"; };
+		774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitDataRepository.swift; sourceTree = "<group>"; };
+		774844022EB38B01007F3B9B /* HabitTrackerViewModelClean.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitTrackerViewModelClean.swift; sourceTree = "<group>"; };
+		774844042EB38E75007F3B9B /* HabitTrackerViewModelClean 2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HabitTrackerViewModelClean 2.swift"; sourceTree = "<group>"; };
 		77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionManager.swift; sourceTree = "<group>"; };
 		77731D4F2DF07FF500A1F37C /* FutureEntryParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureEntryParser.swift; sourceTree = "<group>"; };
 		77731D512DF0872800A1F37C /* FutureLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureLogView.swift; sourceTree = "<group>"; };
@@ -195,6 +203,9 @@
 				77DB37BE2DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift */,
 				77DB37BF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift */,
 				77DB37C12DEBFBB4004E2ED9 /* HabitRowLabelView.swift */,
+				774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */,
+				774844022EB38B01007F3B9B /* HabitTrackerViewModelClean.swift */,
+				774844042EB38E75007F3B9B /* HabitTrackerViewModelClean 2.swift */,
 			);
 			path = Habits;
 			sourceTree = "<group>";
@@ -238,10 +249,10 @@
 			isa = PBXGroup;
 			children = (
 				77DB37F32DEBFBB9004E2ED9 /* App */,
+				77166BC12DF329530071BED6 /* Data */,
 				77166BBD2DF328D60071BED6 /* Habits */,
 				77166BBC2DF328B10071BED6 /* Journal */,
 				77166BBF2DF328FA0071BED6 /* Collections */,
-				77166BC12DF329530071BED6 /* Data */,
 				77166BC52DF3297D0071BED6 /* Utilities */,
 				77DB372A2DEBD5B6004E2ED9 /* Documentation */,
 				7783B25D2DD2894B0008E0F3 /* Bullet Tracker */,
@@ -269,6 +280,7 @@
 				77DB37262DEBD47E004E2ED9 /* Bullet Track - update log.md */,
 				77DB372B2DEBD616004E2ED9 /* Bullet Track - Context.md */,
 				77DB372D2DEBD64D004E2ED9 /* Bullet Track - protocol */,
+				77166BCC2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations */,
 			);
 			path = Documentation;
 			sourceTree = "<group>";
@@ -354,7 +366,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1630;
-				LastUpgradeCheck = 1630;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					7783B25A2DD2894B0008E0F3 = {
 						CreatedOnToolsVersion = 16.3;
@@ -397,6 +409,7 @@
 				77DB372C2DEBD616004E2ED9 /* Bullet Track - Context.md in Resources */,
 				77DB372E2DEBD64D004E2ED9 /* Bullet Track - protocol in Resources */,
 				77DB37272DEBD47E004E2ED9 /* Bullet Track - update log.md in Resources */,
+				77166BCD2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations in Resources */,
 				77DB37292DEBD593004E2ED9 /* Bullet Track - Overview.md in Resources */,
 				77DB38052DEC0768004E2ED9 /* feature list.md in Resources */,
 			);
@@ -424,6 +437,7 @@
 				77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */,
 				77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */,
 				77166BB52DF1F4D00071BED6 /* SpecialEntryTemplates.swift in Sources */,
+				774844052EB38E75007F3B9B /* HabitTrackerViewModelClean 2.swift in Sources */,
 				77DB37CD2DEBFBB4004E2ED9 /* HabitTrackerViewModel.swift in Sources */,
 				77DB37CE2DEBFBB4004E2ED9 /* SettingsView.swift in Sources */,
 				77DB37CF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift in Sources */,
@@ -433,6 +447,7 @@
 				77166BB92DF1F94D0071BED6 /* SpecialEntryDetailView.swift in Sources */,
 				77DB37D42DEBFBB4004E2ED9 /* Constants.swift in Sources */,
 				77DB37D52DEBFBB4004E2ED9 /* DailyLogView.swift in Sources */,
+				774844032EB38B01007F3B9B /* HabitTrackerViewModelClean.swift in Sources */,
 				77DB37D62DEBFBB4004E2ED9 /* CoreDataManager.swift in Sources */,
 				77DB37D72DEBFBB4004E2ED9 /* EntryListItem.swift in Sources */,
 				77DB37D82DEBFBB4004E2ED9 /* CollectionDetailView.swift in Sources */,
@@ -449,6 +464,7 @@
 				77DB37E12DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift in Sources */,
 				77731D582DF1C6DE00A1F37C /* MigrationManager.swift in Sources */,
 				77731D522DF0872800A1F37C /* FutureLogView.swift in Sources */,
+				774843FF2EB2D27A007F3B9B /* HabitDataRepository.swift in Sources */,
 				77DB37E32DEBFBB4004E2ED9 /* EditEntryView.swift in Sources */,
 				77DB37E42DEBFBB4004E2ED9 /* NewEntryView.swift in Sources */,
 				77DB37E62DEBFBB4004E2ED9 /* Color+Hex.swift in Sources */,
@@ -545,6 +561,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -602,6 +619,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};

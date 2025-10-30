@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreData
 
 struct HabitCheckboxView: View {
     // MARK: - Properties
@@ -7,15 +6,41 @@ struct HabitCheckboxView: View {
     @ObservedObject var habit: Habit
     let date: Date
     
+    // MARK: - Dependencies
+    
+    @EnvironmentObject private var dataRepository: HabitDataRepository
+    
     // MARK: - State Properties
     
-    @State private var isChecked: Bool = false
-    @State private var completionState: Int = 0 // 0: none, 1: success, 2: partial, 3: failure
     @State private var isAnimating: Bool = false
-    @State private var hasDetails: Bool = false
     @State private var showingDetailView: Bool = false
+    @State private var pendingOperation: PendingOperation?
+    
+    // MARK: - Types
+    
+    private enum PendingOperation: Equatable {
+        case toggle
+        case setState(Int)
+        case delete
+    }
+    
     
     // MARK: - Computed Properties
+    
+    /// Gets the current completion state from the repository
+    private var completionState: HabitCompletionState {
+        dataRepository.getCompletionState(for: habit, on: date)
+    }
+    
+    /// Whether the habit is currently checked/completed
+    private var isChecked: Bool {
+        completionState.isCompleted
+    }
+    
+    /// Whether the habit has meaningful details
+    private var hasDetails: Bool {
+        completionState.hasDetails
+    }
     
     private var shouldTrackDetails: Bool {
         (habit.value(forKey: "trackDetails") as? Bool) ?? false
@@ -29,12 +54,11 @@ struct HabitCheckboxView: View {
         (habit.value(forKey: "isNegativeHabit") as? Bool) ?? false
     }
     
-    private var isWorkoutHabit: Bool {
-        let workoutKeywords = ["workout", "exercise", "gym", "fitness", "training", "movement"]
-        let habitName = (habit.name ?? "").lowercased()
-        let detailType = (habit.value(forKey: "detailType") as? String) ?? ""
-        
-        return workoutKeywords.contains { habitName.contains($0) } || detailType == "workout"
+    private var isFutureDate: Bool {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let checkDate = calendar.startOfDay(for: date)
+        return checkDate > today
     }
     
     // MARK: - Body
@@ -49,15 +73,15 @@ struct HabitCheckboxView: View {
             contextMenuContent
         }
         .sheet(isPresented: $showingDetailView) {
-            checkHabitStatus()
-        } content: {
             HabitCompletionDetailView(habit: habit, date: date)
         }
         .onLongPressGesture {
             showingDetailView = true
         }
-        .onAppear {
-            checkHabitStatus()
+        .onChange(of: pendingOperation) { _, operation in
+            if let operation = operation {
+                processPendingOperation(operation)
+            }
         }
     }
     
@@ -75,12 +99,14 @@ struct HabitCheckboxView: View {
                 .fill(isChecked ? getStateColor() : Color.clear)
                 .frame(width: 24, height: 24)
                 .scaleEffect(isAnimating ? 1.2 : 1.0)
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isAnimating)
             
             if isChecked {
                 Image(systemName: getStateIcon())
                     .foregroundStyle(.white)
                     .font(.system(size: 12, weight: .bold))
                     .opacity(isAnimating ? 0.0 : 1.0)
+                    .animation(.easeInOut(duration: 0.2), value: isAnimating)
             }
             
             // Show a note indicator if there are details
@@ -88,7 +114,6 @@ struct HabitCheckboxView: View {
                 detailIndicator
             }
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isAnimating)
     }
     
     private var detailIndicator: some View {
@@ -110,16 +135,16 @@ struct HabitCheckboxView: View {
                 Label("Add/Edit Details", systemImage: "square.and.pencil")
             }
             
-            Button(action: toggleHabit) {
+            Button(action: { pendingOperation = .toggle }) {
                 Label("Uncheck", systemImage: "circle")
             }
         } else {
-            Button(action: toggleHabit) {
+            Button(action: { pendingOperation = .toggle }) {
                 Label("Complete", systemImage: "checkmark.circle")
             }
             
             Button(action: {
-                toggleHabit()
+                pendingOperation = .toggle
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     showingDetailView = true
                 }
@@ -132,15 +157,22 @@ struct HabitCheckboxView: View {
     // MARK: - Helper Methods
     
     private func handleTap() {
+        guard !isFutureDate else { return }
+        
         // If habit tracks details and is already checked, open detail view
         if shouldTrackDetails && isChecked {
             showingDetailView = true
         } else {
             // Normal behavior - cycle through states
-            toggleHabitWithState()
+            let nextState = getNextState()
+            if nextState == 0 {
+                pendingOperation = .delete
+            } else {
+                pendingOperation = .setState(nextState)
+            }
             
             // If we just completed a habit that tracks details, show the detail view
-            if isChecked && shouldTrackDetails && !hasDetails {
+            if nextState == 1 && shouldTrackDetails && !hasDetails {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     showingDetailView = true
                 }
@@ -154,13 +186,8 @@ struct HabitCheckboxView: View {
             return .red
         }
         
-        // For positive habits, use normal color scheme
-        switch completionState {
-        case 1: return .green     // Success
-        case 2: return .yellow    // Partial
-        case 3: return .red       // Attempted
-        default: return .green    // Default
-        }
+        // Use the state color from completion state
+        return completionState.stateColor
     }
     
     private func getStateIcon() -> String {
@@ -169,149 +196,21 @@ struct HabitCheckboxView: View {
             return "xmark"
         }
         
-        // For positive habits, use normal icons
-        switch completionState {
-        case 1: return "checkmark"              // Success
-        case 2: return "circle.lefthalf.filled" // Partial
-        case 3: return "xmark"                  // Failed
-        default: return "checkmark"             // Default
-        }
-    }
-    
-    private func checkHabitStatus() {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
-        
-        let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        fetchRequest.predicate = NSPredicate(
-            format: "habit == %@ AND date >= %@ AND date < %@",
-            habit, startOfDay as NSDate, endOfDay as NSDate
-        )
-        fetchRequest.fetchLimit = 1
-        
-        do {
-            let context = CoreDataManager.shared.container.viewContext
-            let results = try context.fetch(fetchRequest)
-            
-            if let entry = results.first {
-                isChecked = entry.completed
-                completionState = (entry.value(forKey: "completionState") as? Int) ?? 1
-                hasDetails = checkForMeaningfulDetails(in: entry)
-            } else {
-                isChecked = false
-                completionState = 0
-                hasDetails = false
-            }
-        } catch {
-            // Silent failure - default to unchecked
-            isChecked = false
-            completionState = 0
-            hasDetails = false
-        }
-    }
-    
-    private func checkForMeaningfulDetails(in entry: HabitEntry) -> Bool {
-        guard let detailsString = entry.details, !detailsString.isEmpty else {
-            return false
-        }
-        
-        // Try to parse as JSON
-        guard let data = detailsString.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            // Plain text details
-            return !detailsString.isEmpty
-        }
-        
-        // For workout habits with multiple states
-        if isWorkoutHabit && useMultipleStates {
-            // Only show indicator for success state with actual data
-            return completionState == 1 &&
-                   (!((json["types"] as? [String])?.isEmpty ?? true) ||
-                    !((json["duration"] as? String)?.isEmpty ?? true))
-        }
-        
-        // For other habits, check if notes exist
-        return !((json["notes"] as? String)?.isEmpty ?? true)
-    }
-    
-    private func toggleHabit() {
-        // Prevent future dates
-        guard !isFutureDate else { return }
-        
-        // Trigger animation
-        withAnimation {
-            isAnimating = true
-        }
-        
-        // Use CoreDataManager to toggle
-        _ = CoreDataManager.shared.toggleHabitEntry(habit: habit, date: date)
-        
-        // Update UI state
-        isChecked.toggle()
-        completionState = isChecked ? 1 : 0
-        
-        // Reset animation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            isAnimating = false
-        }
-        
-        // Haptic feedback
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    }
-    
-    private func toggleHabitWithState() {
-        // Prevent future dates
-        guard !isFutureDate else { return }
-        
-        // Trigger animation
-        withAnimation {
-            isAnimating = true
-        }
-        
-        // For negative habits or non-multi-state, simple toggle
-        if isNegativeHabit || !useMultipleStates {
-            toggleHabit()
-            return
-        }
-        
-        // Cycle through states
-        let nextState = getNextState()
-        
-        if nextState == 0 {
-            // Delete entry
-            deleteHabitEntry()
-            isChecked = false
-            completionState = 0
-        } else {
-            // Create or update entry
-            createOrUpdateHabitEntry(state: nextState)
-            isChecked = true
-            completionState = nextState
-        }
-        
-        // Reset animation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            isAnimating = false
-        }
-        
-        // Haptic feedback
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    }
-    
-    private var isFutureDate: Bool {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let checkDate = calendar.startOfDay(for: date)
-        return checkDate > today
+        // Use the state icon from completion state
+        return completionState.stateIcon
     }
     
     private func getNextState() -> Int {
+        // For negative habits or non-multi-state, simple toggle
+        if isNegativeHabit || !useMultipleStates {
+            return isChecked ? 0 : 1
+        }
+        
         if !isChecked {
             return 1 // Not checked -> Success
         }
         
-        switch completionState {
+        switch completionState.state {
         case 1: return 2  // Success -> Partial
         case 2: return 3  // Partial -> Failed
         case 3: return 0  // Failed -> None
@@ -319,62 +218,51 @@ struct HabitCheckboxView: View {
         }
     }
     
-    private func createOrUpdateHabitEntry(state: Int) {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
-        
-        let context = CoreDataManager.shared.container.viewContext
-        let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        fetchRequest.predicate = NSPredicate(
-            format: "habit == %@ AND date >= %@ AND date < %@",
-            habit,
-            startOfDay as NSDate,
-            calendar.date(byAdding: .day, value: 1, to: startOfDay)! as NSDate
-        )
-        fetchRequest.fetchLimit = 1
-        
-        do {
-            let results = try context.fetch(fetchRequest)
-            
-            if let entry = results.first {
-                entry.completed = true
-                entry.setValue(state, forKey: "completionState")
-            } else {
-                let entry = HabitEntry(context: context)
-                entry.id = UUID()
-                entry.date = startOfDay
-                entry.completed = true
-                entry.setValue(state, forKey: "completionState")
-                entry.habit = habit
-            }
-            
-            try context.save()
-        } catch {
-            // Silent failure
-        }
-    }
     
-    private func deleteHabitEntry() {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
+    private func processPendingOperation(_ operation: PendingOperation) {
+        // Trigger animation
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            isAnimating = true
+        }
         
-        let context = CoreDataManager.shared.container.viewContext
-        let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        fetchRequest.predicate = NSPredicate(
-            format: "habit == %@ AND date >= %@ AND date < %@",
-            habit,
-            startOfDay as NSDate,
-            calendar.date(byAdding: .day, value: 1, to: startOfDay)! as NSDate
-        )
-        fetchRequest.fetchLimit = 1
-        
-        do {
-            if let entry = try context.fetch(fetchRequest).first {
-                context.delete(entry)
-                try context.save()
+        // Process operation using repository
+        switch operation {
+        case .toggle:
+            if isNegativeHabit || !useMultipleStates {
+                // Simple toggle
+                let newCompleted = !isChecked
+                dataRepository.updateEntry(
+                    for: habit,
+                    on: date,
+                    completed: newCompleted,
+                    state: newCompleted ? 1 : 0
+                )
+            } else {
+                // Multi-state toggle
+                let nextState = getNextState()
+                if nextState == 0 {
+                    dataRepository.removeEntry(for: habit, on: date)
+                } else {
+                    dataRepository.updateEntry(for: habit, on: date, completed: true, state: nextState)
+                }
             }
-        } catch {
-            // Silent failure
+            
+        case .setState(let state):
+            dataRepository.updateEntry(for: habit, on: date, completed: true, state: state)
+            
+        case .delete:
+            dataRepository.removeEntry(for: habit, on: date)
+        }
+        
+        // Reset animation and pending operation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                isAnimating = false
+            }
+            pendingOperation = nil
+            
+            // Haptic feedback
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         }
     }
 }

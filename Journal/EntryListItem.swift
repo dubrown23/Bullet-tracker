@@ -15,6 +15,12 @@ struct EntryListItem: View {
     
     // MARK: - Constants
     
+    private enum Config {
+        static let maxTagsToShow = 3
+        static let verticalSpacing: CGFloat = 4
+        static let tagSpacing: CGFloat = 4
+    }
+    
     private enum EntryType {
         static let task = "task"
         static let event = "event"
@@ -25,7 +31,7 @@ struct EntryListItem: View {
         static let completed = "completed"
     }
     
-    private let maxTagsToShow = 3
+    private let maxTagsToShow = Config.maxTagsToShow
     
     // MARK: - Static Formatters
     
@@ -68,7 +74,7 @@ struct EntryListItem: View {
     // MARK: - Body
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Config.verticalSpacing) {
             HStack {
                 Image(systemName: entryIcon)
                     .foregroundStyle(entryColor)
@@ -90,7 +96,7 @@ struct EntryListItem: View {
                 
                 // Tags
                 if !tags.isEmpty {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Config.tagSpacing) {
                         ForEach(tags.prefix(maxTagsToShow), id: \.self) { tag in
                             Text("#\(tag.name ?? "")")
                                 .font(.caption)
@@ -106,7 +112,7 @@ struct EntryListItem: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Config.verticalSpacing)
     }
 }
 

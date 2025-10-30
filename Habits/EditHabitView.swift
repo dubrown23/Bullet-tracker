@@ -7,93 +7,89 @@
 
 import SwiftUI
 import CoreData
+import Combine
 
-struct EditHabitView: View {
-    // MARK: - Environment Properties
+// MARK: - Shared Habit Form View Model
+
+@MainActor
+class HabitFormViewModel: ObservableObject {
+    // MARK: - Published Properties
     
-    @Environment(\.dismiss) private var dismiss
+    @Published var name = ""
+    @Published var selectedIcon = "circle.fill"
+    @Published var selectedColor = "#007AFF"
+    @Published var selectedFrequency = "daily"
+    @Published var customDays: [Int] = []
+    @Published var notes = ""
+    @Published var trackDetails = false
+    @Published var detailType = "general"
+    @Published var useMultipleStates = false
+    @Published var isNegativeHabit = false
+    @Published var showingIconSheet = false
+    @Published var isValid = false
+    @Published var isSaving = false
     
-    // MARK: - Properties
+    // MARK: - Private Properties
     
-    @ObservedObject var habit: Habit
+    private var cancellables = Set<AnyCancellable>()
+    private var habit: Habit?
     
-    // MARK: - State Properties
+    // MARK: - Initialization
     
-    @State private var name = ""
-    @State private var selectedIcon = "circle.fill"
-    @State private var selectedColor = "#007AFF"
-    @State private var selectedFrequency = "daily"
-    @State private var customDays: [Int] = []
-    @State private var notes = ""
-    @State private var trackDetails = false
-    @State private var detailType = "general"
-    @State private var useMultipleStates = false
-    @State private var isNegativeHabit = false
-    @State private var showingIconSheet = false
-    @State private var showingDeleteAlert = false
-    
-    // MARK: - Body
-    
-    var body: some View {
-        NavigationStack {
-            Form {
-                HabitFormView(
-                    name: $name,
-                    selectedIcon: $selectedIcon,
-                    selectedColor: $selectedColor,
-                    selectedFrequency: $selectedFrequency,
-                    customDays: $customDays,
-                    notes: $notes,
-                    trackDetails: $trackDetails,
-                    detailType: $detailType,
-                    useMultipleStates: $useMultipleStates,
-                    isNegativeHabit: $isNegativeHabit,
-                    showingIconSheet: $showingIconSheet
-                )
-                
-                Section {
-                    Button("Delete Habit", role: .destructive) {
-                        showingDeleteAlert = true
-                    }
-                }
-            }
-            .navigationTitle("Edit Habit")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        updateHabit()
-                    }
-                    .disabled(name.isEmpty)
-                }
-            }
-            .onAppear {
-                loadHabitData()
-            }
-            .sheet(isPresented: $showingIconSheet) {
-                IconSelectorView(
-                    selectedIcon: $selectedIcon,
-                    selectedColor: $selectedColor
-                )
-            }
-            .alert("Delete Habit", isPresented: $showingDeleteAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Delete", role: .destructive) {
-                    deleteHabit()
-                }
-            } message: {
-                Text("Are you sure you want to delete this habit? All tracking data will be lost.")
-            }
+    init(habit: Habit? = nil) {
+        self.habit = habit
+        setupValidation()
+        setupDebouncing()
+        
+        if let habit = habit {
+            loadHabitData(from: habit)
         }
     }
     
-    // MARK: - Helper Methods
+    // MARK: - Setup Methods
     
-    private func loadHabitData() {
+    private func setupValidation() {
+        $name
+            .map { name in
+                !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            .assign(to: &$isValid)
+    }
+    
+    private func setupDebouncing() {
+        // Debounce name changes
+        $name
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.validateForm()
+            }
+            .store(in: &cancellables)
+        
+        // Debounce notes
+        $notes
+            .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
+            .sink { _ in
+                // Could trigger auto-save or other actions
+            }
+            .store(in: &cancellables)
+        
+        // Debounce custom days changes
+        $customDays
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .sink { _ in
+                // Could validate custom days selection
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func validateForm() {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        isValid = !trimmedName.isEmpty && trimmedName.count >= 2
+    }
+    
+    // MARK: - Data Loading
+    
+    private func loadHabitData(from habit: Habit) {
         name = habit.name ?? ""
         selectedIcon = habit.icon ?? "circle.fill"
         selectedColor = habit.color ?? "#007AFF"
@@ -112,32 +108,177 @@ struct EditHabitView: View {
         isNegativeHabit = (habit.value(forKey: "isNegativeHabit") as? Bool) ?? false
     }
     
-    private func updateHabit() {
+    // MARK: - Save Methods
+    
+    func saveHabit() async throws {
+        guard isValid, !isSaving else { return }
+        
+        isSaving = true
+        defer { isSaving = false }
+        
         let customDaysString = customDays.sorted().map(String.init).joined(separator: ",")
         
-        CoreDataManager.shared.updateHabit(
-            habit,
-            name: name,
-            color: selectedColor,
-            icon: selectedIcon,
-            frequency: selectedFrequency,
-            customDays: customDaysString,
-            notes: notes,
-            collection: nil
-        )
+        await MainActor.run {
+            if let existingHabit = habit {
+                // Update existing habit
+                CoreDataManager.shared.updateHabit(
+                    existingHabit,
+                    name: name,
+                    color: selectedColor,
+                    icon: selectedIcon,
+                    frequency: selectedFrequency,
+                    customDays: customDaysString,
+                    notes: notes,
+                    collection: nil
+                )
+                
+                // Set dynamic properties
+                existingHabit.setValue(trackDetails, forKey: "trackDetails")
+                existingHabit.setValue(detailType, forKey: "detailType")
+                existingHabit.setValue(isNegativeHabit ? false : useMultipleStates, forKey: "useMultipleStates")
+                existingHabit.setValue(isNegativeHabit, forKey: "isNegativeHabit")
+            } else {
+                // Create new habit
+                let newHabit = CoreDataManager.shared.createHabit(
+                    name: name,
+                    color: selectedColor,
+                    icon: selectedIcon,
+                    frequency: selectedFrequency,
+                    customDays: customDaysString,
+                    startDate: Date(),
+                    notes: notes,
+                    collection: nil
+                )
+                
+                // Set dynamic properties
+                newHabit.setValue(trackDetails, forKey: "trackDetails")
+                newHabit.setValue(detailType, forKey: "detailType")
+                newHabit.setValue(isNegativeHabit ? false : useMultipleStates, forKey: "useMultipleStates")
+                newHabit.setValue(isNegativeHabit, forKey: "isNegativeHabit")
+            }
+            
+            CoreDataManager.shared.saveContext()
+        }
+    }
+    
+    func deleteHabit() async throws {
+        guard let habit = habit else { return }
         
-        // Set dynamic properties
-        habit.setValue(trackDetails, forKey: "trackDetails")
-        habit.setValue(detailType, forKey: "detailType")
-        habit.setValue(isNegativeHabit ? false : useMultipleStates, forKey: "useMultipleStates")
-        habit.setValue(isNegativeHabit, forKey: "isNegativeHabit")
-        
-        CoreDataManager.shared.saveContext()
-        dismiss()
+        await MainActor.run {
+            CoreDataManager.shared.deleteHabit(habit)
+        }
+    }
+}
+
+// MARK: - Edit Habit View
+
+struct EditHabitView: View {
+    // MARK: - Environment Properties
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    // MARK: - Properties
+    
+    @ObservedObject var habit: Habit
+    
+    // MARK: - State Properties
+    
+    @StateObject private var viewModel: HabitFormViewModel
+    @State private var showingDeleteAlert = false
+    
+    // MARK: - Initialization
+    
+    init(habit: Habit) {
+        self.habit = habit
+        self._viewModel = StateObject(wrappedValue: HabitFormViewModel(habit: habit))
+    }
+    
+    // MARK: - Body
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                HabitFormView(
+                    name: $viewModel.name,
+                    selectedIcon: $viewModel.selectedIcon,
+                    selectedColor: $viewModel.selectedColor,
+                    selectedFrequency: $viewModel.selectedFrequency,
+                    customDays: $viewModel.customDays,
+                    notes: $viewModel.notes,
+                    trackDetails: $viewModel.trackDetails,
+                    detailType: $viewModel.detailType,
+                    useMultipleStates: $viewModel.useMultipleStates,
+                    isNegativeHabit: $viewModel.isNegativeHabit,
+                    showingIconSheet: $viewModel.showingIconSheet
+                )
+                
+                Section {
+                    Button("Delete Habit", role: .destructive) {
+                        showingDeleteAlert = true
+                    }
+                }
+            }
+            .navigationTitle("Edit Habit")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .disabled(viewModel.isSaving)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        saveHabit()
+                    } label: {
+                        if viewModel.isSaving {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                                .scaleEffect(0.8)
+                        } else {
+                            Text("Save")
+                        }
+                    }
+                    .disabled(!viewModel.isValid || viewModel.isSaving)
+                }
+            }
+            .sheet(isPresented: $viewModel.showingIconSheet) {
+                IconSelectorView(
+                    selectedIcon: $viewModel.selectedIcon,
+                    selectedColor: $viewModel.selectedColor
+                )
+            }
+            .alert("Delete Habit", isPresented: $showingDeleteAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    deleteHabit()
+                }
+            } message: {
+                Text("Are you sure you want to delete this habit? All tracking data will be lost.")
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func saveHabit() {
+        Task {
+            do {
+                try await viewModel.saveHabit()
+                dismiss()
+            } catch {
+                // Handle error if needed
+            }
+        }
     }
     
     private func deleteHabit() {
-        CoreDataManager.shared.deleteHabit(habit)
-        dismiss()
+        Task {
+            do {
+                try await viewModel.deleteHabit()
+                dismiss()
+            } catch {
+                // Handle error if needed
+            }
+        }
     }
 }

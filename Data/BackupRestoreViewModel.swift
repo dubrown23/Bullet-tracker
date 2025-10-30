@@ -16,25 +16,28 @@ class BackupPickerDelegate: NSObject, ObservableObject, UIDocumentPickerDelegate
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let url = urls.first else { return }
         
-        let hasSecureAccess = url.startAccessingSecurityScopedResource()
+        // Simplified: Only copy if we have secure access
+        if url.startAccessingSecurityScopedResource() {
+            defer { url.stopAccessingSecurityScopedResource() }
+            
+            // Try to access directly first
+            if FileManager.default.isReadableFile(atPath: url.path) {
+                onDocumentsPicked?(url)
+                return
+            }
+        }
         
+        // Fallback: Create local copy only if direct access fails
         let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let localCopy = documentsDirectory.appendingPathComponent("backup_temp.json")
         
         do {
-            if FileManager.default.fileExists(atPath: localCopy.path) {
-                try FileManager.default.removeItem(at: localCopy)
-            }
-            
+            try? FileManager.default.removeItem(at: localCopy)
             try FileManager.default.copyItem(at: url, to: localCopy)
-            
             onDocumentsPicked?(localCopy)
         } catch {
+            // If copy fails, try with original URL anyway
             onDocumentsPicked?(url)
-        }
-        
-        if hasSecureAccess {
-            url.stopAccessingSecurityScopedResource()
         }
     }
 }
@@ -42,19 +45,61 @@ class BackupPickerDelegate: NSObject, ObservableObject, UIDocumentPickerDelegate
 // MARK: - View Model
 
 class BackupRestoreViewModel: ObservableObject {
+    // MARK: - Alert Type
+    
+    enum AlertType: Identifiable {
+        case error(String)
+        case success(String)
+        
+        var id: String {
+            switch self {
+            case .error(let message): return "error-\(message)"
+            case .success(let message): return "success-\(message)"
+            }
+        }
+        
+        var title: String {
+            switch self {
+            case .error: return "Error"
+            case .success: return "Success"
+            }
+        }
+        
+        var message: String {
+            switch self {
+            case .error(let msg), .success(let msg): return msg
+            }
+        }
+    }
+    
     // MARK: - Published Properties
     
     @Published var isCreatingBackup = false
     @Published var isRestoringBackup = false
     @Published var backupProgress: Float = 0
     @Published var restoreProgress: Float = 0
-    @Published var errorMessage: String?
-    @Published var successMessage: String?
-    @Published var showAlert = false
+    @Published var currentAlert: AlertType?
     @Published var showImportPicker = false
     @Published var showConfirmRestore = false
     @Published var selectedBackupURL: URL?
     @Published var documentPickerDelegate = BackupPickerDelegate()
+    
+    // MARK: - Private Properties for Memory Management
+    
+    private var backupProgressObserver: NSObjectProtocol?
+    private var restoreProgressObserver: NSObjectProtocol?
+    
+    // MARK: - Lifecycle
+    
+    deinit {
+        // Clean up any remaining observers
+        if let observer = backupProgressObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = restoreProgressObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
     
     // MARK: - Public Methods
     
@@ -62,20 +107,18 @@ class BackupRestoreViewModel: ObservableObject {
     func createBackup(from viewController: UIViewController, sourceView: UIView) {
         isCreatingBackup = true
         backupProgress = 0
-        errorMessage = nil
         
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let progressObserver = self?.setupBackupProgressObserver()
+            self?.setupBackupProgressObserver()
             
             if let backupURL = BackupManager.shared.createBackup() {
                 self?.handleBackupSuccess(
                     with: backupURL,
                     from: viewController,
-                    sourceView: sourceView,
-                    progressObserver: progressObserver
+                    sourceView: sourceView
                 )
             } else {
-                self?.handleBackupError(progressObserver: progressObserver)
+                self?.handleBackupError()
             }
         }
     }
@@ -97,24 +140,25 @@ class BackupRestoreViewModel: ObservableObject {
         
         isRestoringBackup = true
         restoreProgress = 0
-        errorMessage = nil
         
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let progressObserver = self?.setupRestoreProgressObserver()
+            self?.setupRestoreProgressObserver()
             
             let success = BackupManager.shared.restoreFromURL(backupURL)
             
-            self?.handleRestoreCompletion(
-                success: success,
-                progressObserver: progressObserver
-            )
+            self?.handleRestoreCompletion(success: success)
         }
     }
     
     // MARK: - Private Methods
     
-    private func setupBackupProgressObserver() -> NSObjectProtocol {
-        NotificationCenter.default.addObserver(
+    private func setupBackupProgressObserver() {
+        // Remove any existing observer first
+        if let observer = backupProgressObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        
+        backupProgressObserver = NotificationCenter.default.addObserver(
             forName: .backupProgressUpdated,
             object: nil,
             queue: .main
@@ -125,8 +169,13 @@ class BackupRestoreViewModel: ObservableObject {
         }
     }
     
-    private func setupRestoreProgressObserver() -> NSObjectProtocol {
-        NotificationCenter.default.addObserver(
+    private func setupRestoreProgressObserver() {
+        // Remove any existing observer first
+        if let observer = restoreProgressObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        
+        restoreProgressObserver = NotificationCenter.default.addObserver(
             forName: .restoreProgressUpdated,
             object: nil,
             queue: .main
@@ -137,13 +186,28 @@ class BackupRestoreViewModel: ObservableObject {
         }
     }
     
+    private func removeBackupProgressObserver() {
+        if let observer = backupProgressObserver {
+            NotificationCenter.default.removeObserver(observer)
+            backupProgressObserver = nil
+        }
+    }
+    
+    private func removeRestoreProgressObserver() {
+        if let observer = restoreProgressObserver {
+            NotificationCenter.default.removeObserver(observer)
+            restoreProgressObserver = nil
+        }
+    }
+    
     private func handleBackupSuccess(
         with url: URL,
         from viewController: UIViewController,
-        sourceView: UIView,
-        progressObserver: NSObjectProtocol?
+        sourceView: UIView
     ) {
         DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
             let activityVC = UIActivityViewController(
                 activityItems: [url],
                 applicationActivities: nil
@@ -154,48 +218,40 @@ class BackupRestoreViewModel: ObservableObject {
                 popoverController.sourceRect = sourceView.bounds
             }
             
-            self?.isCreatingBackup = false
-            self?.backupProgress = 1.0
-            
-            if let observer = progressObserver {
-                NotificationCenter.default.removeObserver(observer)
-            }
+            self.isCreatingBackup = false
+            self.backupProgress = 1.0
+            self.removeBackupProgressObserver()
             
             viewController.present(activityVC, animated: true)
         }
     }
     
-    private func handleBackupError(progressObserver: NSObjectProtocol?) {
+    private func handleBackupError() {
         DispatchQueue.main.async { [weak self] in
-            self?.isCreatingBackup = false
-            self?.errorMessage = BackupManager.shared.errorMessage ?? "Failed to create backup"
-            self?.showAlert = true
+            guard let self = self else { return }
             
-            if let observer = progressObserver {
-                NotificationCenter.default.removeObserver(observer)
-            }
+            self.isCreatingBackup = false
+            self.removeBackupProgressObserver()
+            
+            let errorMessage = BackupManager.shared.errorMessage ?? "Failed to create backup"
+            self.currentAlert = .error(errorMessage)
         }
     }
     
-    private func handleRestoreCompletion(
-        success: Bool,
-        progressObserver: NSObjectProtocol?
-    ) {
+    private func handleRestoreCompletion(success: Bool) {
         DispatchQueue.main.async { [weak self] in
-            self?.isRestoringBackup = false
-            self?.restoreProgress = 1.0
+            guard let self = self else { return }
             
-            if let observer = progressObserver {
-                NotificationCenter.default.removeObserver(observer)
-            }
+            self.isRestoringBackup = false
+            self.restoreProgress = 1.0
+            self.removeRestoreProgressObserver()
             
             if success {
-                self?.successMessage = "Backup restored successfully! Restart the app to see your data."
+                self.currentAlert = .success("Backup restored successfully! Restart the app to see your data.")
             } else {
-                self?.errorMessage = BackupManager.shared.errorMessage ?? "Failed to restore from backup"
+                let errorMessage = BackupManager.shared.errorMessage ?? "Failed to restore from backup"
+                self.currentAlert = .error(errorMessage)
             }
-            
-            self?.showAlert = true
         }
     }
 }
@@ -221,8 +277,12 @@ struct BackupRestoreView: View {
             .padding(.vertical)
         }
         .navigationTitle("Backup & Restore")
-        .alert(isPresented: $viewModel.showAlert) {
-            alertContent
+        .alert(item: $viewModel.currentAlert) { alertType in
+            Alert(
+                title: Text(alertType.title),
+                message: Text(alertType.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
         .sheet(isPresented: $viewModel.showImportPicker) {
             importPickerSheet
@@ -372,23 +432,7 @@ struct BackupRestoreView: View {
         }
     }
     
-    // MARK: - Alerts and Sheets
-    
-    private var alertContent: Alert {
-        if viewModel.errorMessage != nil {
-            Alert(
-                title: Text("Error"),
-                message: Text(viewModel.errorMessage ?? "Unknown error"),
-                dismissButton: .default(Text("OK"))
-            )
-        } else {
-            Alert(
-                title: Text("Success"),
-                message: Text(viewModel.successMessage ?? "Operation completed successfully"),
-                dismissButton: .default(Text("OK"))
-            )
-        }
-    }
+    // MARK: - Sheets
     
     private var importPickerSheet: some View {
         BackupDocumentPickerView(delegate: viewModel.documentPickerDelegate) { url in
