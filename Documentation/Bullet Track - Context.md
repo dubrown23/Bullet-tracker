@@ -1,5 +1,5 @@
 # 🎯 BULLET TRACKER MASTER CONTEXT
-(June 7, 2025 - v1.4)
+(November 3, 2025 - v1.5)
 
 ## 🔧 General App Overview
 - **App Name**: Bullet Tracker
@@ -14,6 +14,7 @@
 - **Distribution**: [Current distribution method - App Store/TestFlight]
 - **UI Design**: Clean interface focused on habit tracking with multi-state completions
 - **Code Quality**: Production-ready with modern Swift patterns and zero DEBUG statements
+- **Widget Support**: Home screen widgets with interactive habit tracking
 
 ## 📊 Data Architecture
 
@@ -191,6 +192,15 @@
 - **Requirements**: Same iCloud account on all devices, iCloud Drive enabled
 - **Sync Timing**: Automatic background sync, typically within 30-60 seconds
 
+### Widget System
+- **HabitTrackerWidget**: Main widget showing today's habits in 3x2 grid
+- **App Intent Integration**: CompleteHabitIntent for interactive habit completion
+- **Timeline Provider**: Updates at midnight and after habit changes
+- **Data Sharing**: Uses shared Core Data container with main app
+- **Widget Configuration**: System Medium size with up to 6 habit buttons
+- **Visual Design**: Traffic light colors with habit-specific borders
+- **Smart Filtering**: Only shows habits scheduled for today based on frequency
+
 ## 🎯 Current Major Areas Status
 
 | Area | Status | Notes |
@@ -208,6 +218,7 @@
 | iCloud Sync | ✅ Fully Implemented | |
 | Migration System | ✅ Fully Implemented | Daily and monthly migrations |
 | Code Optimization | ✅ Complete | Production-ready, zero DEBUG |
+| Widget Support | ✅ Fully Implemented | Interactive home screen widgets |
 | Dark Mode Support | 🔧 Needs Review | |
 | iPad Optimization | 📋 Planned | |
 | Analytics Dashboard | 📋 Next Priority | Workout detail visualization |
@@ -420,6 +431,8 @@ BulletTracker/
 │   ├── BackupManager.swift
 │   ├── BackupRestoreViewModel.swift
 │   └── DataExportManager.swift
+├── Widgets/
+│   └── BulletTrackerWidgetsBundle.swift
 ├── Utilities/
 │   ├── IconSelectorView.swift
 │   ├── FutureEntryParser.swift
@@ -444,12 +457,14 @@ BulletTracker/
 ### Key Implementation Files
 - **CoreDataManager.swift**: Container selection and CloudKit configuration
 - **HabitTrackerView.swift**: Main habit tracking interface with date update logic
+- **HabitTrackerViewModel.swift**: View model for habit tracking with data repository integration
 - **ContentView.swift**: Tab navigation structure
 - **SimpleCollectionsView.swift**: Collections with automatic journal collections
 - **MigrationManager.swift**: Daily and monthly migration logic
 - **CollectionManager.swift**: Automatic collection creation and management
 - **FutureEntryParser.swift**: @mention date parsing with static regex
 - **HabitFormView.swift**: Shared form component for habit create/edit
+- **BulletTrackerWidgetsBundle.swift**: Complete widget implementation with App Intents
 
 ## 🐛 Recent Bug Fixes
 1. **Delete Habit Context Menu**: Fixed issue where delete opened edit view
@@ -467,6 +482,7 @@ BulletTracker/
 - **Modern Swift**: async/await, @MainActor, static formatters throughout
 - **Seamless Sync**: iCloud integration working flawlessly
 - **Smart Migration**: Automatic daily and monthly task/entry migration
+- **Widget Integration**: Interactive home screen widgets with App Intent support
 
 ✅ This Master Context file should be referenced for all future development.
-(Version 1.4 — June 7, 2025) 
+(Version 1.5 — November 3, 2025) 

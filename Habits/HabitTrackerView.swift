@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CoreData
 
 struct HabitTrackerView: View {
     @StateObject private var viewModel = HabitTrackerViewModel()
@@ -81,16 +82,7 @@ struct HabitTrackerView: View {
                 viewModel.loadHabitEntries()
             }
             .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active {
-                    // Check if we're on a new day when app becomes active
-                    let calendar = Calendar.current
-                    if !calendar.isDate(lastDateCheck, inSameDayAs: Date()) {
-                        viewModel.selectedDate = Date()
-                        viewModel.updateVisibleDates()
-                        viewModel.loadHabitEntries()
-                        lastDateCheck = Date()
-                    }
-                }
+                handleScenePhaseChange(newPhase)
             }
     }
     
@@ -261,6 +253,157 @@ struct HabitTrackerView: View {
                     .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
                     .listRowBackground(Color.clear)
             }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func performManualRefresh() {
+        // Clear cache and reload habits to ensure fresh data
+        viewModel.dataRepository.clearCache()
+        viewModel.loadHabits()
+        viewModel.updateVisibleDates()
+        viewModel.loadHabitEntries()
+    }
+    
+    private func handleScenePhaseChange(_ newPhase: ScenePhase) {
+        
+        if newPhase == .active {
+            // Check if we're on a new day when app becomes active
+            let calendar = Calendar.current
+            if !calendar.isDate(lastDateCheck, inSameDayAs: Date()) {
+                viewModel.selectedDate = Date()
+                viewModel.updateVisibleDates()
+                viewModel.loadHabitEntries()
+                lastDateCheck = Date()
+            } else {
+                // Clear cache and refresh to pick up widget changes
+                viewModel.dataRepository.clearCache()
+                viewModel.loadHabitEntries()
+            }
+        }
+    }
+    
+    private func processWidgetCommands() {
+        guard let appGroupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.db23.Bullet-Tracker") else {
+            return
+        }
+        
+        let commandsURL = appGroupURL.appendingPathComponent("widget_commands.json")
+        
+        guard FileManager.default.fileExists(atPath: commandsURL.path) else {
+            return
+        }
+        
+        do {
+            let data = try Data(contentsOf: commandsURL)
+            guard let commands = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                return
+            }
+            
+            let context = CoreDataManager.shared.container.viewContext
+            
+            for command in commands {
+                guard let action = command["action"] as? String,
+                      let habitIDString = command["habitID"] as? String,
+                      let habitName = command["habitName"] as? String,
+                      let timestamp = command["timestamp"] as? Double else {
+                    continue
+                }
+                
+                if action == "toggle_habit" {
+                    processToggleHabitCommand(habitID: habitIDString, context: context)
+                }
+            }
+            
+            // Clear the commands file
+            try "[]".write(to: commandsURL, atomically: true, encoding: .utf8)
+            
+            // Save any changes
+            if context.hasChanges {
+                try context.save()
+            }
+            
+            // Refresh the data
+            performManualRefresh()
+            
+        } catch {
+            // Silently handle widget command processing errors
+        }
+    }
+    
+    private func processToggleHabitCommand(habitID: String, context: NSManagedObjectContext) {
+        guard let habitUUID = UUID(uuidString: habitID) else {
+            return
+        }
+        
+        // Find the habit
+        let habitRequest: NSFetchRequest<Habit> = Habit.fetchRequest()
+        habitRequest.predicate = NSPredicate(format: "id == %@", habitUUID as CVarArg)
+        
+        do {
+            guard let habit = try context.fetch(habitRequest).first else {
+                return
+            }
+            
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            let endOfDay = calendar.date(byAdding: .day, value: 1, to: today)!
+            
+            // Find existing entry for today
+            let entryRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
+            entryRequest.predicate = NSPredicate(format: "habit == %@ AND date >= %@ AND date < %@",
+                                               habit,
+                                               today as CVarArg,
+                                               endOfDay as CVarArg)
+            
+            let existingEntry = try context.fetch(entryRequest).first
+            
+            if let entry = existingEntry {
+                // Cycle through completion states or delete
+                let currentState = Int(entry.completionState)
+                let nextState = getNextCompletionState(current: currentState, habit: habit)
+                
+                if nextState == 0 {
+                    // Delete the entry
+                    context.delete(entry)
+                } else {
+                    // Update the state
+                    entry.completionState = Int16(nextState)
+                }
+            } else {
+                // Create new entry with success state
+                let newEntry = HabitEntry(context: context)
+                newEntry.id = UUID()
+                newEntry.habit = habit
+                newEntry.date = today
+                newEntry.completionState = 1 // Success
+                newEntry.details = nil
+            }
+            
+        } catch {
+            // Silently handle errors in background processing
+        }
+    }
+    
+    private func getNextCompletionState(current: Int, habit: Habit) -> Int {
+        // For negative habits, only toggle between 0 (none) and 3 (attempted/relapse)
+        if habit.isNegativeHabit {
+            return current == 0 ? 3 : 0
+        }
+        
+        // For habits without multiple states, toggle between 0 and 1
+        if !habit.useMultipleStates {
+            return current == 0 ? 1 : 0
+        }
+        
+        // For habits with multiple states, cycle through: 0 -> 1 -> 2 -> 3 -> 0
+        switch current {
+        case 0: return 1 // None -> Success
+        case 1: return 2 // Success -> Partial  
+        case 2: return 3 // Partial -> Attempted
+        case 3: return 0 // Attempted -> None
+        default: return 1 // Fallback to Success
         }
     }
 }

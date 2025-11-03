@@ -8,6 +8,7 @@
 import SwiftUI
 import CoreData
 import Combine
+import WidgetKit
 
 /// Centralized repository for habit data that efficiently manages Core Data operations
 /// and provides optimized data access for habit tracking views
@@ -32,8 +33,50 @@ class HabitDataRepository: ObservableObject {
     
     // MARK: - Lifecycle
     
+    init() {
+        // Listen for Core Data remote changes (from CloudKit sync or widget)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(contextDidSave(_:)),
+            name: .NSManagedObjectContextDidSave,
+            object: nil
+        )
+    }
+    
     deinit {
+        NotificationCenter.default.removeObserver(self)
         loadingTask?.cancel()
+    }
+    
+    // MARK: - Notification Handlers
+    
+    @objc private func contextDidSave(_ notification: Notification) {
+        // Check if this is a save from a different context (like the widget)
+        guard let savedContext = notification.object as? NSManagedObjectContext,
+              savedContext != context else {
+            return // Ignore saves from our own context
+        }
+        
+        print("HabitDataRepository: Detected external Core Data changes (likely from widget)")
+        
+        // Merge the changes into our context
+        context.mergeChanges(fromContextDidSave: notification)
+        
+        // Check if any HabitEntry objects were changed
+        let insertedObjects = notification.userInfo?[NSInsertedObjectsKey] as? Set<NSManagedObject> ?? Set()
+        let updatedObjects = notification.userInfo?[NSUpdatedObjectsKey] as? Set<NSManagedObject> ?? Set()
+        let deletedObjects = notification.userInfo?[NSDeletedObjectsKey] as? Set<NSManagedObject> ?? Set()
+        
+        let allChangedObjects = insertedObjects.union(updatedObjects).union(deletedObjects)
+        let hasHabitEntryChanges = allChangedObjects.contains { $0 is HabitEntry }
+        
+        if hasHabitEntryChanges {
+            print("HabitDataRepository: HabitEntry changes detected, clearing cache to trigger refresh")
+            Task { @MainActor in
+                // Clear cache to force reload on next access
+                self.loadedDateRange = nil
+            }
+        }
     }
     
     // MARK: - Public Methods
@@ -76,8 +119,11 @@ class HabitDataRepository: ObservableObject {
         let state = (entry.value(forKey: "completionState") as? Int) ?? 1
         let hasDetails = checkForMeaningfulDetails(in: entry, habit: habit, state: state)
         
+        // Fix: isCompleted should be true when state > 0, regardless of entry.completed
+        let isCompleted = state > 0
+        
         return HabitCompletionState(
-            isCompleted: entry.completed,
+            isCompleted: isCompleted,
             state: state,
             hasDetails: hasDetails
         )
@@ -113,6 +159,12 @@ class HabitDataRepository: ObservableObject {
         let habitObjectID = habit.objectID
         Task {
             await performCoreDataUpdate(habitObjectID: habitObjectID, on: dayStart, completed: completed, state: state)
+            
+            // Only refresh widget for today's date to avoid excessive refreshes
+            if Calendar.current.isDate(dayStart, inSameDayAs: Date()) {
+                print("HabitDataRepository: Refreshing widget timeline for today's habit change")
+                WidgetCenter.shared.reloadTimelines(ofKind: "HabitTrackerWidget")
+            }
         }
     }
     
@@ -128,6 +180,12 @@ class HabitDataRepository: ObservableObject {
         let habitObjectID = habit.objectID
         Task {
             await performCoreDataDeletion(habitObjectID: habitObjectID, on: dayStart)
+            
+            // Only refresh widget for today's date to avoid excessive refreshes
+            if Calendar.current.isDate(dayStart, inSameDayAs: Date()) {
+                print("HabitDataRepository: Refreshing widget timeline for today's habit removal")
+                WidgetCenter.shared.reloadTimelines(ofKind: "HabitTrackerWidget")
+            }
         }
     }
     
@@ -142,6 +200,13 @@ class HabitDataRepository: ObservableObject {
     func clearCache() {
         habitEntries.removeAll()
         loadedDateRange = nil
+    }
+    
+    /// Forces a refresh of data for the currently loaded habits and date range
+    func forceRefresh(for habits: [Habit], dateRange: ClosedRange<Date>) async {
+        print("HabitDataRepository: Force refreshing data for \(habits.count) habits")
+        loadedDateRange = nil // Clear the loaded range to force reload
+        await loadEntries(for: habits, dateRange: dateRange)
     }
     
     // MARK: - Private Methods

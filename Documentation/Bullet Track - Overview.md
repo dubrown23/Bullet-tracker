@@ -71,11 +71,20 @@ Seamlessly sync your data across all your Apple devices:
 - Never lose your tracking history
 - Local-only option when sync is disabled
 
+### 9. Widget Support
+- **Home Screen Widgets**: Track habits directly from your home screen
+- **3x2 Grid Layout**: See up to 6 habits in a compact, visual grid
+- **Interactive Completion**: Tap habit buttons to cycle through completion states
+- **Real-Time Updates**: Widget reflects current habit status
+- **App Intent Integration**: Changes made in widget sync with main app
+- **Visual State Indicators**: Traffic light system (green/yellow/red) for quick status
+- **Smart Filtering**: Shows only habits scheduled for today based on frequency
+
 ## App Structure
 
 ### Navigation (4 Tabs)
 1. **Daily Log** - Today's journal entries and migrated tasks
-2. **Habits** - Primary habit tracking interface
+2. **Habits** - Primary habit tracking interface with widget support
 3. **Collections** - Organize entries and access special logs
 4. **Settings** - App configuration and preferences
 
@@ -108,11 +117,18 @@ BULLET TRACKER focuses on flexibility and insight:
 - **True Digital Bullet Journal**: Complete implementation of the bullet journal method
 
 ## Current Status
-**Version**: 1.4
-**Last Updated**: June 7, 2025
-**Development Phase**: ✅ Production-Ready with Full Digital Bullet Journal
+**Version**: 1.5
+**Last Updated**: November 3, 2025
+**Development Phase**: ✅ Production-Ready with Full Digital Bullet Journal & Widget Support
 
-### What's New in v1.4
+### What's New in v1.5
+- **Widget Support**: Home screen widgets for habit tracking with interactive buttons
+- **3x2 Grid Layout**: Compact widget showing up to 6 habits with visual state indicators
+- **App Intent Integration**: Widget interactions sync seamlessly with main app
+- **Real-Time Updates**: Widget timeline updates at midnight and after habit changes
+- **Smart Habit Filtering**: Widget shows only habits scheduled for today
+- **Visual State System**: Traffic light colors (green/yellow/red) with habit-specific borders
+### Previous Features (v1.4)
 - **Complete Digital Bullet Journal**: Future Log → Monthly Log → Daily Log flow
 - **Smart Migration**: Automatic task migration with visual age indicators
 - **Future Entry Scheduling**: Use @mentions to schedule entries (@december, @dec-25)
@@ -127,7 +143,7 @@ BULLET TRACKER focuses on flexibility and insight:
 - **Cleaner Organization**: Habits no longer need collection assignment
 - **Better Structure**: Index now accessible through Collections
 
-### Previous Features (v1.2)
+### Earlier Features (v1.2)
 - **Entry Management & UI Polish**: Fixed habit entry editing, traffic light colors
 - **Workout UI Refinements**: Native SwiftUI components throughout
 - **Negative Habits**: Track things to avoid with special indicators
@@ -173,9 +189,10 @@ BULLET TRACKER focuses on flexibility and insight:
 - Sharing progress with accountability partners
 - Print layouts for physical bullet journals
 - AI insights for habit optimization
-- Widget support for quick tracking
 - Advanced analytics with predictive trends
 - Health app integration
+- Live Activities for ongoing habit sessions
+- Control Center widgets for quick habit toggling
 
 ## Known Limitations
 - iCloud sync setting changes require app restart
@@ -207,4 +224,4 @@ BULLET TRACKER focuses on flexibility and insight:
 ## Support
 For questions or issues, check Settings → Help or visit our support site.
 
-Version 1.4 - Updated June 7, 2025
+Version 1.5 - Updated November 3, 2025

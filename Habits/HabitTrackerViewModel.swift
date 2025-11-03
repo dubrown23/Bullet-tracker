@@ -1,4 +1,3 @@
-/*//
 //  HabitTrackerViewModel.swift
 //  Bullet Tracker
 //
@@ -6,7 +5,7 @@
 //
 
 import SwiftUI
-import CoreData
+@preconcurrency import CoreData
 
 // MARK: - View Model
 
@@ -78,11 +77,6 @@ class HabitTrackerViewModel: ObservableObject {
         }
     }
     
-    /// Gets the completion rate for a habit
-    func getCompletionRate(for habit: Habit) -> Double {
-        CoreDataManager.shared.getCompletionRateForHabit(habit)
-    }
-    
     /// Reorders habits
     func reorderHabits(from source: IndexSet, to destination: Int) {
         habits.move(fromOffsets: source, toOffset: destination)
@@ -91,6 +85,11 @@ class HabitTrackerViewModel: ObservableObject {
         Task {
             await updateHabitSortOrder()
         }
+    }
+    
+    /// Gets the completion rate for a habit
+    func getCompletionRate(for habit: Habit) -> Double {
+        CoreDataManager.shared.getCompletionRateForHabit(habit)
     }
     
     // MARK: - Private Methods
@@ -112,7 +111,7 @@ class HabitTrackerViewModel: ObservableObject {
                 
                 // Ensure all habits have an order value
                 var needsOrderUpdate = false
-                for (index, habit) in fetchedHabits.enumerated() where habit.order == 0 && index > 0 {
+                for (index, habit) in fetchedHabits.enumerated() where habit.order == 0 {
                     habit.order = Int32(index)
                     needsOrderUpdate = true
                 }
@@ -153,6 +152,4 @@ class HabitTrackerViewModel: ObservableObject {
             }
         }
     }
-    
 }
-*/

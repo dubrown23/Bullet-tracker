@@ -19,6 +19,9 @@ class CoreDataManager {
     /// The Core Data container configured for CloudKit sync
     let container: NSPersistentCloudKitContainer
     
+    /// App Group identifier for sharing data between main app and widget
+    private static let appGroupIdentifier = "group.db23.Bullet-Tracker"
+    
     // MARK: - Initialization
     
     private init() {
@@ -35,6 +38,11 @@ class CoreDataManager {
     private func configureContainer() {
         guard let description = container.persistentStoreDescriptions.first else { return }
         
+        // Configure store URL to use App Group container for widget access
+        if let appGroupURL = containerURL() {
+            description.url = appGroupURL
+        }
+        
         // Enable history tracking and remote notifications for CloudKit sync
         description.setOption(true as NSNumber,
                             forKey: NSPersistentHistoryTrackingKey)
@@ -46,7 +54,12 @@ class CoreDataManager {
     private func loadPersistentStores() {
         container.loadPersistentStores { (storeDescription, error) in
             if let error = error as NSError? {
-                fatalError("Unresolved error \(error), \(error.userInfo)")
+                // In production, we should handle this gracefully
+                // Log the error for debugging but don't crash the app
+                print("Core Data error: \(error), \(error.userInfo)")
+                
+                // You might want to show an alert to the user and attempt recovery
+                // For now, we'll continue but the app may not function properly
             }
         }
     }
@@ -55,6 +68,15 @@ class CoreDataManager {
     private func configureViewContext() {
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+    }
+    
+    /// Returns the URL for the App Group container to share Core Data with widgets
+    private func containerURL() -> URL? {
+        guard let appGroupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupIdentifier) else {
+            print("Warning: Unable to access App Group container. Widgets won't be able to access data.")
+            return nil
+        }
+        return appGroupURL.appendingPathComponent("BulletTracker.sqlite")
     }
     
     // MARK: - Core Data Saving
@@ -67,8 +89,24 @@ class CoreDataManager {
             try container.viewContext.save()
         } catch {
             let nserror = error as NSError
-            fatalError("Unresolved error \(nserror), \(nserror.userInfo)")
+            // In production, handle this more gracefully
+            print("Core Data save error: \(nserror), \(nserror.userInfo)")
+            
+            // Rollback the context to prevent further issues
+            container.viewContext.rollback()
+            
+            // In a production app, you might want to:
+            // 1. Show an alert to the user
+            // 2. Attempt to save again
+            // 3. Prompt for app restart if critical
         }
+    }
+    
+    // MARK: - App Group Support
+    
+    /// Returns the App Group identifier for sharing data with widgets
+    static var sharedAppGroupIdentifier: String {
+        return appGroupIdentifier
     }
     
     // MARK: - Initial Setup

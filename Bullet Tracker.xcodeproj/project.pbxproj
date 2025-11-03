@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		77043D242EB8F04C006B4683 /* HabitTrackerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77043D232EB8F04C006B4683 /* HabitTrackerViewModel.swift */; };
+		77043D262EB8F462006B4683 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77043D252EB8F462006B4683 /* AppConstants.swift */; };
 		77166BB12DF1DC910071BED6 /* YearLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BB02DF1DC910071BED6 /* YearLogView.swift */; };
 		77166BB32DF1DE290071BED6 /* MonthArchiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BB22DF1DE290071BED6 /* MonthArchiveView.swift */; };
 		77166BB52DF1F4D00071BED6 /* SpecialEntryTemplates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BB42DF1F4D00071BED6 /* SpecialEntryTemplates.swift */; };
@@ -15,9 +17,11 @@
 		77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */; };
 		77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */; };
 		77166BCD2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations in Resources */ = {isa = PBXBuildFile; fileRef = 77166BCC2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations */; };
+		772D05842EB3A2DC00186D04 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 772D05832EB3A2DC00186D04 /* WidgetKit.framework */; };
+		772D05862EB3A2DC00186D04 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 772D05852EB3A2DC00186D04 /* SwiftUI.framework */; };
+		772D05972EB3A2DD00186D04 /* BulletTrackerWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 772D05812EB3A2DC00186D04 /* BulletTrackerWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		774843FF2EB2D27A007F3B9B /* HabitDataRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */; };
-		774844032EB38B01007F3B9B /* HabitTrackerViewModelClean.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774844022EB38B01007F3B9B /* HabitTrackerViewModelClean.swift */; };
-		774844052EB38E75007F3B9B /* HabitTrackerViewModelClean 2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774844042EB38E75007F3B9B /* HabitTrackerViewModelClean 2.swift */; };
+		7770B1EA2EB8117000DA97EB /* CoreDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B52DEBFBB4004E2ED9 /* CoreDataManager.swift */; };
 		77731D4E2DF07A5B00A1F37C /* CollectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */; };
 		77731D502DF07FF500A1F37C /* FutureEntryParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D4F2DF07FF500A1F37C /* FutureEntryParser.swift */; };
 		77731D522DF0872800A1F37C /* FutureLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731D512DF0872800A1F37C /* FutureLogView.swift */; };
@@ -30,7 +34,6 @@
 		77DB37292DEBD593004E2ED9 /* Bullet Track - Overview.md in Resources */ = {isa = PBXBuildFile; fileRef = 77DB37282DEBD593004E2ED9 /* Bullet Track - Overview.md */; };
 		77DB372C2DEBD616004E2ED9 /* Bullet Track - Context.md in Resources */ = {isa = PBXBuildFile; fileRef = 77DB372B2DEBD616004E2ED9 /* Bullet Track - Context.md */; };
 		77DB372E2DEBD64D004E2ED9 /* Bullet Track - protocol in Resources */ = {isa = PBXBuildFile; fileRef = 77DB372D2DEBD64D004E2ED9 /* Bullet Track - protocol */; };
-		77DB37CD2DEBFBB4004E2ED9 /* HabitTrackerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C42DEBFBB4004E2ED9 /* HabitTrackerViewModel.swift */; };
 		77DB37CE2DEBFBB4004E2ED9 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C72DEBFBB4004E2ED9 /* SettingsView.swift */; };
 		77DB37CF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37BF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift */; };
 		77DB37D02DEBFBB4004E2ED9 /* IndexView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C52DEBFBB4004E2ED9 /* IndexView.swift */; };
@@ -60,6 +63,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		772D05952EB3A2DD00186D04 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7783B2532DD2894B0008E0F3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 772D05802EB3A2DC00186D04;
+			remoteInfo = BulletTrackerWidgetsExtension;
+		};
 		7783B26E2DD2894D0008E0F3 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 7783B2532DD2894B0008E0F3 /* Project object */;
@@ -76,7 +86,21 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		772D059C2EB3A2DD00186D04 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				772D05972EB3A2DD00186D04 /* BulletTrackerWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		77043D232EB8F04C006B4683 /* HabitTrackerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitTrackerViewModel.swift; sourceTree = "<group>"; };
+		77043D252EB8F462006B4683 /* AppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConstants.swift; sourceTree = "<group>"; };
 		77166BB02DF1DC910071BED6 /* YearLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YearLogView.swift; sourceTree = "<group>"; };
 		77166BB22DF1DE290071BED6 /* MonthArchiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthArchiveView.swift; sourceTree = "<group>"; };
 		77166BB42DF1F4D00071BED6 /* SpecialEntryTemplates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpecialEntryTemplates.swift; sourceTree = "<group>"; };
@@ -85,9 +109,11 @@
 		77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitFormView.swift; sourceTree = "<group>"; };
 		77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconSelectorView.swift; sourceTree = "<group>"; };
 		77166BCC2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Bullet Tracker - Future Optimizations"; sourceTree = "<group>"; };
+		772D05812EB3A2DC00186D04 /* BulletTrackerWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BulletTrackerWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		772D05832EB3A2DC00186D04 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		772D05852EB3A2DC00186D04 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		772D059D2EB3A47E00186D04 /* BulletTrackerWidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BulletTrackerWidgetsExtension.entitlements; sourceTree = "<group>"; };
 		774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitDataRepository.swift; sourceTree = "<group>"; };
-		774844022EB38B01007F3B9B /* HabitTrackerViewModelClean.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitTrackerViewModelClean.swift; sourceTree = "<group>"; };
-		774844042EB38E75007F3B9B /* HabitTrackerViewModelClean 2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HabitTrackerViewModelClean 2.swift"; sourceTree = "<group>"; };
 		77731D4D2DF07A5B00A1F37C /* CollectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionManager.swift; sourceTree = "<group>"; };
 		77731D4F2DF07FF500A1F37C /* FutureEntryParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureEntryParser.swift; sourceTree = "<group>"; };
 		77731D512DF0872800A1F37C /* FutureLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureLogView.swift; sourceTree = "<group>"; };
@@ -124,7 +150,6 @@
 		77DB37C12DEBFBB4004E2ED9 /* HabitRowLabelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitRowLabelView.swift; sourceTree = "<group>"; };
 		77DB37C22DEBFBB4004E2ED9 /* HabitStatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitStatsView.swift; sourceTree = "<group>"; };
 		77DB37C32DEBFBB4004E2ED9 /* HabitTrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitTrackerView.swift; sourceTree = "<group>"; };
-		77DB37C42DEBFBB4004E2ED9 /* HabitTrackerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitTrackerViewModel.swift; sourceTree = "<group>"; };
 		77DB37C52DEBFBB4004E2ED9 /* IndexView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndexView.swift; sourceTree = "<group>"; };
 		77DB37C62DEBFBB4004E2ED9 /* NewEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewEntryView.swift; sourceTree = "<group>"; };
 		77DB37C72DEBFBB4004E2ED9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -132,9 +157,37 @@
 		77DB38042DEC0768004E2ED9 /* feature list.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "feature list.md"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		772D05982EB3A2DD00186D04 /* Exceptions for "BulletTrackerWidgets" folder in "BulletTrackerWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 772D05802EB3A2DC00186D04 /* BulletTrackerWidgetsExtension */;
+		};
+		7770B1E92EB79EB700DA97EB /* Exceptions for "Bullet Tracker" folder in "BulletTrackerWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Bullet_Tracker.xcdatamodeld,
+			);
+			target = 772D05802EB3A2DC00186D04 /* BulletTrackerWidgetsExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		772D05872EB3A2DC00186D04 /* BulletTrackerWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				772D05982EB3A2DD00186D04 /* Exceptions for "BulletTrackerWidgets" folder in "BulletTrackerWidgetsExtension" target */,
+			);
+			path = BulletTrackerWidgets;
+			sourceTree = "<group>";
+		};
 		7783B25D2DD2894B0008E0F3 /* Bullet Tracker */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7770B1E92EB79EB700DA97EB /* Exceptions for "Bullet Tracker" folder in "BulletTrackerWidgetsExtension" target */,
+			);
 			path = "Bullet Tracker";
 			sourceTree = "<group>";
 		};
@@ -151,6 +204,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		772D057E2EB3A2DC00186D04 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				772D05862EB3A2DC00186D04 /* SwiftUI.framework in Frameworks */,
+				772D05842EB3A2DC00186D04 /* WidgetKit.framework in Frameworks */,
+			);
+		};
 		7783B2582DD2894B0008E0F3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -198,14 +258,12 @@
 				77DB37C02DEBFBB4004E2ED9 /* HabitProgressView.swift */,
 				77DB37C22DEBFBB4004E2ED9 /* HabitStatsView.swift */,
 				77DB37C32DEBFBB4004E2ED9 /* HabitTrackerView.swift */,
-				77DB37C42DEBFBB4004E2ED9 /* HabitTrackerViewModel.swift */,
 				77DB37BD2DEBFBB4004E2ED9 /* HabitCheckboxView.swift */,
 				77DB37BE2DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift */,
 				77DB37BF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift */,
 				77DB37C12DEBFBB4004E2ED9 /* HabitRowLabelView.swift */,
 				774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */,
-				774844022EB38B01007F3B9B /* HabitTrackerViewModelClean.swift */,
-				774844042EB38E75007F3B9B /* HabitTrackerViewModelClean 2.swift */,
+				77043D232EB8F04C006B4683 /* HabitTrackerViewModel.swift */,
 			);
 			path = Habits;
 			sourceTree = "<group>";
@@ -245,9 +303,19 @@
 			path = Utilities;
 			sourceTree = "<group>";
 		};
+		772D05822EB3A2DC00186D04 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				772D05832EB3A2DC00186D04 /* WidgetKit.framework */,
+				772D05852EB3A2DC00186D04 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		7783B2522DD2894B0008E0F3 = {
 			isa = PBXGroup;
 			children = (
+				772D059D2EB3A47E00186D04 /* BulletTrackerWidgetsExtension.entitlements */,
 				77DB37F32DEBFBB9004E2ED9 /* App */,
 				77166BC12DF329530071BED6 /* Data */,
 				77166BBD2DF328D60071BED6 /* Habits */,
@@ -258,6 +326,8 @@
 				7783B25D2DD2894B0008E0F3 /* Bullet Tracker */,
 				7783B2702DD2894D0008E0F3 /* Bullet TrackerTests */,
 				7783B27A2DD2894D0008E0F3 /* Bullet TrackerUITests */,
+				772D05872EB3A2DC00186D04 /* BulletTrackerWidgets */,
+				772D05822EB3A2DC00186D04 /* Frameworks */,
 				7783B25C2DD2894B0008E0F3 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -268,6 +338,7 @@
 				7783B25B2DD2894B0008E0F3 /* Bullet Tracker.app */,
 				7783B26D2DD2894D0008E0F3 /* Bullet TrackerTests.xctest */,
 				7783B2772DD2894D0008E0F3 /* Bullet TrackerUITests.xctest */,
+				772D05812EB3A2DC00186D04 /* BulletTrackerWidgetsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -281,6 +352,7 @@
 				77DB372B2DEBD616004E2ED9 /* Bullet Track - Context.md */,
 				77DB372D2DEBD64D004E2ED9 /* Bullet Track - protocol */,
 				77166BCC2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations */,
+				77043D252EB8F462006B4683 /* AppConstants.swift */,
 			);
 			path = Documentation;
 			sourceTree = "<group>";
@@ -298,6 +370,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		772D05802EB3A2DC00186D04 /* BulletTrackerWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 772D05992EB3A2DD00186D04 /* Build configuration list for PBXNativeTarget "BulletTrackerWidgetsExtension" */;
+			buildPhases = (
+				772D057D2EB3A2DC00186D04 /* Sources */,
+				772D057E2EB3A2DC00186D04 /* Frameworks */,
+				772D057F2EB3A2DC00186D04 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				772D05872EB3A2DC00186D04 /* BulletTrackerWidgets */,
+			);
+			name = BulletTrackerWidgetsExtension;
+			productName = BulletTrackerWidgetsExtension;
+			productReference = 772D05812EB3A2DC00186D04 /* BulletTrackerWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		7783B25A2DD2894B0008E0F3 /* Bullet Tracker */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 7783B2812DD2894D0008E0F3 /* Build configuration list for PBXNativeTarget "Bullet Tracker" */;
@@ -305,8 +395,12 @@
 				7783B2572DD2894B0008E0F3 /* Sources */,
 				7783B2582DD2894B0008E0F3 /* Frameworks */,
 				7783B2592DD2894B0008E0F3 /* Resources */,
+				772D059C2EB3A2DD00186D04 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
+			);
+			dependencies = (
+				772D05962EB3A2DD00186D04 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7783B25D2DD2894B0008E0F3 /* Bullet Tracker */,
@@ -365,9 +459,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1630;
+				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					772D05802EB3A2DC00186D04 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
 					7783B25A2DD2894B0008E0F3 = {
 						CreatedOnToolsVersion = 16.3;
 					};
@@ -398,11 +495,17 @@
 				7783B25A2DD2894B0008E0F3 /* Bullet Tracker */,
 				7783B26C2DD2894D0008E0F3 /* Bullet TrackerTests */,
 				7783B2762DD2894D0008E0F3 /* Bullet TrackerUITests */,
+				772D05802EB3A2DC00186D04 /* BulletTrackerWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		772D057F2EB3A2DC00186D04 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 		7783B2592DD2894B0008E0F3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
@@ -427,18 +530,23 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		772D057D2EB3A2DC00186D04 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				7770B1EA2EB8117000DA97EB /* CoreDataManager.swift in Sources */,
+			);
+		};
 		7783B2572DD2894B0008E0F3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
 				77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */,
 				77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */,
 				77731D542DF0A06D00A1F37C /* MonthLogView.swift in Sources */,
+				77043D262EB8F462006B4683 /* AppConstants.swift in Sources */,
 				77166BB12DF1DC910071BED6 /* YearLogView.swift in Sources */,
 				77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */,
 				77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */,
 				77166BB52DF1F4D00071BED6 /* SpecialEntryTemplates.swift in Sources */,
-				774844052EB38E75007F3B9B /* HabitTrackerViewModelClean 2.swift in Sources */,
-				77DB37CD2DEBFBB4004E2ED9 /* HabitTrackerViewModel.swift in Sources */,
 				77DB37CE2DEBFBB4004E2ED9 /* SettingsView.swift in Sources */,
 				77DB37CF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift in Sources */,
 				77DB37D02DEBFBB4004E2ED9 /* IndexView.swift in Sources */,
@@ -447,7 +555,6 @@
 				77166BB92DF1F94D0071BED6 /* SpecialEntryDetailView.swift in Sources */,
 				77DB37D42DEBFBB4004E2ED9 /* Constants.swift in Sources */,
 				77DB37D52DEBFBB4004E2ED9 /* DailyLogView.swift in Sources */,
-				774844032EB38B01007F3B9B /* HabitTrackerViewModelClean.swift in Sources */,
 				77DB37D62DEBFBB4004E2ED9 /* CoreDataManager.swift in Sources */,
 				77DB37D72DEBFBB4004E2ED9 /* EntryListItem.swift in Sources */,
 				77DB37D82DEBFBB4004E2ED9 /* CollectionDetailView.swift in Sources */,
@@ -465,6 +572,7 @@
 				77731D582DF1C6DE00A1F37C /* MigrationManager.swift in Sources */,
 				77731D522DF0872800A1F37C /* FutureLogView.swift in Sources */,
 				774843FF2EB2D27A007F3B9B /* HabitDataRepository.swift in Sources */,
+				77043D242EB8F04C006B4683 /* HabitTrackerViewModel.swift in Sources */,
 				77DB37E32DEBFBB4004E2ED9 /* EditEntryView.swift in Sources */,
 				77DB37E42DEBFBB4004E2ED9 /* NewEntryView.swift in Sources */,
 				77DB37E62DEBFBB4004E2ED9 /* Color+Hex.swift in Sources */,
@@ -489,6 +597,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		772D05962EB3A2DD00186D04 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 772D05802EB3A2DC00186D04 /* BulletTrackerWidgetsExtension */;
+			targetProxy = 772D05952EB3A2DD00186D04 /* PBXContainerItemProxy */;
+		};
 		7783B26F2DD2894D0008E0F3 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 7783B25A2DD2894B0008E0F3 /* Bullet Tracker */;
@@ -502,6 +615,70 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		772D059A2EB3A2DD00186D04 /* Debug configuration for PBXNativeTarget "BulletTrackerWidgetsExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = BulletTrackerWidgetsExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6W932TN323;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BulletTrackerWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = BulletTrackerWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "db23.Bullet-Tracker.BulletTrackerWidgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		772D059B2EB3A2DD00186D04 /* Release configuration for PBXNativeTarget "BulletTrackerWidgetsExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = BulletTrackerWidgetsExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6W932TN323;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BulletTrackerWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = BulletTrackerWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "db23.Bullet-Tracker.BulletTrackerWidgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		7783B27F2DD2894D0008E0F3 /* Debug configuration for PBXProject "Bullet Tracker" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -760,6 +937,14 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		772D05992EB3A2DD00186D04 /* Build configuration list for PBXNativeTarget "BulletTrackerWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				772D059A2EB3A2DD00186D04 /* Debug configuration for PBXNativeTarget "BulletTrackerWidgetsExtension" */,
+				772D059B2EB3A2DD00186D04 /* Release configuration for PBXNativeTarget "BulletTrackerWidgetsExtension" */,
+			);
+			defaultConfigurationName = Release;
+		};
 		7783B2562DD2894B0008E0F3 /* Build configuration list for PBXProject "Bullet Tracker" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
