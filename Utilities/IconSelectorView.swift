@@ -67,7 +67,7 @@ struct IconSelectorView: View {
             "flame.fill", "thermometer", "thermometer.snowflake", "snowflake",
             "drop.triangle.fill", "leaf.fill", "tree.fill", "mountain.2.fill",
             "globe.americas.fill", "hare.fill", "tortoise.fill", "bird.fill",
-            "ant.fill", "lizard.fill", "fish.fill"
+            "ant.fill", "lizard.fill", "fish.fill", "dog.fill"
         ],
         "Tech & Science": [
             "lightbulb.fill", "light.strip.2", "network", "wifi",

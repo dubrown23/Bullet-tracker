@@ -88,8 +88,18 @@ class HabitDataRepository: ObservableObject {
         loadingTask?.cancel()
         
         // Check if we already have this data loaded
-        if let currentRange = loadedDateRange,
-           currentRange.contains(dateRange.lowerBound) && currentRange.contains(dateRange.upperBound) {
+        // Always load if cache is empty (app launch scenario)
+        let shouldSkipLoad: Bool
+        if habitEntries.isEmpty {
+            shouldSkipLoad = false // Always load on first run
+        } else if let currentRange = loadedDateRange {
+            // Only skip if the new range is completely contained within the loaded range
+            shouldSkipLoad = currentRange.contains(dateRange.lowerBound) && currentRange.contains(dateRange.upperBound)
+        } else {
+            shouldSkipLoad = false
+        }
+        
+        if shouldSkipLoad {
             return // Already loaded
         }
         
@@ -225,9 +235,10 @@ class HabitDataRepository: ObservableObject {
             
             let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
             
-            // Create predicate for batch loading all entries in date range
-            let startDate = dateRange.lowerBound
-            let endDate = self.calendar.date(byAdding: .day, value: 1, to: dateRange.upperBound)!
+            // Use robust date handling for the query
+            // Ensure we're using start of day for both bounds
+            let startDate = self.calendar.startOfDay(for: dateRange.lowerBound)
+            let endDate = self.calendar.startOfDay(for: self.calendar.date(byAdding: .day, value: 1, to: dateRange.upperBound)!)
             
             fetchRequest.predicate = NSPredicate(
                 format: "date >= %@ AND date < %@ AND habit IN %@",
@@ -255,8 +266,8 @@ class HabitDataRepository: ObservableObject {
     }
     
     private func processLoadedEntries(_ entries: [HabitEntry]) {
-        // Clear existing data for reload
-        var newEntries: [UUID: [Date: HabitEntry]] = [:]
+        // Merge new entries with existing cache instead of clearing everything
+        var updatedEntries = habitEntries
         
         for entry in entries {
             guard let habit = entry.habit,
@@ -265,13 +276,13 @@ class HabitDataRepository: ObservableObject {
             
             let dayStart = calendar.startOfDay(for: date)
             
-            if newEntries[habitId] == nil {
-                newEntries[habitId] = [:]
+            if updatedEntries[habitId] == nil {
+                updatedEntries[habitId] = [:]
             }
-            newEntries[habitId]?[dayStart] = entry
+            updatedEntries[habitId]?[dayStart] = entry
         }
         
-        habitEntries = newEntries
+        habitEntries = updatedEntries
     }
     
     private func performCoreDataUpdate(habitObjectID: NSManagedObjectID, on date: Date, completed: Bool, state: Int) async {

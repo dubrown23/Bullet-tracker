@@ -20,7 +20,7 @@ struct HabitTrackerView: View {
             .navigationTitle("Habit Tracker")
             .navigationBarBackButtonHidden(true) // Hide default back button
             .toolbar {
-                ToolbarItemGroup(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "chevron.left")
                             .foregroundColor(.blue)
@@ -28,27 +28,32 @@ struct HabitTrackerView: View {
                     }
                 }
                 
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    if !viewModel.habits.isEmpty {
-                        Button(action: {
-                            withAnimation {
-                                isEditMode = isEditMode == .active ? .inactive : .active
-                            }
-                        }) {
+                // Separate toolbar items to avoid constraint conflicts
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { viewModel.showingAddHabitSheet = true }) {
+                        Image(systemName: "plus")
+                            .foregroundColor(.blue)
+                    }
+                }
+                
+                ToolbarItem(placement: .secondaryAction) {
+                    Button(action: {
+                        withAnimation {
+                            isEditMode = isEditMode == .active ? .inactive : .active
+                        }
+                    }) {
+                        Group {
                             if isEditMode == .active {
                                 Text("Done")
                                     .fontWeight(.bold)
-                                    .foregroundColor(.blue)
                             } else {
                                 Image(systemName: "arrow.up.arrow.down")
-                                    .foregroundColor(.blue)
                             }
                         }
+                        .foregroundColor(viewModel.habits.isEmpty ? .gray : .blue)
+                        .frame(minWidth: 44, alignment: .center)
                     }
-                    
-                    Button(action: { viewModel.showingAddHabitSheet = true }) {
-                        Image(systemName: "plus")
-                    }
+                    .disabled(viewModel.habits.isEmpty)
                 }
             }
             .sheet(isPresented: $viewModel.showingAddHabitSheet, onDismiss: {
@@ -273,6 +278,8 @@ struct HabitTrackerView: View {
             let calendar = Calendar.current
             if !calendar.isDate(lastDateCheck, inSameDayAs: Date()) {
                 viewModel.selectedDate = Date()
+                // Clear cache before updating dates to force fresh data load
+                viewModel.dataRepository.clearCache()
                 viewModel.updateVisibleDates()
                 viewModel.loadHabitEntries()
                 lastDateCheck = Date()
@@ -306,8 +313,8 @@ struct HabitTrackerView: View {
             for command in commands {
                 guard let action = command["action"] as? String,
                       let habitIDString = command["habitID"] as? String,
-                      let habitName = command["habitName"] as? String,
-                      let timestamp = command["timestamp"] as? Double else {
+                      let _ = command["habitName"] as? String,
+                      let _ = command["timestamp"] as? Double else {
                     continue
                 }
                 

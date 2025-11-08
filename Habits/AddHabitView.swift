@@ -210,7 +210,7 @@ struct AsyncIconSelectorView: View {
         // First batch - most common
         ["circle.fill", "checkmark.circle.fill", "star.fill", "heart.fill", "flag.fill"],
         // Second batch
-        ["book.fill", "dumbbell.fill", "leaf.fill", "moon.fill", "sun.max.fill"],
+        ["book.fill", "dumbbell.fill", "leaf.fill", "moon.fill", "sun.max.fill", "dog.fill"],
         // Third batch
         ["drop.fill", "flame.fill", "bolt.fill", "brain", "lungs.fill"],
         // Fourth batch
