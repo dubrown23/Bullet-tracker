@@ -33,9 +33,9 @@ struct IconSelectorView: View {
     @State private var searchText: String = ""
     
     // MARK: - Constants
-    
+
     /// Expanded icon options organized by category
-    private let expandedIconOptions: [String: [String]] = [
+    private static let expandedIconOptions: [String: [String]] = [
         "Health & Fitness": [
             "heart.fill", "lungs.fill", "figure.walk", "figure.run", "figure.hiking",
             "figure.yoga", "figure.cooldown", "figure.strengthtraining.traditional",
@@ -88,21 +88,21 @@ struct IconSelectorView: View {
         ]
     ]
     
-    // MARK: - Computed Properties
-    
-    /// All unique icons from all categories
-    private var allIcons: [String] {
+    // MARK: - Cached Properties
+
+    /// All unique icons from all categories (computed once)
+    private static let allIcons: [String] = {
         var icons: [String] = []
         for iconList in expandedIconOptions.values {
             icons.append(contentsOf: iconList)
         }
         return Array(Set(icons)).sorted()
-    }
+    }()
     
     /// Icons filtered by search text
     private var filteredIcons: [String] {
         guard !searchText.isEmpty else { return [] }
-        return allIcons.filter { $0.localizedCaseInsensitiveContains(searchText) }
+        return Self.allIcons.filter { $0.localizedCaseInsensitiveContains(searchText) }
     }
     
     // MARK: - Body
@@ -157,9 +157,9 @@ struct IconSelectorView: View {
     /// List of icons organized by category
     private var categorizedIconList: some View {
         List {
-            ForEach(expandedIconOptions.keys.sorted(), id: \.self) { category in
+            ForEach(Self.expandedIconOptions.keys.sorted(), id: \.self) { category in
                 Section(header: Text(category)) {
-                    iconGrid(icons: expandedIconOptions[category] ?? [])
+                    iconGrid(icons: Self.expandedIconOptions[category] ?? [])
                 }
             }
         }

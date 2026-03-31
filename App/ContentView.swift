@@ -9,66 +9,119 @@ import SwiftUI
 
 struct ContentView: View {
     // MARK: - State Properties
-    
-    @State private var selectedTab = 0
-    
+
+    @State private var selectedTab: Tab = .habits
+    @State private var previousTab: Tab = .habits
+
+    // MARK: - Environment
+
+    @Environment(\.scenePhase) private var scenePhase
+
     // MARK: - Constants
-    
-    private enum Tab: Int, CaseIterable {
-        case daily = 0
-        case habits = 1
-        case collections = 2
+
+    private enum Tab: Int, CaseIterable, Identifiable {
+        case habits = 0
+        case dashboard = 1
+        case journal = 2
         case settings = 3
+
+        var id: Int { rawValue }
+
+        var title: String {
+            switch self {
+            case .habits: return "Habits"
+            case .dashboard: return "Dashboard"
+            case .journal: return "Journal"
+            case .settings: return "Settings"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .habits: return "checkmark.circle"
+            case .dashboard: return "chart.bar.fill"
+            case .journal: return "book"
+            case .settings: return "gear"
+            }
+        }
+
+        var selectedIcon: String {
+            switch self {
+            case .habits: return "checkmark.circle.fill"
+            case .dashboard: return "chart.bar.fill"
+            case .journal: return "book.fill"
+            case .settings: return "gear"
+            }
+        }
     }
-    
+
     // MARK: - Body
-    
+
     var body: some View {
         TabView(selection: $selectedTab) {
-            dailyLogTab
             habitsTab
-            collectionsTab
+            dashboardTab
+            journalTab
             settingsTab
         }
+        .tint(AppTheme.accent)
+        .onChange(of: selectedTab) { oldValue, newValue in
+            // Soft haptic feedback on tab change
+            if oldValue != newValue {
+                let impact = UIImpactFeedbackGenerator(style: .soft)
+                impact.impactOccurred(intensity: 0.5)
+                previousTab = oldValue
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Refresh data when app becomes active
+            if newPhase == .active {
+                NotificationCenter.default.post(name: .appBecameActive, object: nil)
+            }
+        }
     }
-    
+
     // MARK: - Tab Views
-    
-    /// Daily log tab for current day's entries
-    private var dailyLogTab: some View {
-        DailyLogView()
-            .tabItem {
-                Label("Daily", systemImage: "calendar.day.timeline.leading")
-            }
-            .tag(Tab.daily.rawValue)
-    }
-    
-    /// Habits tab for tracking daily habits
+
+    /// Habits tab for daily habit tracking
     private var habitsTab: some View {
-        NavigationStack {
-            HabitTrackerView()
-        }
-        .tabItem {
-            Label("Habits", systemImage: "chart.bar.fill")
-        }
-        .tag(Tab.habits.rawValue)
-    }
-    
-    /// Collections tab for organizing entries and accessing index
-    private var collectionsTab: some View {
-        SimpleCollectionsView()
+        HabitTrackerView()
             .tabItem {
-                Label("Collections", systemImage: "folder")
+                Label(Tab.habits.title, systemImage: selectedTab == .habits ? Tab.habits.selectedIcon : Tab.habits.icon)
             }
-            .tag(Tab.collections.rawValue)
+            .tag(Tab.habits)
     }
-    
+
+    /// Dashboard tab for habit analytics
+    private var dashboardTab: some View {
+        HabitDashboardView()
+            .tabItem {
+                Label(Tab.dashboard.title, systemImage: selectedTab == .dashboard ? Tab.dashboard.selectedIcon : Tab.dashboard.icon)
+            }
+            .tag(Tab.dashboard)
+    }
+
+    /// Journal tab - view any day's habits + notes
+    private var journalTab: some View {
+        DayJournalView()
+            .tabItem {
+                Label(Tab.journal.title, systemImage: selectedTab == .journal ? Tab.journal.selectedIcon : Tab.journal.icon)
+            }
+            .tag(Tab.journal)
+    }
+
     /// Settings tab for app configuration
     private var settingsTab: some View {
         SettingsView()
             .tabItem {
-                Label("Settings", systemImage: "gear")
+                Label(Tab.settings.title, systemImage: selectedTab == .settings ? Tab.settings.selectedIcon : Tab.settings.icon)
             }
-            .tag(Tab.settings.rawValue)
+            .tag(Tab.settings)
     }
+}
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let appBecameActive = Notification.Name("appBecameActive")
 }

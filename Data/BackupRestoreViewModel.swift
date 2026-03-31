@@ -12,31 +12,33 @@ import UniformTypeIdentifiers
 
 class BackupPickerDelegate: NSObject, ObservableObject, UIDocumentPickerDelegate {
     var onDocumentsPicked: ((URL) -> Void)?
-    
+
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let url = urls.first else { return }
-        
-        // Simplified: Only copy if we have secure access
-        if url.startAccessingSecurityScopedResource() {
-            defer { url.stopAccessingSecurityScopedResource() }
-            
-            // Try to access directly first
-            if FileManager.default.isReadableFile(atPath: url.path) {
-                onDocumentsPicked?(url)
-                return
+
+        // Always create a local copy to avoid security-scoped access timing issues
+        // The security access may expire before restore actually runs (user confirms dialog first)
+        guard let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let localCopy = documentsDirectory.appendingPathComponent("backup_temp.json")
+
+        // Start security-scoped access for the copy operation
+        let hasSecurityAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if hasSecurityAccess {
+                url.stopAccessingSecurityScopedResource()
             }
         }
-        
-        // Fallback: Create local copy only if direct access fails
-        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let localCopy = documentsDirectory.appendingPathComponent("backup_temp.json")
-        
+
         do {
+            // Remove any existing temp file
             try? FileManager.default.removeItem(at: localCopy)
+
+            // Copy to local documents directory where we have permanent access
             try FileManager.default.copyItem(at: url, to: localCopy)
             onDocumentsPicked?(localCopy)
         } catch {
-            // If copy fails, try with original URL anyway
+            // If copy fails, try with original URL as last resort
+            debugLog("Failed to create local backup copy: \(error.localizedDescription)")
             onDocumentsPicked?(url)
         }
     }

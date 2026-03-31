@@ -26,9 +26,8 @@ class HabitTrackerViewModel: ObservableObject {
     let dataRepository = HabitDataRepository()
     
     // MARK: - Constants
-    
-    /// Number of days to display in the tracker
-    let daysToShow = 4
+
+    // (daysToShow removed - now dynamically calculated based on month)
     
     // MARK: - Private Properties
     
@@ -52,16 +51,36 @@ class HabitTrackerViewModel: ObservableObject {
         }
     }
     
-    /// Updates the visible date range and loads entries
+    /// Updates the visible date range to show all days from the 1st of the month up to today (never future)
     func updateVisibleDates() {
-        guard let startDate = calendar.date(byAdding: .day, value: -(daysToShow - 1), to: selectedDate) else {
+        // Get the first day of the month for the selected date
+        guard let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDate)) else {
             return
         }
-        
-        visibleDates = (0..<daysToShow).compactMap { dayOffset in
-            calendar.date(byAdding: .day, value: dayOffset, to: startDate)
+
+        // Never show dates past today
+        let today = calendar.startOfDay(for: Date())
+
+        // If viewing a past month, show the whole month; otherwise show up to today
+        guard let endOfMonth = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth) else { return }
+        let effectiveEndDate: Date
+        if endOfMonth < today {
+            // Past month - show entire month
+            effectiveEndDate = endOfMonth
+        } else {
+            // Current or future month - show up to today only
+            effectiveEndDate = min(today, endOfMonth)
         }
-        
+
+        // Calculate how many days from start of month to effective end date
+        let components = calendar.dateComponents([.day], from: startOfMonth, to: effectiveEndDate)
+        let daysToShow = (components.day ?? 0) + 1
+
+        // Build array of dates from 1st of month to effective end date
+        visibleDates = (0..<daysToShow).compactMap { dayOffset in
+            calendar.date(byAdding: .day, value: dayOffset, to: startOfMonth)
+        }
+
         loadHabitEntries()
     }
     
@@ -69,7 +88,8 @@ class HabitTrackerViewModel: ObservableObject {
     func loadHabitEntries() {
         guard !habits.isEmpty, !visibleDates.isEmpty else { return }
         
-        let dateRange = visibleDates.first!...visibleDates.last!
+        guard let first = visibleDates.first, let last = visibleDates.last else { return }
+        let dateRange = first...last
         
         loadTask?.cancel()
         loadTask = Task {
@@ -148,7 +168,7 @@ class HabitTrackerViewModel: ObservableObject {
             do {
                 try context.save()
             } catch {
-                print("Failed to update habit order: \(error)")
+                debugLog("Failed to update habit order: \(error.localizedDescription)")
             }
         }
     }

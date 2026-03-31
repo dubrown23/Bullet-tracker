@@ -18,10 +18,10 @@ class CoreDataManager {
     
     /// The Core Data container configured for CloudKit sync
     let container: NSPersistentCloudKitContainer
-    
+
     /// App Group identifier for sharing data between main app and widget
     private static let appGroupIdentifier = "group.db23.Bullet-Tracker"
-    
+
     // MARK: - Initialization
     
     private init() {
@@ -56,7 +56,7 @@ class CoreDataManager {
             if let error = error as NSError? {
                 // In production, we should handle this gracefully
                 // Log the error for debugging but don't crash the app
-                print("Core Data error: \(error), \(error.userInfo)")
+                debugLog("Core Data error: \(error.localizedDescription)")
                 
                 // You might want to show an alert to the user and attempt recovery
                 // For now, we'll continue but the app may not function properly
@@ -73,7 +73,7 @@ class CoreDataManager {
     /// Returns the URL for the App Group container to share Core Data with widgets
     private func containerURL() -> URL? {
         guard let appGroupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupIdentifier) else {
-            print("Warning: Unable to access App Group container. Widgets won't be able to access data.")
+            debugLog("Unable to access App Group container. Widgets won't be able to access data.")
             return nil
         }
         return appGroupURL.appendingPathComponent("BulletTracker.sqlite")
@@ -90,7 +90,7 @@ class CoreDataManager {
         } catch {
             let nserror = error as NSError
             // In production, handle this more gracefully
-            print("Core Data save error: \(nserror), \(nserror.userInfo)")
+            debugLog("Core Data save error: \(nserror.localizedDescription)")
             
             // Rollback the context to prevent further issues
             container.viewContext.rollback()
@@ -106,7 +106,7 @@ class CoreDataManager {
     
     /// Returns the App Group identifier for sharing data with widgets
     static var sharedAppGroupIdentifier: String {
-        return appGroupIdentifier
+        return Self.appGroupIdentifier
     }
     
     // MARK: - Initial Setup
@@ -439,7 +439,8 @@ extension CoreDataManager {
             startOfDay as NSDate,
             endOfDay as NSDate
         )
-        
+        fetchRequest.fetchLimit = 1
+
         do {
             let results = try container.viewContext.fetch(fetchRequest)
             
@@ -479,14 +480,16 @@ extension CoreDataManager {
         guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
             return []
         }
-        
+
         let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
         fetchRequest.predicate = NSPredicate(
             format: "date >= %@ AND date < %@",
             startOfDay as NSDate,
             endOfDay as NSDate
         )
-        
+        fetchRequest.returnsObjectsAsFaults = false
+        fetchRequest.relationshipKeyPathsForPrefetching = ["habit"]
+
         do {
             return try container.viewContext.fetch(fetchRequest)
         } catch {
@@ -501,14 +504,16 @@ extension CoreDataManager {
         guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: end) else {
             return []
         }
-        
+
         let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
         fetchRequest.predicate = NSPredicate(
             format: "date >= %@ AND date < %@",
             startOfDay as NSDate,
             endOfDay as NSDate
         )
-        
+        fetchRequest.returnsObjectsAsFaults = false
+        fetchRequest.relationshipKeyPathsForPrefetching = ["habit"]
+
         do {
             return try container.viewContext.fetch(fetchRequest)
         } catch {
@@ -535,59 +540,33 @@ extension CoreDataManager {
         
         do {
             let completedCount = try container.viewContext.count(for: fetchRequest)
-            
+
             // Calculate expected days
             var totalDays = 0
             var currentDate = startDate
-            
+
             while currentDate <= endDate {
                 if shouldPerformHabit(habit, on: currentDate) {
                     totalDays += 1
                 }
-                currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate)!
+                guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
+                currentDate = nextDate
             }
-            
+
             return totalDays > 0 ? Double(completedCount) / Double(totalDays) : 0
         } catch {
             return 0
         }
     }
-}
 
-// MARK: - Private Helper Methods
-
-private extension CoreDataManager {
     /// Determines if a habit should be performed on a given date based on its frequency
-    func shouldPerformHabit(_ habit: Habit, on date: Date) -> Bool {
-        let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: date) // 1 = Sunday, 7 = Saturday
-        
-        switch habit.frequency {
-        case "daily":
-            return true
-            
-        case "weekdays":
-            return (2...6).contains(weekday) // Monday-Friday
-            
-        case "weekends":
-            return weekday == 1 || weekday == 7 // Sunday or Saturday
-            
-        case "weekly":
-            // Same day of week as start date
-            guard let startDate = habit.startDate else { return false }
-            let startWeekday = calendar.component(.weekday, from: startDate)
-            return weekday == startWeekday
-            
-        case "custom":
-            // Parse custom days: "1,3,5" for Sun, Tue, Thu
-            let customDays = habit.customDays?
-                .components(separatedBy: ",")
-                .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) } ?? []
-            return customDays.contains(weekday)
-            
-        default:
-            return false
-        }
+    private func shouldPerformHabit(_ habit: Habit, on date: Date) -> Bool {
+        HabitFrequency.shouldTrack(
+            frequency: habit.frequency,
+            on: date,
+            customDays: habit.customDays,
+            startDate: habit.startDate
+        )
     }
 }
 
@@ -619,7 +598,7 @@ extension CoreDataManager {
     func migrateIncompleteTasks(from: Date, to: Date) {
         let calendar = Calendar.current
         let fromStart = calendar.startOfDay(for: from)
-        let fromEnd = calendar.date(byAdding: .day, value: 1, to: fromStart)!
+        guard let fromEnd = calendar.date(byAdding: .day, value: 1, to: fromStart) else { return }
         
         let fetchRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "entryType == %@ AND taskStatus == %@ AND date >= %@ AND date < %@ AND hasMigrated == false",
@@ -652,7 +631,9 @@ extension CoreDataManager {
                 // Copy tags
                 if let tags = task.tags {
                     for tag in tags {
-                        newTask.addToTags(tag as! Tag)
+                        if let tagObj = tag as? Tag {
+                            newTask.addToTags(tagObj)
+                        }
                     }
                 }
             }

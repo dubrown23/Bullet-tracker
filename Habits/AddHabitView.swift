@@ -7,119 +7,6 @@
 
 import SwiftUI
 import CoreData
-import Combine
-
-// MARK: - View Model
-
-@MainActor
-class AddHabitViewModel: ObservableObject {
-    // MARK: - Published Properties
-    
-    @Published var name = ""
-    @Published var selectedIcon = "circle.fill"
-    @Published var selectedColor = "#007AFF"
-    @Published var selectedFrequency = "daily"
-    @Published var customDays: [Int] = []
-    @Published var notes = ""
-    @Published var trackDetails = false
-    @Published var detailType = "general"
-    @Published var useMultipleStates = false
-    @Published var isNegativeHabit = false
-    @Published var showingIconSheet = false
-    @Published var isValid = false
-    @Published var isSaving = false
-    
-    // MARK: - Private Properties
-    
-    private var cancellables = Set<AnyCancellable>()
-    
-    // MARK: - Initialization
-    
-    init() {
-        setupValidation()
-        setupDebouncing()
-    }
-    
-    // MARK: - Validation
-    
-    private func setupValidation() {
-        // Combine publishers for validation
-        $name
-            .map { name in
-                !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }
-            .assign(to: &$isValid)
-    }
-    
-    private func setupDebouncing() {
-        // Debounce name changes to avoid excessive validation
-        $name
-            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.validateForm()
-            }
-            .store(in: &cancellables)
-        
-        // Debounce notes to avoid excessive updates
-        $notes
-            .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
-            .sink { _ in
-                // Could trigger auto-save or other actions
-            }
-            .store(in: &cancellables)
-    }
-    
-    private func validateForm() {
-        // Additional validation logic if needed
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        isValid = !trimmedName.isEmpty && trimmedName.count >= 2
-    }
-    
-    // MARK: - Public Methods
-    
-    func saveHabit() async throws {
-        guard isValid, !isSaving else { return }
-        
-        isSaving = true
-        defer { isSaving = false }
-        
-        let customDaysString = customDays.sorted().map(String.init).joined(separator: ",")
-        
-        await MainActor.run {
-            let habit = CoreDataManager.shared.createHabit(
-                name: name,
-                color: selectedColor,
-                icon: selectedIcon,
-                frequency: selectedFrequency,
-                customDays: customDaysString,
-                startDate: Date(),
-                notes: notes,
-                collection: nil
-            )
-            
-            // Set dynamic properties
-            habit.setValue(trackDetails, forKey: "trackDetails")
-            habit.setValue(detailType, forKey: "detailType")
-            habit.setValue(isNegativeHabit ? false : useMultipleStates, forKey: "useMultipleStates")
-            habit.setValue(isNegativeHabit, forKey: "isNegativeHabit")
-            
-            CoreDataManager.shared.saveContext()
-        }
-    }
-    
-    func resetForm() {
-        name = ""
-        selectedIcon = "circle.fill"
-        selectedColor = "#007AFF"
-        selectedFrequency = "daily"
-        customDays = []
-        notes = ""
-        trackDetails = false
-        detailType = "general"
-        useMultipleStates = false
-        isNegativeHabit = false
-    }
-}
 
 // MARK: - Main View
 
@@ -130,7 +17,7 @@ struct AddHabitView: View {
     
     // MARK: - State Properties
     
-    @StateObject private var viewModel = AddHabitViewModel()
+    @StateObject private var viewModel = HabitFormViewModel()
     
     // MARK: - Body
     
@@ -157,6 +44,7 @@ struct AddHabitView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundColor(Color(UIColor.secondaryLabel))
                     .disabled(viewModel.isSaving)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -166,9 +54,12 @@ struct AddHabitView: View {
                         if viewModel.isSaving {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle())
+                                .tint(Color(hex: "#FF8C42"))
                                 .scaleEffect(0.8)
                         } else {
                             Text("Save")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(viewModel.isValid ? Color(hex: "#FF8C42") : Color(UIColor.tertiaryLabel))
                         }
                     }
                     .disabled(!viewModel.isValid || viewModel.isSaving)

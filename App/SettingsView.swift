@@ -7,297 +7,177 @@
 
 import SwiftUI
 import CoreData
-import UniformTypeIdentifiers
-
-// MARK: - Document Picker Delegate
-
-@MainActor
-class DocumentPickerDelegate: NSObject, ObservableObject, UIDocumentPickerDelegate {
-    var onDocumentsPicked: ((URL) -> Void)?
-    
-    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        guard let url = urls.first else { return }
-        onDocumentsPicked?(url)
-    }
-}
 
 // MARK: - View Model
 
 @MainActor
 class SettingsViewModel: ObservableObject {
     // MARK: - Published Properties
-    
-    @Published var reminderEnabled: Bool = UserDefaults.standard.bool(forKey: "reminderEnabled")
-    @Published var reminderTime: Date = UserDefaults.standard.object(forKey: "reminderTime") as? Date ?? defaultReminderTime
-    @Published var iCloudSyncEnabled: Bool = UserDefaults.standard.bool(forKey: "iCloudSyncEnabled") {
+
+    @Published var reminderEnabled: Bool {
+        didSet { savePreferences() }
+    }
+    @Published var reminderTime: Date {
+        didSet { savePreferences() }
+    }
+    @Published var iCloudSyncEnabled: Bool {
         didSet {
             if iCloudSyncEnabled != oldValue {
-                NotificationCenter.default.post(
-                    name: Notification.Name("iCloudSyncSettingChanged"),
-                    object: nil
+                savePreferences()
+                NotificationCenter.default.post(name: .iCloudSyncSettingChanged, object: nil)
+                showAlert(
+                    title: "iCloud Sync",
+                    message: iCloudSyncEnabled ? Constants.syncEnabledMessage : Constants.syncDisabledMessage
                 )
             }
         }
     }
-    
-    @Published var showingExportActionSheet = false
-    @Published var showingImportPicker = false
-    @Published var showingClearDataAlert = false
-    @Published var showingExportProgressAlert = false
-    @Published var showingImportResultAlert = false
-    @Published var alertMessage = ""
-    @Published var importSuccess = false
-    
-    @Published var showingMonthPicker = false
-    @Published var selectedMonth = Date()
-    
-    @Published var documentPickerDelegate = DocumentPickerDelegate()
-    
+
+    // Alert state
+    @Published var alertConfig: AlertConfig?
+
+    // Sheet state
+    @Published var showingExportJournal = false
+
+    // MARK: - Types
+
+    struct AlertConfig: Identifiable {
+        let id = UUID()
+        let title: String
+        let message: String
+        let primaryButton: AlertButton?
+        let secondaryButton: AlertButton?
+
+        struct AlertButton {
+            let title: String
+            let role: ButtonRole?
+            let action: () -> Void
+        }
+
+        init(title: String, message: String, primaryButton: AlertButton? = nil, secondaryButton: AlertButton? = nil) {
+            self.title = title
+            self.message = message
+            self.primaryButton = primaryButton
+            self.secondaryButton = secondaryButton
+        }
+    }
+
     // MARK: - Constants
-    
-    enum Constants {
+
+    private enum Constants {
         static let notificationIdentifier = "bulletJournalReminder"
         static let notificationTitle = "Bullet Journal Reminder"
         static let notificationBody = "Time to log your day in your Bullet Journal"
-        
-        static let syncEnabledMessage = "iCloud sync enabled. Your data will sync across all devices signed into the same iCloud account."
-        static let syncDisabledMessage = "iCloud sync disabled. Data will only be stored locally on this device."
-        
+
+        static let syncEnabledMessage = "Your data will sync across all devices signed into the same iCloud account."
+        static let syncDisabledMessage = "Data will only be stored locally on this device."
+
         static let defaultCollectionNames = ["Daily Log", "Monthly Log", "Future Log", "Habit Tracker"]
-        static let entityNames = ["JournalEntry", "Collection", "Tag", "Habit", "HabitEntry"]
+        static let entityNames = ["JournalEntry", "Collection", "Tag", "Habit", "HabitEntry", "Note"]
     }
-    
-    private static let defaultReminderTime: Date = {
-        Calendar.current.date(from: DateComponents(hour: 20, minute: 0)) ?? Date()
-    }()
-    
+
+    // MARK: - Initialization
+
+    init() {
+        self.reminderEnabled = UserDefaults.standard.bool(forKey: "reminderEnabled")
+        self.reminderTime = UserDefaults.standard.object(forKey: "reminderTime") as? Date
+            ?? Calendar.current.date(from: DateComponents(hour: 20, minute: 0)) ?? Date()
+        self.iCloudSyncEnabled = UserDefaults.standard.bool(forKey: "iCloudSyncEnabled")
+    }
+
     // MARK: - Public Methods
-    
-    func savePreferences() {
+
+    func confirmClearData() {
+        alertConfig = AlertConfig(
+            title: "Clear All Data",
+            message: "Are you sure you want to clear all journal data? This action cannot be undone.",
+            primaryButton: .init(title: "Cancel", role: .cancel, action: {}),
+            secondaryButton: .init(title: "Clear", role: .destructive, action: { [weak self] in
+                self?.clearAllData()
+            })
+        )
+    }
+
+    // MARK: - Private Methods
+
+    private func savePreferences() {
         UserDefaults.standard.set(reminderEnabled, forKey: "reminderEnabled")
         UserDefaults.standard.set(reminderTime, forKey: "reminderTime")
         UserDefaults.standard.set(iCloudSyncEnabled, forKey: "iCloudSyncEnabled")
-        
+
         scheduleReminder()
     }
-    
-    func scheduleReminder() {
+
+    private func scheduleReminder() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
-        
+
         guard reminderEnabled else { return }
-        
+
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] granted, _ in
-            if granted {
-                Task { @MainActor in
-                    self?.scheduleNotification()
-                }
+            guard granted else { return }
+            Task { @MainActor in
+                self?.createNotification()
             }
         }
     }
-    
-    func exportHabitsCSV(from viewController: UIViewController, sourceView: UIView) {
-        performExport(
-            DataExportManager.shared.exportHabitsToCSV(),
-            message: "Failed to export habits data",
-            from: viewController,
-            sourceView: sourceView
-        )
-    }
-    
-    func exportHabitsCSVWithStats(from viewController: UIViewController, sourceView: UIView) {
-        performExport(
-            DataExportManager.shared.exportHabitsToCSVWithStats(),
-            message: "Failed to export habits data with statistics",
-            from: viewController,
-            sourceView: sourceView
-        )
-    }
-    
-    func exportEntriesCSV(from viewController: UIViewController, sourceView: UIView) {
-        performExport(
-            DataExportManager.shared.exportHabitEntriesToCSV(),
-            message: "Failed to export entries data",
-            from: viewController,
-            sourceView: sourceView
-        )
-    }
-    
-    func exportMonthlyReport(from viewController: UIViewController, sourceView: UIView, date: Date) {
-        let alert = createProgressAlert()
-        viewController.present(alert, animated: true)
-        
-        Task {
-            let url = await Task.detached {
-                DataExportManager.shared.exportMonthlyReport(for: date)
-            }.value
-            
-            if let url = url {
-                await presentShareSheet(for: url, from: viewController, sourceView: sourceView, dismissingAlert: alert)
-            } else {
-                await presentExportError(from: viewController, dismissingAlert: alert)
-            }
-        }
-    }
-    
-    func exportFullBackup(from viewController: UIViewController, sourceView: UIView) {
-        performExport(
-            DataExportManager.shared.exportAppDataToJSON(),
-            message: "Failed to create backup",
-            from: viewController,
-            sourceView: sourceView
-        )
-    }
-    
-    func importData() {
-        showingImportPicker = true
-    }
-    
-    func processImportedFile(url: URL) {
-        DataExportManager.shared.importAppDataFromJSON(url: url) { [weak self] success, message in
-            self?.importSuccess = success
-            self?.alertMessage = message
-            self?.showingImportResultAlert = true
-        }
-    }
-    
-    func clearAllData() {
-        let context = CoreDataManager.shared.container.viewContext
-        
-        clearEntities(in: context)
-        saveContext(context)
-        createDefaultCollections()
-    }
-    
-    // MARK: - Private Methods
-    
-    private func scheduleNotification() {
+
+    private func createNotification() {
         let content = UNMutableNotificationContent()
         content.title = Constants.notificationTitle
         content.body = Constants.notificationBody
         content.sound = .default
-        
+
         let calendar = Calendar.current
-        let hour = calendar.component(.hour, from: reminderTime)
-        let minute = calendar.component(.minute, from: reminderTime)
-        
         var dateComponents = DateComponents()
-        dateComponents.hour = hour
-        dateComponents.minute = minute
-        
+        dateComponents.hour = calendar.component(.hour, from: reminderTime)
+        dateComponents.minute = calendar.component(.minute, from: reminderTime)
+
         let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-        let request = UNNotificationRequest(
-            identifier: Constants.notificationIdentifier,
-            content: content,
-            trigger: trigger
-        )
-        
-        UNUserNotificationCenter.current().add(request) { _ in }
+        let request = UNNotificationRequest(identifier: Constants.notificationIdentifier, content: content, trigger: trigger)
+
+        UNUserNotificationCenter.current().add(request)
     }
-    
-    private func performExport(_ url: URL?, message: String, from viewController: UIViewController, sourceView: UIView) {
-        if let url = url {
-            DataExportManager.shared.shareFile(url: url, from: viewController, sourceView: sourceView)
-        } else {
-            showExportError(message: message)
-        }
+
+    private func showAlert(title: String, message: String) {
+        alertConfig = AlertConfig(title: title, message: message)
     }
-    
-    private func showExportError(message: String) {
-        alertMessage = message
-        showingExportProgressAlert = true
-    }
-    
-    private func createProgressAlert() -> UIAlertController {
-        UIAlertController(
-            title: "Generating Report",
-            message: "Please wait...",
-            preferredStyle: .alert
-        )
-    }
-    
-    private func presentShareSheet(for url: URL, from viewController: UIViewController, sourceView: UIView, dismissingAlert alert: UIAlertController) async {
-        await MainActor.run {
-            alert.dismiss(animated: true) {
-                let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-                
-                if let popoverController = activityVC.popoverPresentationController {
-                    popoverController.sourceView = sourceView
-                    popoverController.sourceRect = sourceView.bounds
-                }
-                
-                viewController.present(activityVC, animated: true)
-            }
-        }
-    }
-    
-    private func presentExportError(from viewController: UIViewController, dismissingAlert alert: UIAlertController) async {
-        await MainActor.run {
-            alert.dismiss(animated: true) {
-                let errorAlert = UIAlertController(
-                    title: "Export Failed",
-                    message: "Failed to create monthly report. Please try again.",
-                    preferredStyle: .alert
-                )
-                errorAlert.addAction(UIAlertAction(title: "OK", style: .default))
-                viewController.present(errorAlert, animated: true)
-            }
-        }
-    }
-    
-    private func clearEntities(in context: NSManagedObjectContext) {
+
+    private func clearAllData() {
+        let context = CoreDataManager.shared.container.viewContext
+
         for entityName in Constants.entityNames {
             let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: entityName)
             let batchDeleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
-            
-            do {
-                try context.execute(batchDeleteRequest)
-            } catch {
-                // Handle error silently
-            }
+            _ = try? context.execute(batchDeleteRequest)
         }
+
+        try? context.save()
+        createDefaultCollections(in: context)
+
+        showAlert(title: "Data Cleared", message: "All data has been cleared successfully.")
     }
-    
-    private func saveContext(_ context: NSManagedObjectContext) {
-        do {
-            try context.save()
-        } catch {
-            // Handle error silently
-        }
-    }
-    
-    private func createDefaultCollections() {
-        let context = CoreDataManager.shared.container.viewContext
-        
+
+    private func createDefaultCollections(in context: NSManagedObjectContext) {
         for name in Constants.defaultCollectionNames {
             let collection = Collection(context: context)
             collection.id = UUID()
             collection.name = name
         }
-        
-        do {
-            try context.save()
-        } catch {
-            // Handle error silently
-        }
+        try? context.save()
     }
+}
+
+// MARK: - Notification Name Extension
+
+extension Notification.Name {
+    static let iCloudSyncSettingChanged = Notification.Name("iCloudSyncSettingChanged")
 }
 
 // MARK: - Main View
 
 struct SettingsView: View {
-    // MARK: - State Properties
-    
     @StateObject private var viewModel = SettingsViewModel()
-    
-    // MARK: - Constants
-    
-    private enum Layout {
-        static let iconWidth: CGFloat = 30
-        static let cornerRadius: CGFloat = 10
-    }
-    
-    // MARK: - Body
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -307,257 +187,172 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Settings")
-            .actionSheet(isPresented: $viewModel.showingExportActionSheet) {
-                exportActionSheet
+            .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $viewModel.showingExportJournal) {
+                JournalExportView()
             }
-            .sheet(isPresented: $viewModel.showingImportPicker) {
-                importPickerSheet
-            }
-            .sheet(isPresented: $viewModel.showingMonthPicker) {
-                monthPickerSheet
-            }
-            .alert("Import Result", isPresented: $viewModel.showingImportResultAlert) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(viewModel.alertMessage)
-            }
-            .alert("Export Error", isPresented: $viewModel.showingExportProgressAlert) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(viewModel.alertMessage)
-            }
-            .alert("Clear All Data", isPresented: $viewModel.showingClearDataAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Clear", role: .destructive) {
-                    viewModel.clearAllData()
-                }
-            } message: {
-                Text("Are you sure you want to clear all journal data? This action cannot be undone.")
+            .alert(item: $viewModel.alertConfig) { config in
+                createAlert(from: config)
             }
         }
     }
-    
-    // MARK: - View Components
-    
+
+    // MARK: - Sections
+
     private var syncSection: some View {
         Section(header: Text("Sync")) {
             Toggle("iCloud Sync", isOn: $viewModel.iCloudSyncEnabled)
-                .onChange(of: viewModel.iCloudSyncEnabled) { _, newValue in
-                    viewModel.savePreferences()
-                    viewModel.alertMessage = newValue
-                        ? SettingsViewModel.Constants.syncEnabledMessage
-                        : SettingsViewModel.Constants.syncDisabledMessage
-                    viewModel.showingImportResultAlert = true
-                }
-            
+                .tint(AppTheme.accent)
+
             if viewModel.iCloudSyncEnabled {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(AppTheme.success)
                     Text("Syncing with iCloud")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(AppTheme.Font.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
                 }
             }
         }
     }
-    
+
     private var remindersSection: some View {
         Section(header: Text("Reminders")) {
             Toggle("Daily Reminder", isOn: $viewModel.reminderEnabled)
-                .onChange(of: viewModel.reminderEnabled) { _, _ in
-                    viewModel.savePreferences()
-                }
-            
+                .tint(AppTheme.accent)
+
             if viewModel.reminderEnabled {
                 DatePicker(
                     "Time",
                     selection: $viewModel.reminderTime,
                     displayedComponents: .hourAndMinute
                 )
-                .onChange(of: viewModel.reminderTime) { _, _ in
-                    viewModel.savePreferences()
-                }
+                .tint(AppTheme.accent)
             }
         }
     }
-    
+
     private var dataManagementSection: some View {
         Section(header: Text("Data Management")) {
             NavigationLink(destination: BackupRestoreView()) {
                 Label("Backup & Restore", systemImage: "arrow.clockwise.icloud")
+                    .foregroundStyle(AppTheme.textPrimary)
             }
-            
-            Button(action: { viewModel.showingExportActionSheet = true }) {
-                Label("Export Data", systemImage: "square.and.arrow.up")
-                    .foregroundStyle(.primary)
+
+            Button(action: { viewModel.showingExportJournal = true }) {
+                Label("Export Journal", systemImage: "square.and.arrow.up")
+                    .foregroundStyle(AppTheme.textPrimary)
             }
-            
-            Button(action: { viewModel.showingMonthPicker = true }) {
-                Label("Monthly Habit Report", systemImage: "calendar")
-                    .foregroundStyle(.primary)
-            }
-            
-            Button(action: viewModel.importData) {
-                Label("Import Backup", systemImage: "square.and.arrow.down")
-                    .foregroundStyle(.primary)
-            }
-            
-            Button(action: { viewModel.showingClearDataAlert = true }) {
+
+            Button(action: viewModel.confirmClearData) {
                 Label("Clear All Data", systemImage: "trash")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppTheme.failed)
             }
         }
     }
-    
+
     private var aboutSection: some View {
         Section(header: Text("About")) {
-            HStack {
-                Text("Version")
-                Spacer()
-                Text("1.0")
-                    .foregroundStyle(.secondary)
-            }
-            
-            HStack {
-                Text("Made with")
-                Spacer()
-                Text("❤️ & SwiftUI")
-                    .foregroundStyle(.secondary)
-            }
-            
+            LabeledContent("Version", value: "1.0")
+
+            LabeledContent("Made with", value: "❤️ & SwiftUI")
+
             NavigationLink {
-                Text("This would show additional information about the app, how to use it, etc.")
-                    .padding()
+                HelpView()
             } label: {
                 Label("Help & Support", systemImage: "questionmark.circle")
+                    .foregroundStyle(AppTheme.textPrimary)
             }
         }
     }
-    
-    // MARK: - Sheets and Alerts
-    
-    private var exportActionSheet: ActionSheet {
-        ActionSheet(
-            title: Text("Export Data"),
-            message: Text("Choose what data to export"),
-            buttons: [
-                .default(Text("Export Habits as CSV")) {
-                    performExport(viewModel.exportHabitsCSV)
-                },
-                .default(Text("Export Habits with Statistics")) {
-                    performExport(viewModel.exportHabitsCSVWithStats)
-                },
-                .default(Text("Export Habit Entries as CSV")) {
-                    performExport(viewModel.exportEntriesCSV)
-                },
-                .default(Text("Full Backup (JSON)")) {
-                    performExport(viewModel.exportFullBackup)
-                },
-                .cancel()
-            ]
-        )
-    }
-    
-    private var importPickerSheet: some View {
-        ImportDocumentPickerView(delegate: viewModel.documentPickerDelegate) { url in
-            viewModel.processImportedFile(url: url)
+
+    // MARK: - Alert Builder
+
+    private func createAlert(from config: SettingsViewModel.AlertConfig) -> Alert {
+        if let primary = config.primaryButton, let secondary = config.secondaryButton {
+            return Alert(
+                title: Text(config.title),
+                message: Text(config.message),
+                primaryButton: .init(primary.role, action: primary.action) { Text(primary.title) },
+                secondaryButton: .init(secondary.role, action: secondary.action) { Text(secondary.title) }
+            )
+        } else {
+            return Alert(
+                title: Text(config.title),
+                message: Text(config.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
-    }
-    
-    private var monthPickerSheet: some View {
-        MonthPickerView(selectedMonth: $viewModel.selectedMonth) {
-            performExport { viewController, sourceView in
-                viewModel.exportMonthlyReport(
-                    from: viewController,
-                    sourceView: sourceView,
-                    date: viewModel.selectedMonth
-                )
-                viewModel.showingMonthPicker = false
-            }
-        }
-    }
-    
-    // MARK: - Helper Methods
-    
-    private func performExport(_ action: @escaping (UIViewController, UIView) -> Void) {
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = windowScene.windows.first,
-              let rootVC = window.rootViewController else { return }
-        
-        action(rootVC, window)
     }
 }
 
-// MARK: - Supporting Views
+// MARK: - Alert Button Extension
 
-struct MonthPickerView: View {
-    @Binding var selectedMonth: Date
-    let onExport: () -> Void
-    
-    @Environment(\.dismiss) private var dismiss
-    
-    @State private var selectedDate = Date()
-    
-    private enum Layout {
-        static let verticalSpacing: CGFloat = 20
-        static let cornerRadius: CGFloat = 10
+private extension Alert.Button {
+    init(_ role: ButtonRole?, action: @escaping () -> Void, @ViewBuilder label: () -> Text) {
+        guard let role = role else {
+            self = .default(label(), action: action)
+            return
+        }
+
+        if role == .destructive {
+            self = .destructive(label(), action: action)
+        } else if role == .cancel {
+            self = .cancel(label(), action: action)
+        } else {
+            self = .default(label(), action: action)
+        }
     }
-    
+}
+
+// MARK: - Help View
+
+struct HelpView: View {
     var body: some View {
-        NavigationStack {
-            VStack(spacing: Layout.verticalSpacing) {
-                Text("Select Month for Report")
-                    .font(.headline)
-                    .padding(.top)
-                
-                DatePicker(
-                    "Month",
-                    selection: $selectedDate,
-                    displayedComponents: [.date]
+        ScrollView {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.xl) {
+                helpSection(
+                    title: "Getting Started",
+                    content: "Track your daily habits by tapping on the checkboxes in the Habits tab. Swipe through dates to view your history."
                 )
-                .datePickerStyle(.wheel)
-                .labelsHidden()
-                
-                Button(action: {
-                    selectedMonth = selectedDate
-                    onExport()
-                }) {
-                    Label("Export Report", systemImage: "square.and.arrow.up")
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .cornerRadius(Layout.cornerRadius)
-                }
-                .padding(.horizontal)
-                
-                Spacer()
+
+                helpSection(
+                    title: "Dashboard",
+                    content: "View your habit statistics, streaks, and completion rates at a glance."
+                )
+
+                helpSection(
+                    title: "Journal",
+                    content: "Add notes and review your daily activity. Tap on a date to see details for that day."
+                )
+
+                helpSection(
+                    title: "Backup & Sync",
+                    content: "Enable iCloud Sync to keep your data synchronized across all your devices. Use Backup & Restore for manual backups."
+                )
+
+                helpSection(
+                    title: "Export Journal",
+                    content: "Export your journal entries as PDF for archiving or JSON for backup. Choose custom date ranges."
+                )
             }
-            .padding()
-            .navigationBarItems(trailing: Button("Cancel", action: dismiss.callAsFunction))
+            .padding(AppTheme.Spacing.lg)
+        }
+        .navigationTitle("Help & Support")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func helpSection(title: String, content: String) -> some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+            Text(title)
+                .font(AppTheme.Font.headline)
+            Text(content)
+                .font(AppTheme.Font.body)
+                .foregroundStyle(AppTheme.textSecondary)
         }
     }
 }
 
-// MARK: - UIKit Bridges
-
-struct ImportDocumentPickerView: UIViewControllerRepresentable {
-    let delegate: DocumentPickerDelegate
-    let onPick: (URL) -> Void
-    
-    init(delegate: DocumentPickerDelegate, onPick: @escaping (URL) -> Void) {
-        self.delegate = delegate
-        self.onPick = onPick
-        delegate.onDocumentsPicked = onPick
-    }
-    
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.json])
-        picker.allowsMultipleSelection = false
-        picker.delegate = delegate
-        return picker
-    }
-    
-    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+#Preview {
+    SettingsView()
 }

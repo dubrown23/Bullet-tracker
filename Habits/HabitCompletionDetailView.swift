@@ -15,9 +15,10 @@ struct HabitCompletionDetailView: View {
     let date: Date
     
     // MARK: - Environment Properties
-    
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
+    @EnvironmentObject private var dataRepository: HabitDataRepository
     
     // MARK: - State Properties
     
@@ -330,6 +331,9 @@ struct HabitCompletionDetailView: View {
             CoreDataManager.shared.saveContext()
         }
         
+        // Invalidate the cache so the checkbox reflects the updated details
+        dataRepository.invalidateCache(for: habit, on: date)
+        
         dismiss()
     }
     
@@ -369,17 +373,21 @@ struct HabitCompletionDetailView: View {
     private func clearEntry() {
         let startOfDay = Calendar.current.startOfDay(for: date)
         guard let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) else { return }
-        
+
         let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
         fetchRequest.predicate = NSPredicate(
             format: "habit == %@ AND date >= %@ AND date < %@",
             habit, startOfDay as NSDate, endOfDay as NSDate
         )
-        
+
         do {
             let entries = try viewContext.fetch(fetchRequest)
             entries.forEach(viewContext.delete)
             try viewContext.save()
+
+            // Invalidate the cache so the checkbox updates
+            dataRepository.invalidateCache(for: habit, on: date)
+
             dismiss()
         } catch {
             // Handle error silently in production

@@ -2,149 +2,182 @@ import SwiftUI
 
 struct HabitCheckboxView: View {
     // MARK: - Properties
-    
+
     @ObservedObject var habit: Habit
     let date: Date
-    
+
     // MARK: - Dependencies
-    
+
     @EnvironmentObject private var dataRepository: HabitDataRepository
-    
-    // MARK: - State Properties
-    
-    @State private var isAnimating: Bool = false
-    @State private var showingDetailView: Bool = false
-    @State private var pendingOperation: PendingOperation?
-    
-    // MARK: - Types
-    
-    private enum PendingOperation: Equatable {
-        case toggle
-        case setState(Int)
-        case delete
+
+    // MARK: - Size Class Adaptation
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    // Adaptive dimensions
+    private var outerCircleSize: CGFloat {
+        horizontalSizeClass == .regular ? 40 : 32
     }
-    
-    
+
+    private var innerCircleSize: CGFloat {
+        horizontalSizeClass == .regular ? 30 : 24
+    }
+
+    private var glowSize: CGFloat {
+        horizontalSizeClass == .regular ? 48 : 38
+    }
+
+    private var checkmarkSize: CGFloat {
+        horizontalSizeClass == .regular ? 15 : 12
+    }
+
+    private var tapAreaSize: CGFloat {
+        horizontalSizeClass == .regular ? 56 : 44
+    }
+
+    // MARK: - State Properties
+
+    @State private var isAnimating: Bool = false
+    @State private var showCheckmarkPop: Bool = false
+    @State private var showingDetailView: Bool = false
+
     // MARK: - Computed Properties
-    
+
     /// Gets the current completion state from the repository
     private var completionState: HabitCompletionState {
         dataRepository.getCompletionState(for: habit, on: date)
     }
-    
+
     /// Whether the habit is currently checked/completed
     private var isChecked: Bool {
         completionState.isCompleted
     }
-    
+
     /// Whether the habit has meaningful details
     private var hasDetails: Bool {
         completionState.hasDetails
     }
-    
+
     private var shouldTrackDetails: Bool {
         (habit.value(forKey: "trackDetails") as? Bool) ?? false
     }
-    
+
     private var useMultipleStates: Bool {
         (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
     }
-    
+
     private var isNegativeHabit: Bool {
         (habit.value(forKey: "isNegativeHabit") as? Bool) ?? false
     }
-    
+
     private var isFutureDate: Bool {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         let checkDate = calendar.startOfDay(for: date)
         return checkDate > today
     }
-    
+
     // MARK: - Body
-    
+
     var body: some View {
-        Button(action: handleTap) {
-            checkboxContent
-        }
-        .buttonStyle(PlainButtonStyle())
-        .frame(width: 44, height: 44)
-        .contextMenu {
-            contextMenuContent
-        }
-        .sheet(isPresented: $showingDetailView) {
-            HabitCompletionDetailView(habit: habit, date: date)
-        }
-        .onLongPressGesture {
-            showingDetailView = true
-        }
-        .onChange(of: pendingOperation) { _, operation in
-            if let operation = operation {
-                processPendingOperation(operation)
+        checkboxContent
+            .contentShape(Rectangle()) // Ensure entire area is tappable
+            .onTapGesture {
+                handleTap()
             }
-        }
+            .onLongPressGesture(minimumDuration: 0.5) {
+                showingDetailView = true
+            }
+            .contextMenu {
+                contextMenuContent
+            }
+            .sheet(isPresented: $showingDetailView) {
+                HabitCompletionDetailView(habit: habit, date: date)
+                    .environmentObject(dataRepository)
+            }
     }
-    
+
     // MARK: - View Components
-    
+
     private var checkboxContent: some View {
-        ZStack {
+        let habitColor = Color(hex: habit.color ?? "#FF8C42")
+        let strokeWidth: CGFloat = horizontalSizeClass == .regular ? 3.0 : 2.5
+
+        return ZStack {
+            // Subtle glow when checked
+            if isChecked {
+                Circle()
+                    .fill(getStateColor().opacity(0.2))
+                    .frame(width: glowSize, height: glowSize)
+                    .scaleEffect(isAnimating ? 1.3 : 1.0)
+            }
+
             // Outer ring in habit color
             Circle()
-                .strokeBorder(Color(hex: habit.color ?? "#007AFF"), lineWidth: isChecked ? 2 : 1)
-                .frame(width: 32, height: 32)
-            
+                .strokeBorder(
+                    isChecked ? getStateColor() : habitColor.opacity(0.5),
+                    lineWidth: isChecked ? strokeWidth : strokeWidth - 1
+                )
+                .frame(width: outerCircleSize, height: outerCircleSize)
+
             // Inner circle with state color
             Circle()
                 .fill(isChecked ? getStateColor() : Color.clear)
-                .frame(width: 24, height: 24)
-                .scaleEffect(isAnimating ? 1.2 : 1.0)
-                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isAnimating)
-            
+                .frame(width: innerCircleSize, height: innerCircleSize)
+                .scaleEffect(isAnimating ? 1.15 : 1.0)
+
+            // Checkmark with pop animation
             if isChecked {
                 Image(systemName: getStateIcon())
                     .foregroundStyle(.white)
-                    .font(.system(size: 12, weight: .bold))
-                    .opacity(isAnimating ? 0.0 : 1.0)
-                    .animation(.easeInOut(duration: 0.2), value: isAnimating)
+                    .font(.system(size: checkmarkSize, weight: .bold))
+                    .scaleEffect(showCheckmarkPop ? 1.0 : 0.5)
+                    .opacity(showCheckmarkPop ? 1.0 : 0.0)
             }
-            
+
             // Show a note indicator if there are details
             if hasDetails && isChecked {
                 detailIndicator
             }
         }
+        .frame(width: tapAreaSize, height: tapAreaSize)
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isChecked)
+        .animation(.spring(response: 0.2, dampingFraction: 0.5), value: isAnimating)
+        .animation(.spring(response: 0.25, dampingFraction: 0.6), value: showCheckmarkPop)
     }
-    
+
     private var detailIndicator: some View {
-        Circle()
+        let indicatorSize: CGFloat = horizontalSizeClass == .regular ? 14 : 12
+        let iconSize: CGFloat = horizontalSizeClass == .regular ? 9 : 8
+        let offset: CGFloat = horizontalSizeClass == .regular ? 16 : 12
+
+        return Circle()
             .fill(Color.white)
-            .frame(width: 12, height: 12)
+            .frame(width: indicatorSize, height: indicatorSize)
             .overlay(
                 Image(systemName: "note.text")
-                    .font(.system(size: 8))
+                    .font(.system(size: iconSize))
                     .foregroundStyle(Color(hex: habit.color ?? "#007AFF"))
             )
-            .offset(x: 12, y: -12)
+            .offset(x: offset, y: -offset)
     }
-    
+
     @ViewBuilder
     private var contextMenuContent: some View {
         if isChecked {
             Button(action: { showingDetailView = true }) {
                 Label("Add/Edit Details", systemImage: "square.and.pencil")
             }
-            
-            Button(action: { pendingOperation = .toggle }) {
+
+            Button(action: { performUncheck() }) {
                 Label("Uncheck", systemImage: "circle")
             }
         } else {
-            Button(action: { pendingOperation = .toggle }) {
+            Button(action: { performCheck() }) {
                 Label("Complete", systemImage: "checkmark.circle")
             }
-            
+
             Button(action: {
-                pendingOperation = .toggle
+                performCheck()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     showingDetailView = true
                 }
@@ -153,117 +186,155 @@ struct HabitCheckboxView: View {
             }
         }
     }
-    
-    // MARK: - Helper Methods
-    
+
+    // MARK: - Action Methods
+
     private func handleTap() {
         guard !isFutureDate else { return }
-        
+
         // If habit tracks details and is already checked, open detail view
         if shouldTrackDetails && isChecked {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             showingDetailView = true
-        } else {
-            // Normal behavior - cycle through states
-            let nextState = getNextState()
-            if nextState == 0 {
-                pendingOperation = .delete
+            return
+        }
+
+        // Toggle or cycle through states (haptics handled in each method)
+        if isChecked {
+            if useMultipleStates && !isNegativeHabit {
+                cycleToNextState()
             } else {
-                pendingOperation = .setState(nextState)
+                performUncheck()
             }
-            
-            // If we just completed a habit that tracks details, show the detail view
-            if nextState == 1 && shouldTrackDetails && !hasDetails {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    showingDetailView = true
+        } else {
+            performCheck()
+        }
+    }
+
+    private func performCheck() {
+        // Stronger haptic for completion
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+        // Animate the circle expansion
+        withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) {
+            isAnimating = true
+        }
+
+        // Update data
+        dataRepository.updateEntry(for: habit, on: date, completed: true, state: 1)
+
+        // Pop in the checkmark slightly delayed
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                showCheckmarkPop = true
+            }
+        }
+
+        // Reset circle animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            withAnimation {
+                isAnimating = false
+            }
+        }
+
+        // Show detail view if this habit tracks details
+        if shouldTrackDetails {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                showingDetailView = true
+            }
+        }
+    }
+
+    private func performUncheck() {
+        // Light haptic for uncheck
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
+        // Animate checkmark out first
+        withAnimation(.easeOut(duration: 0.1)) {
+            showCheckmarkPop = false
+        }
+
+        // Then animate circle
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                isAnimating = true
+            }
+        }
+
+        // Remove entry
+        dataRepository.removeEntry(for: habit, on: date)
+
+        // Reset animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            withAnimation {
+                isAnimating = false
+            }
+        }
+    }
+
+    private func cycleToNextState() {
+        let currentState = completionState.state
+        let nextState: Int
+
+        switch currentState {
+        case 1: nextState = 2  // Success -> Partial
+        case 2: nextState = 3  // Partial -> Failed
+        case 3: nextState = 0  // Failed -> None (uncheck)
+        default: nextState = 1 // Any other -> Success
+        }
+
+        // Haptic feedback
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
+        // Animate
+        withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) {
+            isAnimating = true
+        }
+
+        if nextState == 0 {
+            withAnimation(.easeOut(duration: 0.1)) {
+                showCheckmarkPop = false
+            }
+            dataRepository.removeEntry(for: habit, on: date)
+        } else {
+            dataRepository.updateEntry(for: habit, on: date, completed: true, state: nextState)
+            // Quick pop for icon change
+            showCheckmarkPop = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                    showCheckmarkPop = true
                 }
             }
         }
+
+        // Reset animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            withAnimation {
+                isAnimating = false
+            }
+        }
     }
-    
+
+    // MARK: - Helper Methods
+
     private func getStateColor() -> Color {
         // For negative habits, being checked means failure (red)
         if isNegativeHabit {
-            return .red
+            return AppTheme.failed
         }
-        
+
         // Use the state color from completion state
         return completionState.stateColor
     }
-    
+
     private func getStateIcon() -> String {
         // For negative habits, show X when checked
         if isNegativeHabit {
             return "xmark"
         }
-        
+
         // Use the state icon from completion state
         return completionState.stateIcon
-    }
-    
-    private func getNextState() -> Int {
-        // For negative habits or non-multi-state, simple toggle
-        if isNegativeHabit || !useMultipleStates {
-            return isChecked ? 0 : 1
-        }
-        
-        if !isChecked {
-            return 1 // Not checked -> Success
-        }
-        
-        switch completionState.state {
-        case 1: return 2  // Success -> Partial
-        case 2: return 3  // Partial -> Failed
-        case 3: return 0  // Failed -> None
-        default: return 1 // Any other -> Success
-        }
-    }
-    
-    
-    private func processPendingOperation(_ operation: PendingOperation) {
-        // Trigger animation
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-            isAnimating = true
-        }
-        
-        // Process operation using repository
-        switch operation {
-        case .toggle:
-            if isNegativeHabit || !useMultipleStates {
-                // Simple toggle
-                let newCompleted = !isChecked
-                dataRepository.updateEntry(
-                    for: habit,
-                    on: date,
-                    completed: newCompleted,
-                    state: newCompleted ? 1 : 0
-                )
-            } else {
-                // Multi-state toggle
-                let nextState = getNextState()
-                if nextState == 0 {
-                    dataRepository.removeEntry(for: habit, on: date)
-                } else {
-                    dataRepository.updateEntry(for: habit, on: date, completed: true, state: nextState)
-                }
-            }
-            
-        case .setState(let state):
-            dataRepository.updateEntry(for: habit, on: date, completed: true, state: state)
-            
-        case .delete:
-            dataRepository.removeEntry(for: habit, on: date)
-        }
-        
-        // Reset animation and pending operation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                isAnimating = false
-            }
-            pendingOperation = nil
-            
-            // Haptic feedback
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        }
     }
 }
 
@@ -274,7 +345,7 @@ struct HabitCheckboxView: View {
     let habit = Habit(context: context)
     habit.name = "Sample Habit"
     habit.color = "#007AFF"
-    
+
     return HabitCheckboxView(habit: habit, date: Date())
         .padding()
 }

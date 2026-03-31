@@ -7,7 +7,6 @@
 
 import SwiftUI
 import CoreData
-import Combine
 
 // MARK: - Shared Habit Form View Model
 
@@ -15,10 +14,12 @@ import Combine
 class HabitFormViewModel: ObservableObject {
     // MARK: - Published Properties
     
-    @Published var name = ""
+    @Published var name = "" {
+        didSet { validateForm() }
+    }
     @Published var selectedIcon = "circle.fill"
-    @Published var selectedColor = "#007AFF"
-    @Published var selectedFrequency = "daily"
+    @Published var selectedColor = "#FF8C42"
+    @Published var selectedFrequency = HabitFrequency.daily.rawValue
     @Published var customDays: [Int] = []
     @Published var notes = ""
     @Published var trackDetails = false
@@ -31,56 +32,21 @@ class HabitFormViewModel: ObservableObject {
     
     // MARK: - Private Properties
     
-    private var cancellables = Set<AnyCancellable>()
     private var habit: Habit?
     
     // MARK: - Initialization
     
     init(habit: Habit? = nil) {
         self.habit = habit
-        setupValidation()
-        setupDebouncing()
         
         if let habit = habit {
             loadHabitData(from: habit)
         }
-    }
-    
-    // MARK: - Setup Methods
-    
-    private func setupValidation() {
-        $name
-            .map { name in
-                !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }
-            .assign(to: &$isValid)
-    }
-    
-    private func setupDebouncing() {
-        // Debounce name changes
-        $name
-            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.validateForm()
-            }
-            .store(in: &cancellables)
         
-        // Debounce notes
-        $notes
-            .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
-            .sink { _ in
-                // Could trigger auto-save or other actions
-            }
-            .store(in: &cancellables)
-        
-        // Debounce custom days changes
-        $customDays
-            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
-            .sink { _ in
-                // Could validate custom days selection
-            }
-            .store(in: &cancellables)
+        validateForm()
     }
+    
+    // MARK: - Validation
     
     private func validateForm() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -93,7 +59,7 @@ class HabitFormViewModel: ObservableObject {
         name = habit.name ?? ""
         selectedIcon = habit.icon ?? "circle.fill"
         selectedColor = habit.color ?? "#007AFF"
-        selectedFrequency = habit.frequency ?? "daily"
+        selectedFrequency = habit.frequency ?? HabitFrequency.daily.rawValue
         notes = habit.notes ?? ""
         
         if let customDaysString = habit.customDays, !customDaysString.isEmpty {

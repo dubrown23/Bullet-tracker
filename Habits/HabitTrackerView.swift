@@ -12,48 +12,42 @@ struct HabitTrackerView: View {
     @StateObject private var viewModel = HabitTrackerViewModel()
     @State private var isEditMode: EditMode = .inactive
     @State private var lastDateCheck = Date()
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    
+
     var body: some View {
-        contentView
-            .navigationTitle("Habit Tracker")
-            .navigationBarBackButtonHidden(true) // Hide default back button
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "chevron.left")
-                            .foregroundColor(.blue)
-                            .imageScale(.large)
-                    }
-                }
-                
-                // Separate toolbar items to avoid constraint conflicts
+        NavigationStack {
+            contentView
+                .navigationTitle("Habits")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { viewModel.showingAddHabitSheet = true }) {
-                        Image(systemName: "plus")
-                            .foregroundColor(.blue)
-                    }
-                }
-                
-                ToolbarItem(placement: .secondaryAction) {
-                    Button(action: {
-                        withAnimation {
-                            isEditMode = isEditMode == .active ? .inactive : .active
-                        }
-                    }) {
-                        Group {
-                            if isEditMode == .active {
-                                Text("Done")
-                                    .fontWeight(.bold)
-                            } else {
-                                Image(systemName: "arrow.up.arrow.down")
+                    HStack(spacing: AppTheme.Spacing.lg) {
+                        // Reorder button
+                        if !viewModel.habits.isEmpty {
+                            Button(action: {
+                                withAnimation {
+                                    isEditMode = isEditMode == .active ? .inactive : .active
+                                }
+                            }) {
+                                if isEditMode == .active {
+                                    Text("Done")
+                                        .font(AppTheme.Font.callout)
+                                        .foregroundColor(AppTheme.accent)
+                                } else {
+                                    Image(systemName: "arrow.up.arrow.down")
+                                        .foregroundColor(AppTheme.accent)
+                                }
                             }
+                            .accessibilityLabel(isEditMode == .active ? "Done reordering" : "Reorder habits")
                         }
-                        .foregroundColor(viewModel.habits.isEmpty ? .gray : .blue)
-                        .frame(minWidth: 44, alignment: .center)
+
+                        // Add habit button
+                        Button(action: { viewModel.showingAddHabitSheet = true }) {
+                            Image(systemName: "plus")
+                                .foregroundColor(AppTheme.accent)
+                        }
+                        .accessibilityLabel("Add new habit")
                     }
-                    .disabled(viewModel.habits.isEmpty)
                 }
             }
             .sheet(isPresented: $viewModel.showingAddHabitSheet, onDismiss: {
@@ -82,24 +76,24 @@ struct HabitTrackerView: View {
                 Text("Are you sure you want to delete this habit? All tracking data will be lost.")
             }
             .onAppear {
-                viewModel.updateVisibleDates()
                 viewModel.loadHabits()
-                viewModel.loadHabitEntries()
+                viewModel.updateVisibleDates() // This already calls loadHabitEntries()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 handleScenePhaseChange(newPhase)
             }
+        }
     }
     
     // Main content view
     private var contentView: some View {
         VStack(spacing: 0) {
-            datePickerView
-            
+            monthSelectorView
+
             if isEditMode == .active && !viewModel.habits.isEmpty {
                 reorderInstructionView
             }
-            
+
             if viewModel.habits.isEmpty {
                 emptyStateView
             } else {
@@ -108,157 +102,180 @@ struct HabitTrackerView: View {
         }
     }
     
-    // Date picker component
-    private var datePickerView: some View {
-        DatePicker("Date Range", selection: $viewModel.selectedDate, displayedComponents: .date)
-            .datePickerStyle(CompactDatePickerStyle())
-            .padding(.horizontal)
-            .onChange(of: viewModel.selectedDate) { _, _ in
-                viewModel.updateVisibleDates()
-                viewModel.loadHabitEntries()
+    // Month selector component
+    private var monthSelectorView: some View {
+        HStack(spacing: 4) {
+            // Previous month button
+            Button(action: {
+                if let newDate = Calendar.current.date(byAdding: .month, value: -1, to: viewModel.selectedDate) {
+                    viewModel.selectedDate = newDate
+                    viewModel.updateVisibleDates() // Already calls loadHabitEntries()
+                }
+            }) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppTheme.accent)
+                    .frame(width: 36, height: 36)
             }
+
+            // Current month/year display
+            Text(monthYearString(from: viewModel.selectedDate))
+                .font(AppTheme.Font.headline)
+                .frame(minWidth: 140)
+
+            // Next month button
+            Button(action: {
+                if let newDate = Calendar.current.date(byAdding: .month, value: 1, to: viewModel.selectedDate) {
+                    if newDate <= Date() {
+                        viewModel.selectedDate = min(newDate, Date())
+                        viewModel.updateVisibleDates() // Already calls loadHabitEntries()
+                    }
+                }
+            }) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(isCurrentMonth ? .gray.opacity(0.5) : AppTheme.accent)
+                    .frame(width: 36, height: 36)
+            }
+            .disabled(isCurrentMonth)
+
+            Spacer()
+
+            // Today button - jump to current date
+            if !isCurrentMonth {
+                Button(action: {
+                    viewModel.selectedDate = Date()
+                    viewModel.updateVisibleDates() // Already calls loadHabitEntries()
+                }) {
+                    Text("Today")
+                        .font(AppTheme.Font.callout)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(AppTheme.accent)
+                        .cornerRadius(14)
+                }
+            }
+        }
+        .padding(.horizontal, AppTheme.Spacing.md)
+        .padding(.vertical, AppTheme.Spacing.sm)
+        .background(AppTheme.cardBackground.opacity(0.5))
+    }
+
+    // Helper to check if selected date is in current month
+    private var isCurrentMonth: Bool {
+        Calendar.current.isDate(viewModel.selectedDate, equalTo: Date(), toGranularity: .month)
+    }
+
+    // Format month and year
+    private func monthYearString(from date: Date) -> String {
+        DateFormatters.monthYear.string(from: date)
     }
     
     // Reorder instruction banner
     private var reorderInstructionView: some View {
-        HStack {
+        HStack(spacing: AppTheme.Spacing.sm) {
             Image(systemName: "arrow.up.arrow.down")
-                .foregroundColor(.blue)
+                .foregroundColor(AppTheme.accent)
             Text("Drag habits to reorder them")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(AppTheme.Font.caption)
+                .foregroundColor(AppTheme.textSecondary)
         }
-        .padding(.top, 4)
+        .padding(.vertical, AppTheme.Spacing.xs)
     }
     
     // Empty state view
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: AppTheme.Spacing.xl) {
             Spacer()
-            
-            Image(systemName: "chart.bar")
-                .font(.system(size: 70))
-                .foregroundColor(.blue)
-            
+
+            ZStack {
+                Circle()
+                    .fill(AppTheme.accent.opacity(0.15))
+                    .frame(width: 120, height: 120)
+
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 50))
+                    .foregroundColor(AppTheme.accent)
+            }
+
             Text("No Habits Yet")
-                .font(.title2)
-            
+                .font(AppTheme.Font.title)
+
             Text("Add your first habit to start tracking your daily progress")
+                .font(AppTheme.Font.body)
                 .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
-            
+                .foregroundColor(AppTheme.textSecondary)
+                .padding(.horizontal, 32)
+
             Button(action: {
                 viewModel.showingAddHabitSheet = true
             }) {
-                HStack {
+                HStack(spacing: AppTheme.Spacing.sm) {
                     Image(systemName: "plus.circle.fill")
                     Text("Add Habit")
                 }
-                .padding()
-                .background(Color.blue)
+                .font(AppTheme.Font.headline)
+                .padding(.horizontal, AppTheme.Spacing.xxl)
+                .padding(.vertical, AppTheme.Spacing.md)
+                .background(AppTheme.accent)
                 .foregroundColor(.white)
-                .cornerRadius(10)
+                .cornerRadius(AppTheme.Radius.medium)
             }
-            .padding(.top)
-            
+            .padding(.top, AppTheme.Spacing.sm)
+
             Spacer()
         }
         .padding()
     }
     
-    // Main habits view with date headers and habit list
+    // Main habits view with habit headers and date rows
     private var habitsView: some View {
         VStack(spacing: 0) {
-            // Date headers - don't show in edit mode
             if isEditMode == .inactive {
-                dateHeadersView
+                // Synchronized scrolling layout
+                synchronizedHabitGrid
+            } else {
+                // Edit mode - show habits list for reordering
+                habitsEditList
             }
-            
-            // Habits list
-            habitsList
         }
     }
-    
-    // Date headers section
-    private var dateHeadersView: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top) {
-                // Column for habit names
-                VStack(alignment: .leading) {
-                    Text("Habits")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .frame(width: 120, height: 40, alignment: .leading)
-                        .padding(.leading, 8)
+
+    // Main habit tracking grid
+    private var synchronizedHabitGrid: some View {
+        VStack(spacing: 0) {
+            // Grid with dates vertical, habits horizontal
+            HabitGridView(
+                habits: viewModel.habits,
+                dates: viewModel.visibleDates,
+                dataRepository: viewModel.dataRepository,
+                onHabitTap: { habit in
+                    viewModel.selectedHabit = habit
+                },
+                onHabitLongPress: { habit in
+                    viewModel.habitToDelete = habit
+                    viewModel.showingDeleteAlert = true
                 }
-                .frame(width: 120)
-                
-                // Date columns
-                HStack(spacing: 12) {
-                    ForEach(viewModel.visibleDates, id: \.self) { date in
-                        dateColumn(for: date)
-                    }
-                }
-            }
-            .padding(.leading, 8)
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(.horizontal)
-        .padding(.bottom, 8)
     }
-    
-    // Extract date column for reusability
-    @ViewBuilder
-    private func dateColumn(for date: Date) -> some View {
-        VStack {
-            Text(DateFormatters.dateFormatter.string(from: date))
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            Text(DateFormatters.dayFormatter.string(from: date))
-                .font(.caption2)
-                .foregroundColor(.secondary)
-        }
-        .frame(width: 44)
-    }
-    
-    // Habits list with reordering support
-    private var habitsList: some View {
+
+    // Habits list for edit/reorder mode
+    private var habitsEditList: some View {
         List {
-            // Habits section
             Section {
                 ForEach(viewModel.habits) { habit in
-                    habitRow(for: habit)
+                    HabitRowReorderView(habit: habit)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                        .listRowBackground(Color.clear)
                 }
                 .onMove(perform: viewModel.reorderHabits)
-            }
-            
-            // Stats section when not in edit mode
-            if isEditMode == .inactive {
-                Section {
-                    HabitStatsView(habits: viewModel.habits)
-                }
             }
         }
         .listStyle(PlainListStyle())
         .environment(\.editMode, $isEditMode)
-    }
-    
-    // Individual habit row based on edit mode
-    private func habitRow(for habit: Habit) -> some View {
-        Group {
-            if isEditMode == .active {
-                // Simplified view during reordering
-                HabitRowReorderView(habit: habit)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
-                    .listRowBackground(Color.clear)
-            } else {
-                // Normal view
-                HabitRowWithEdit(habit: habit, dates: viewModel.visibleDates, viewModel: viewModel)
-                    .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
-                    .listRowBackground(Color.clear)
-            }
-        }
     }
     
     // MARK: - Helper Methods
@@ -291,219 +308,32 @@ struct HabitTrackerView: View {
         }
     }
     
-    private func processWidgetCommands() {
-        guard let appGroupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.db23.Bullet-Tracker") else {
-            return
-        }
-        
-        let commandsURL = appGroupURL.appendingPathComponent("widget_commands.json")
-        
-        guard FileManager.default.fileExists(atPath: commandsURL.path) else {
-            return
-        }
-        
-        do {
-            let data = try Data(contentsOf: commandsURL)
-            guard let commands = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-                return
-            }
-            
-            let context = CoreDataManager.shared.container.viewContext
-            
-            for command in commands {
-                guard let action = command["action"] as? String,
-                      let habitIDString = command["habitID"] as? String,
-                      let _ = command["habitName"] as? String,
-                      let _ = command["timestamp"] as? Double else {
-                    continue
-                }
-                
-                if action == "toggle_habit" {
-                    processToggleHabitCommand(habitID: habitIDString, context: context)
-                }
-            }
-            
-            // Clear the commands file
-            try "[]".write(to: commandsURL, atomically: true, encoding: .utf8)
-            
-            // Save any changes
-            if context.hasChanges {
-                try context.save()
-            }
-            
-            // Refresh the data
-            performManualRefresh()
-            
-        } catch {
-            // Silently handle widget command processing errors
-        }
-    }
-    
-    private func processToggleHabitCommand(habitID: String, context: NSManagedObjectContext) {
-        guard let habitUUID = UUID(uuidString: habitID) else {
-            return
-        }
-        
-        // Find the habit
-        let habitRequest: NSFetchRequest<Habit> = Habit.fetchRequest()
-        habitRequest.predicate = NSPredicate(format: "id == %@", habitUUID as CVarArg)
-        
-        do {
-            guard let habit = try context.fetch(habitRequest).first else {
-                return
-            }
-            
-            let calendar = Calendar.current
-            let today = calendar.startOfDay(for: Date())
-            let endOfDay = calendar.date(byAdding: .day, value: 1, to: today)!
-            
-            // Find existing entry for today
-            let entryRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-            entryRequest.predicate = NSPredicate(format: "habit == %@ AND date >= %@ AND date < %@",
-                                               habit,
-                                               today as CVarArg,
-                                               endOfDay as CVarArg)
-            
-            let existingEntry = try context.fetch(entryRequest).first
-            
-            if let entry = existingEntry {
-                // Cycle through completion states or delete
-                let currentState = Int(entry.completionState)
-                let nextState = getNextCompletionState(current: currentState, habit: habit)
-                
-                if nextState == 0 {
-                    // Delete the entry
-                    context.delete(entry)
-                } else {
-                    // Update the state
-                    entry.completionState = Int16(nextState)
-                }
-            } else {
-                // Create new entry with success state
-                let newEntry = HabitEntry(context: context)
-                newEntry.id = UUID()
-                newEntry.habit = habit
-                newEntry.date = today
-                newEntry.completionState = 1 // Success
-                newEntry.details = nil
-            }
-            
-        } catch {
-            // Silently handle errors in background processing
-        }
-    }
-    
-    private func getNextCompletionState(current: Int, habit: Habit) -> Int {
-        // For negative habits, only toggle between 0 (none) and 3 (attempted/relapse)
-        if habit.isNegativeHabit {
-            return current == 0 ? 3 : 0
-        }
-        
-        // For habits without multiple states, toggle between 0 and 1
-        if !habit.useMultipleStates {
-            return current == 0 ? 1 : 0
-        }
-        
-        // For habits with multiple states, cycle through: 0 -> 1 -> 2 -> 3 -> 0
-        switch current {
-        case 0: return 1 // None -> Success
-        case 1: return 2 // Success -> Partial  
-        case 2: return 3 // Partial -> Attempted
-        case 3: return 0 // Attempted -> None
-        default: return 1 // Fallback to Success
-        }
-    }
 }
 
-// Date formatters as static instances for performance
-private struct DateFormatters {
-    static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MM/dd"
-        return formatter
-    }()
-    
-    static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE"
-        return formatter
-    }()
-}
-
-// Helper view for displaying a single habit row with edit button and checkboxes
-struct HabitRowWithEdit: View {
-    @ObservedObject var habit: Habit
-    let dates: [Date]
-    let viewModel: HabitTrackerViewModel
-    
-    var body: some View {
-        VStack {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .center) {
-                    // Habit name and icon - removed pencil button for cleaner UI
-                    HabitRowLabelView(habit: habit)
-                        .frame(width: 120, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            viewModel.selectedHabit = habit
-                        }
-                        // Move context menu to just the habit label area, not the whole row
-                        .contextMenu {
-                            Button(action: {
-                                viewModel.selectedHabit = habit
-                            }) {
-                                Label("Edit Habit", systemImage: "pencil")
-                            }
-                            
-                            Button(role: .destructive, action: {
-                                // Fixed: Use habitToDelete instead of selectedHabit
-                                viewModel.habitToDelete = habit
-                                viewModel.showingDeleteAlert = true
-                            }) {
-                                Label("Delete Habit", systemImage: "trash")
-                            }
-                        }
-                    
-                    // Checkboxes for each date - these have their own interaction
-                    HStack(spacing: 12) {
-                        ForEach(dates, id: \.self) { date in
-                            HabitCheckboxView(habit: habit, date: date)
-                                .environmentObject(viewModel.dataRepository)
-                                .highPriorityGesture(
-                                    LongPressGesture(minimumDuration: 0.5)
-                                        .onEnded { _ in
-                                            // This will be handled in HabitCheckboxView
-                                        }
-                                )
-                        }
-                    }
-                }
-                .padding(.vertical, 8)
-                .padding(.leading, 8)
-            }
-        }
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(8)
-        // Removed the context menu from the entire row
-    }
-}
+// DateFormatters are now in Utilities/HabitCalculations.swift
 
 // Simplified habit row specifically for reordering mode
 struct HabitRowReorderView: View {
     @ObservedObject var habit: Habit
-    
+
     var body: some View {
-        HStack {
-            Image(systemName: habit.icon ?? "circle")
-                .foregroundColor(Color(hex: habit.color ?? "#007AFF"))
-                .frame(width: 30)
-            
+        HStack(spacing: AppTheme.Spacing.md) {
+            ZStack {
+                Circle()
+                    .fill(Color(hex: habit.color ?? "#FF8C42").opacity(0.15))
+                    .frame(width: 36, height: 36)
+
+                Image(systemName: habit.icon ?? "circle")
+                    .font(.system(size: 16))
+                    .foregroundColor(Color(hex: habit.color ?? "#FF8C42"))
+            }
+
             Text(habit.name ?? "")
-                .font(.headline)
-            
+                .font(AppTheme.Font.headline)
+
             Spacer()
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, AppTheme.Spacing.sm)
         .contentShape(Rectangle())
     }
 }

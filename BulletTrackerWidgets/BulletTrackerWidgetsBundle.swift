@@ -57,15 +57,15 @@ struct CompleteHabitIntent: AppIntent {
     func perform() async throws -> some IntentResult {
         // Use the MAIN app's Core Data manager instead of a separate widget one
         let context = CoreDataManager.shared.container.viewContext
-        
+
         await context.perform {
             do {
                 try self.toggleHabitCompletion(habitID: self.habitID, context: context)
             } catch {
-                // Silently handle widget errors
+                // Widget toggle error - silent fail
             }
         }
-        
+
         return .result()
     }
     
@@ -84,7 +84,7 @@ struct CompleteHabitIntent: AppIntent {
         
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: today)!
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: today) else { return }
         
         // Find existing entry for today
         let entryRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
@@ -151,55 +151,6 @@ struct CompleteHabitIntent: AppIntent {
     }
 }
 
-// MARK: - Widget Core Data Manager
-
-class WidgetCoreDataManager {
-    static let shared = WidgetCoreDataManager()
-    
-    lazy var persistentContainer: NSPersistentCloudKitContainer = {
-        let container = NSPersistentCloudKitContainer(name: "Bullet_Tracker")
-        
-        // Configure to use the same App Group container as main app
-        if let storeURL = containerURL() {
-            guard let description = container.persistentStoreDescriptions.first else {
-                fatalError("Widget: Failed to retrieve store description")
-            }
-            
-            description.url = storeURL
-            
-            // Enable history tracking and remote notifications for CloudKit sync
-            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-        }
-        
-        container.loadPersistentStores { _, error in
-            if let error = error {
-                // Log error appropriately in production
-            }
-        }
-        
-        // Use the same merge policy as main app
-        container.viewContext.automaticallyMergesChangesFromParent = true
-        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
-        
-        return container
-    }()
-    
-    var viewContext: NSManagedObjectContext {
-        return persistentContainer.viewContext
-    }
-    
-    private func containerURL() -> URL? {
-        let appGroupID = "group.db23.Bullet-Tracker"
-        guard let appGroupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) else {
-            return nil
-        }
-        return appGroupURL.appendingPathComponent("BulletTracker.sqlite")
-    }
-    
-    private init() {}
-}
-
 // MARK: - Timeline Provider
 
 struct HabitWidgetProvider: TimelineProvider {
@@ -227,9 +178,34 @@ struct HabitWidgetProvider: TimelineProvider {
     
     func getTimeline(in context: Context, completion: @escaping (Timeline<HabitWidgetEntry>) -> ()) {
         loadHabitsEntry { entry in
-            // Update timeline at midnight for new day
-            let midnight = Calendar.current.startOfDay(for: Date().addingTimeInterval(86400))
-            let timeline = Timeline(entries: [entry], policy: .after(midnight))
+            // Smart refresh policy:
+            // - During active hours (6am-11pm): refresh every 15 minutes for responsiveness
+            // - During sleep hours: refresh at 6am
+            let calendar = Calendar.current
+            let now = Date()
+            let hour = calendar.component(.hour, from: now)
+
+            let nextRefresh: Date
+            if hour >= 6 && hour < 23 {
+                // Active hours: refresh in 15 minutes
+                nextRefresh = now.addingTimeInterval(15 * 60)
+            } else {
+                // Sleep hours: refresh at 6am
+                var components = calendar.dateComponents([.year, .month, .day], from: now)
+                components.hour = 6
+                components.minute = 0
+                if hour >= 23 {
+                    // After 11pm, target tomorrow's 6am
+                    if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) {
+                        components = calendar.dateComponents([.year, .month, .day], from: tomorrow)
+                        components.hour = 6
+                        components.minute = 0
+                    }
+                }
+                nextRefresh = calendar.date(from: components) ?? now.addingTimeInterval(3600)
+            }
+
+            let timeline = Timeline(entries: [entry], policy: .after(nextRefresh))
             completion(timeline)
         }
     }
@@ -282,64 +258,45 @@ struct HabitWidgetProvider: TimelineProvider {
             NSSortDescriptor(key: "order", ascending: true),
             NSSortDescriptor(key: "name", ascending: true)
         ]
-        
+        // Optimization: prefetch entries relationship for completion checking
+        request.relationshipKeyPathsForPrefetching = ["entries"]
+        request.returnsObjectsAsFaults = false
+
         let allHabits = try context.fetch(request)
         let today = Date()
-        
+
         // Filter habits that should be tracked today based on frequency
         let todaysHabits = allHabits.filter { habit in
             shouldTrackHabitToday(habit, on: today)
         }
-        
+
         return todaysHabits
     }
     
     private func shouldTrackHabitToday(_ habit: Habit, on date: Date) -> Bool {
-        // Check if habit has started
-        if let startDate = habit.startDate, date < startDate {
-            return false
-        }
-        
-        let weekday = Calendar.current.component(.weekday, from: date)
-        let frequency = habit.frequency ?? "daily"
-        
-        switch frequency {
-        case "daily":
-            return true
-        case "weekdays":
-            return weekday >= 2 && weekday <= 6 // Monday = 2, Friday = 6
-        case "weekends":
-            return weekday == 1 || weekday == 7 // Sunday = 1, Saturday = 7
-        case "weekly":
-            // Check custom days - Handle String to Data conversion
-            guard let customDaysData = habit.customDays else {
-                return true // Default to daily if no custom days
-            }
-            
-            // Convert String to Data, then decode to [Int] array
-            guard let jsonData = customDaysData.data(using: .utf8),
-                  let customDays = try? JSONDecoder().decode([Int].self, from: jsonData) else {
-                return true // Default to daily if can't parse
-            }
-            return customDays.contains(weekday)
-        default:
-            return true
-        }
+        HabitFrequency.shouldTrack(
+            frequency: habit.frequency,
+            on: date,
+            customDays: habit.customDays,
+            startDate: habit.startDate
+        )
     }
     
     private func getCompletionState(for habit: Habit) -> Int {
-        let today = Calendar.current.startOfDay(for: Date())
-        
-        // Try to find today's entry
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        // Try to find today's entry using prefetched entries
         if let entries = habit.entries as? Set<HabitEntry> {
-            for entry in entries {
-                if let entryDate = entry.date,
-                   Calendar.current.isDate(entryDate, inSameDayAs: today) {
-                    return Int(entry.completionState)
-                }
+            // Use first(where:) for early exit instead of iterating all
+            if let todayEntry = entries.first(where: { entry in
+                guard let entryDate = entry.date else { return false }
+                return calendar.isDate(entryDate, inSameDayAs: today)
+            }) {
+                return Int(todayEntry.completionState)
             }
         }
-        
+
         return 0 // Not completed
     }
 }
@@ -448,20 +405,26 @@ struct HabitWidgetView: View {
     }
     
     // MARK: - Empty State
-    
+
     private var emptyStateView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 32, weight: .light))
-                .foregroundColor(.secondary)
-            
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.1))
+                    .frame(width: 60, height: 60)
+
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 28))
+                    .foregroundColor(.blue)
+            }
+
             VStack(spacing: 4) {
                 Text("No Habits Today")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.primary)
-                
+
                 Text("Open app to create habits")
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                     .foregroundColor(.secondary)
             }
         }
@@ -591,17 +554,17 @@ struct HabitButtonTile: View {
     @ViewBuilder
     private var backgroundView: some View {
         RoundedRectangle(cornerRadius: 12)
-            .fill(Color(.systemBackground))
+            .fill(habit.completionState > 0 ? habitColor.opacity(0.08) : Color(.systemBackground))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(
-                        habit.completionState == 0 ? 
+                        habit.completionState == 0 ?
                         Color(.systemGray4) : habitColor,
                         lineWidth: habit.completionState == 0 ? 1 : 2
                     )
             )
             .shadow(
-                color: Color.black.opacity(0.1),
+                color: Color.black.opacity(0.04),
                 radius: 2,
                 x: 0,
                 y: 1
@@ -617,18 +580,24 @@ struct HabitButtonTile: View {
 
 struct EmptyHabitTile: View {
     let isLarge: Bool
-    
+
     init(isLarge: Bool = false) {
         self.isLarge = isLarge
     }
-    
+
     var body: some View {
         VStack(spacing: iconTextSpacing) {
-            // Plus icon with iOS-native styling
-            Image(systemName: "plus.circle")
-                .font(.system(size: iconSize, weight: .light))
-                .foregroundColor(.secondary)
-            
+            // Plus icon with circular background to match app style
+            ZStack {
+                Circle()
+                    .fill(Color.secondary.opacity(0.1))
+                    .frame(width: iconBackgroundSize, height: iconBackgroundSize)
+
+                Image(systemName: "plus")
+                    .font(.system(size: iconSize, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+
             // "Add Habit" text
             Text("Add Habit")
                 .font(.system(size: textSize, weight: .medium))
@@ -645,38 +614,48 @@ struct EmptyHabitTile: View {
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(Color(.systemGray5), style: StrokeStyle(lineWidth: 1, dash: [4]))
                 )
+                .shadow(
+                    color: Color.black.opacity(0.02),
+                    radius: 1,
+                    x: 0,
+                    y: 1
+                )
         )
         .frame(height: tileHeight)
     }
     
     // MARK: - Size-Adaptive Properties
-    
+
     private var tileHeight: CGFloat {
-        isLarge ? 85 : 70  // Match habit tiles
+        isLarge ? 85 : 70
     }
-    
+
+    private var iconBackgroundSize: CGFloat {
+        isLarge ? 32 : 26
+    }
+
     private var iconSize: CGFloat {
-        isLarge ? 30 : 24  // Slightly increased
+        isLarge ? 14 : 12
     }
-    
+
     private var textSize: CGFloat {
-        isLarge ? 12 : 10  // Increased
+        isLarge ? 12 : 10
     }
-    
+
     private var textLines: Int {
         isLarge ? 2 : 1
     }
-    
+
     private var iconTextSpacing: CGFloat {
-        isLarge ? 10 : 6  // Match habit tiles
+        isLarge ? 10 : 6
     }
-    
+
     private var horizontalPadding: CGFloat {
-        isLarge ? 12 : 8  // Match habit tiles
+        isLarge ? 12 : 8
     }
-    
+
     private var verticalPadding: CGFloat {
-        isLarge ? 14 : 10  // Match habit tiles
+        isLarge ? 14 : 10
     }
 }
 

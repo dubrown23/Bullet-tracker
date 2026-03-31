@@ -62,16 +62,16 @@ struct HabitFormView: View {
     private var colorPicker: some View {
         VStack(alignment: .leading) {
             Text("Color")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            
+                .font(AppTheme.Font.caption)
+                .foregroundColor(AppTheme.textSecondary)
+
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: AppTheme.Spacing.md) {
                     ForEach(HabitConstants.colorOptions, id: \.self) { color in
                         colorCircle(for: color)
                     }
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, AppTheme.Spacing.sm)
             }
         }
     }
@@ -94,25 +94,25 @@ struct HabitFormView: View {
         VStack(alignment: .leading) {
             HStack {
                 Text("Icon")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
+                    .font(AppTheme.Font.caption)
+                    .foregroundColor(AppTheme.textSecondary)
+
                 Spacer()
-                
+
                 Button("Browse More") {
                     showingIconSheet = true
                 }
-                .font(.caption)
-                .foregroundColor(.blue)
+                .font(AppTheme.Font.caption)
+                .foregroundColor(AppTheme.accent)
             }
-            
+
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: AppTheme.Spacing.md) {
                     ForEach(HabitConstants.quickIconOptions, id: \.self) { icon in
                         iconButton(for: icon)
                     }
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, AppTheme.Spacing.sm)
             }
         }
     }
@@ -138,7 +138,7 @@ struct HabitFormView: View {
                 }
             }
             
-            if selectedFrequency == "custom" {
+            if selectedFrequency == HabitFrequency.custom.rawValue {
                 ForEach(HabitConstants.daysOfWeek, id: \.0) { day in
                     customDayRow(day: day)
                 }
@@ -150,14 +150,15 @@ struct HabitFormView: View {
         Button(action: { toggleCustomDay(day.0) }) {
             HStack {
                 Text(day.1)
+                    .font(AppTheme.Font.body)
                 Spacer()
                 if customDays.contains(day.0) {
                     Image(systemName: "checkmark")
-                        .foregroundColor(.blue)
+                        .foregroundColor(AppTheme.accent)
                 }
             }
         }
-        .foregroundColor(.primary)
+        .foregroundColor(AppTheme.textPrimary)
     }
     
     private var trackingOptionsSection: some View {
@@ -173,29 +174,32 @@ struct HabitFormView: View {
     private var negativeHabitToggle: some View {
         Group {
             Toggle("This is something I'm avoiding", isOn: $isNegativeHabit)
-            
+                .tint(AppTheme.accent)
+
             if isNegativeHabit {
                 Text("Checking this habit means you did the thing you're trying to avoid. Leave it unchecked for success.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(AppTheme.Font.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
             }
         }
     }
-    
+
     private var detailTrackingToggle: some View {
         Group {
             Toggle("Track Additional Details", isOn: $trackDetails)
-            
+                .tint(AppTheme.accent)
+
             if trackDetails {
                 Picker("Detail Type", selection: $detailType) {
                     ForEach(HabitConstants.detailTypeOptions, id: \.0) { option in
                         Text(option.1).tag(option.0)
                     }
                 }
-                
+                .tint(AppTheme.accent)
+
                 Text("You'll be prompted to add details each time you complete this habit.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(AppTheme.Font.caption)
+                    .foregroundColor(AppTheme.textSecondary)
             }
         }
     }
@@ -203,20 +207,21 @@ struct HabitFormView: View {
     private var multiStateTrackingToggle: some View {
         Group {
             Toggle("Use Multiple Completion States", isOn: $useMultipleStates)
-            
+                .tint(AppTheme.accent)
+
             if useMultipleStates {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
                     Text("This habit will track success, partial success, and failure states separately.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
+                        .font(AppTheme.Font.caption)
+                        .foregroundColor(AppTheme.textSecondary)
+
                     ForEach([
-                        ("Success (✓)", "Full completion", Color.green),
-                        ("Partial (⚬)", "Did some but not all", Color.orange),
-                        ("Failure (✗)", "Attempted but struggled", Color.red)
+                        ("Success (✓)", "Full completion", AppTheme.success),
+                        ("Partial (⚬)", "Did some but not all", AppTheme.partial),
+                        ("Failure (✗)", "Attempted but struggled", AppTheme.failed)
                     ], id: \.0) { item in
                         Text("• \(item.0): \(item.1)")
-                            .font(.caption)
+                            .font(AppTheme.Font.caption)
                             .foregroundColor(item.2)
                     }
                 }
@@ -246,12 +251,12 @@ struct HabitFormView: View {
 
 struct HabitConstants {
     static let colorOptions = [
-        // Basic colors
-        "#007AFF", "#34C759", "#FF3B30", "#FF9500", "#FFCC00", "#5856D6", "#FF2D55", "#5AC8FA",
+        // Primary accent and warm colors first
+        "#FF8C42", "#FF9500", "#FFCC00", "#34C759", "#007AFF", "#5856D6", "#FF2D55", "#5AC8FA",
         // Pastel colors
-        "#AFD0F5", "#A8E1A8", "#F5A8A8", "#F7D1A8", "#F7EFA8", "#D1A8F7", "#F7A8D1", "#A8F5F5",
+        "#FFB380", "#F7D1A8", "#F7EFA8", "#A8E1A8", "#AFD0F5", "#D1A8F7", "#F7A8D1", "#A8F5F5",
         // Dark shades
-        "#004080", "#006633", "#801A15", "#804D00", "#806600", "#2E2B6B", "#80172B", "#0080A8",
+        "#CC6B2E", "#804D00", "#806600", "#006633", "#004080", "#2E2B6B", "#80172B", "#0080A8",
         // Neutral tones
         "#8E8E93", "#48484A", "#636366", "#A8A8A8", "#53433D", "#7A6E65", "#B3A395", "#D9C7B8"
     ]
@@ -261,13 +266,7 @@ struct HabitConstants {
         "thermometer.snowflake", "light.strip.2", "star.fill", "bell.fill"
     ]
     
-    static let frequencyOptions = [
-        ("daily", "Every Day"),
-        ("weekdays", "Weekdays Only"),
-        ("weekends", "Weekends Only"),
-        ("weekly", "Once a Week"),
-        ("custom", "Custom Days")
-    ]
+    static let frequencyOptions: [(String, String)] = HabitFrequency.allCases.map { ($0.rawValue, $0.displayName) }
     
     static let detailTypeOptions = [
         ("general", "General Notes"),

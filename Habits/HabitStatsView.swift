@@ -33,14 +33,14 @@ struct HabitStatsView: View {
             
             switch self {
             case .week:
-                return calendar.date(byAdding: .weekOfYear, value: -1, to: endDate)!
+                return calendar.date(byAdding: .weekOfYear, value: -1, to: endDate) ?? endDate
                 
             case .month:
                 let components = calendar.dateComponents([.year, .month], from: endDate)
-                return calendar.date(from: components)!
+                return calendar.date(from: components) ?? endDate
                 
             case .quarter:
-                return calendar.date(byAdding: .month, value: -3, to: endDate)!
+                return calendar.date(byAdding: .month, value: -3, to: endDate) ?? endDate
             }
         }
         
@@ -110,21 +110,7 @@ struct HabitStatsView: View {
     }
 }
 
-// MARK: - Date Formatters
-
-private struct DateFormatters {
-    static let shortDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
-    
-    static let monthFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM"
-        return formatter
-    }()
-}
+// DateFormatters are now in Utilities/HabitCalculations.swift
 
 // MARK: - Stats Cache
 
@@ -351,123 +337,124 @@ struct EnhancedHabitProgressView: View {
             return
         }
         
-        // Load stats in background
         isLoading = true
         
-        Task { @MainActor in
-            let startDate = timeframe.getStartDate(from: endDate)
+        // Capture habit properties for background work
+        let habitObjectID = habit.objectID
+        let frequency = habit.frequency
+        let customDays = habit.customDays
+        let habitStartDate = habit.startDate
+        let useMulti = (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
+        let periodStart = timeframe.getStartDate(from: endDate)
+        let currentTimeframe = timeframe
+        
+        Task.detached {
+            let bgContext = CoreDataManager.shared.container.newBackgroundContext()
             
-            stats.useMultipleStates = (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
-            
-            // Calculate expected days
-            stats.totalDays = calculateExpectedDays(from: startDate, to: endDate)
-            
-            guard stats.totalDays > 0 else {
-                stats.isCalculated = true
-                isLoading = false
-                return
-            }
-            
-            // Fetch entries
-            let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-            fetchRequest.predicate = NSPredicate(
-                format: "habit == %@ AND date >= %@ AND date <= %@",
-                habit, startDate as NSDate, endDate as NSDate
-            )
-            
-            do {
-                let entries = try CoreDataManager.shared.container.viewContext.fetch(fetchRequest)
-                calculateStats(from: entries)
+            let result: HabitStats? = await bgContext.perform {
+                guard let bgHabit = try? bgContext.existingObject(with: habitObjectID) as? Habit else {
+                    return nil
+                }
                 
-                // Cache the result
-                Self.statsCache.set(stats, for: habit, timeframe: timeframe, endDate: endDate)
-            } catch {
-                resetStats()
+                // Calculate expected days (pure computation — no main thread needed)
+                let totalDays = Self.calculateExpectedDays(
+                    frequency: frequency,
+                    customDays: customDays,
+                    startDate: habitStartDate,
+                    from: periodStart,
+                    to: endDate
+                )
+                
+                guard totalDays > 0 else {
+                    var empty = HabitStats()
+                    empty.isCalculated = true
+                    return empty
+                }
+                
+                // Fetch entries on background context
+                let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
+                fetchRequest.predicate = NSPredicate(
+                    format: "habit == %@ AND date >= %@ AND date <= %@",
+                    bgHabit, periodStart as NSDate, endDate as NSDate
+                )
+                
+                let entries = (try? bgContext.fetch(fetchRequest)) ?? []
+                
+                // Calculate stats from entries (pure computation)
+                var newStats = HabitStats()
+                newStats.totalDays = totalDays
+                newStats.useMultipleStates = useMulti
+                
+                var successCount = 0
+                var partialCount = 0
+                var failureCount = 0
+                
+                for entry in entries {
+                    if useMulti {
+                        switch entry.value(forKey: "completionState") as? Int ?? 1 {
+                        case 1: successCount += 1
+                        case 2: partialCount += 1
+                        case 3: failureCount += 1
+                        default: break
+                        }
+                    } else if entry.completed {
+                        successCount += 1
+                    }
+                }
+                
+                let total = Double(totalDays)
+                newStats.successCount = successCount
+                newStats.partialCount = partialCount
+                newStats.failureCount = failureCount
+                newStats.successRate = Double(successCount) / total
+                newStats.partialRate = Double(partialCount) / total
+                newStats.failureRate = Double(failureCount) / total
+                newStats.isCalculated = true
+                
+                return newStats
             }
             
-            isLoading = false
+            await MainActor.run {
+                if let result = result {
+                    stats = result
+                    Self.statsCache.set(stats, for: habit, timeframe: currentTimeframe, endDate: endDate)
+                } else {
+                    stats = HabitStats()
+                }
+                isLoading = false
+            }
         }
     }
     
-    private func calculateExpectedDays(from startDate: Date, to endDate: Date) -> Int {
+    /// Static version for background use — no Core Data dependency
+    private static func calculateExpectedDays(
+        frequency: String?,
+        customDays: String?,
+        startDate: Date?,
+        from periodStart: Date,
+        to endDate: Date
+    ) -> Int {
         let calendar = Calendar.current
+        let freq = HabitFrequency(rawValue: frequency ?? HabitFrequency.daily.rawValue) ?? .daily
         
-        // For daily habits, use simple calculation
-        if habit.frequency == "daily" {
-            let components = calendar.dateComponents([.day], from: startDate, to: endDate)
+        if freq == .daily {
+            let components = calendar.dateComponents([.day], from: periodStart, to: endDate)
             return (components.day ?? 0) + 1
         }
         
-        // For other frequencies, optimize with stride
         var count = 0
-        let startWeekday = calendar.component(.weekday, from: habit.startDate ?? Date())
-        let customDays = parseCustomDays()
-        
-        // Use stride for efficient date iteration
-        let dayInterval: TimeInterval = 86400 // 24 hours in seconds
-        let startTime = startDate.timeIntervalSinceReferenceDate
-        let endTime = endDate.timeIntervalSinceReferenceDate
-        
-        for timeInterval in stride(from: startTime, through: endTime, by: dayInterval) {
-            let currentDate = Date(timeIntervalSinceReferenceDate: timeInterval)
-            let weekday = calendar.component(.weekday, from: currentDate)
-            
-            switch habit.frequency {
-            case "weekdays":
-                if (2...6).contains(weekday) { count += 1 }
-            case "weekends":
-                if weekday == 1 || weekday == 7 { count += 1 }
-            case "weekly":
-                if weekday == startWeekday { count += 1 }
-            case "custom":
-                if customDays.contains(weekday) { count += 1 }
-            default:
-                break
+        var currentDate = periodStart
+        while currentDate <= endDate {
+            if HabitFrequency.shouldTrack(frequency: frequency, on: currentDate, customDays: customDays, startDate: startDate) {
+                count += 1
             }
+            guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
+            currentDate = nextDate
         }
-        
         return count
     }
     
-    private func parseCustomDays() -> Set<Int> {
-        guard let customDaysString = habit.customDays else { return [] }
-        
-        return Set(customDaysString
-            .components(separatedBy: ",")
-            .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) })
-    }
-    
-    private func calculateStats(from entries: [HabitEntry]) {
-        var successCount = 0
-        var partialCount = 0
-        var failureCount = 0
-        
-        for entry in entries {
-            if stats.useMultipleStates {
-                switch entry.value(forKey: "completionState") as? Int ?? 1 {
-                case 1: successCount += 1
-                case 2: partialCount += 1
-                case 3: failureCount += 1
-                default: break
-                }
-            } else if entry.completed {
-                successCount += 1
-            }
-        }
-        
-        let total = Double(stats.totalDays)
-        stats.successCount = successCount
-        stats.partialCount = partialCount
-        stats.failureCount = failureCount
-        stats.successRate = Double(successCount) / total
-        stats.partialRate = Double(partialCount) / total
-        stats.failureRate = Double(failureCount) / total
-        stats.isCalculated = true
-    }
-    
-    private func resetStats() {
-        stats = HabitStats()
-    }
+
 }
 
 // MARK: - State Indicator

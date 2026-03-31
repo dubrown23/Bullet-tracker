@@ -56,9 +56,7 @@ class HabitDataRepository: ObservableObject {
               savedContext != context else {
             return // Ignore saves from our own context
         }
-        
-        print("HabitDataRepository: Detected external Core Data changes (likely from widget)")
-        
+
         // Merge the changes into our context
         context.mergeChanges(fromContextDidSave: notification)
         
@@ -71,7 +69,6 @@ class HabitDataRepository: ObservableObject {
         let hasHabitEntryChanges = allChangedObjects.contains { $0 is HabitEntry }
         
         if hasHabitEntryChanges {
-            print("HabitDataRepository: HabitEntry changes detected, clearing cache to trigger refresh")
             Task { @MainActor in
                 // Clear cache to force reload on next access
                 self.loadedDateRange = nil
@@ -172,28 +169,26 @@ class HabitDataRepository: ObservableObject {
             
             // Only refresh widget for today's date to avoid excessive refreshes
             if Calendar.current.isDate(dayStart, inSameDayAs: Date()) {
-                print("HabitDataRepository: Refreshing widget timeline for today's habit change")
                 WidgetCenter.shared.reloadTimelines(ofKind: "HabitTrackerWidget")
             }
         }
     }
-    
+
     /// Removes a habit entry
     func removeEntry(for habit: Habit, on date: Date) {
         guard let habitId = habit.id else { return }
         let dayStart = calendar.startOfDay(for: date)
-        
+
         // Optimistic update
         habitEntries[habitId]?[dayStart] = nil
-        
+
         // Perform actual Core Data deletion
         let habitObjectID = habit.objectID
         Task {
             await performCoreDataDeletion(habitObjectID: habitObjectID, on: dayStart)
-            
+
             // Only refresh widget for today's date to avoid excessive refreshes
             if Calendar.current.isDate(dayStart, inSameDayAs: Date()) {
-                print("HabitDataRepository: Refreshing widget timeline for today's habit removal")
                 WidgetCenter.shared.reloadTimelines(ofKind: "HabitTrackerWidget")
             }
         }
@@ -214,7 +209,6 @@ class HabitDataRepository: ObservableObject {
     
     /// Forces a refresh of data for the currently loaded habits and date range
     func forceRefresh(for habits: [Habit], dateRange: ClosedRange<Date>) async {
-        print("HabitDataRepository: Force refreshing data for \(habits.count) habits")
         loadedDateRange = nil // Clear the loaded range to force reload
         await loadEntries(for: habits, dateRange: dateRange)
     }
@@ -238,7 +232,8 @@ class HabitDataRepository: ObservableObject {
             // Use robust date handling for the query
             // Ensure we're using start of day for both bounds
             let startDate = self.calendar.startOfDay(for: dateRange.lowerBound)
-            let endDate = self.calendar.startOfDay(for: self.calendar.date(byAdding: .day, value: 1, to: dateRange.upperBound)!)
+            guard let nextDay = self.calendar.date(byAdding: .day, value: 1, to: dateRange.upperBound) else { return }
+            let endDate = self.calendar.startOfDay(for: nextDay)
             
             fetchRequest.predicate = NSPredicate(
                 format: "date >= %@ AND date < %@ AND habit IN %@",
@@ -260,7 +255,7 @@ class HabitDataRepository: ObservableObject {
                     self.loadedDateRange = dateRange
                 }
             } catch {
-                print("Failed to load habit entries: \(error)")
+                debugLog("Failed to load habit entries: \(error.localizedDescription)")
             }
         }
     }
@@ -295,7 +290,7 @@ class HabitDataRepository: ObservableObject {
                     format: "habit == %@ AND date >= %@ AND date < %@",
                     habit,
                     date as NSDate,
-                    self.calendar.date(byAdding: .day, value: 1, to: date)! as NSDate
+                    (self.calendar.date(byAdding: .day, value: 1, to: date) ?? date) as NSDate
                 )
                 fetchRequest.fetchLimit = 1
                 
@@ -319,7 +314,7 @@ class HabitDataRepository: ObservableObject {
                 
                 try self.context.save()
             } catch {
-                print("Failed to update habit entry: \(error)")
+                debugLog("Failed to update habit entry: \(error.localizedDescription)")
             }
         }
     }
@@ -334,7 +329,7 @@ class HabitDataRepository: ObservableObject {
                     format: "habit == %@ AND date >= %@ AND date < %@",
                     habit,
                     date as NSDate,
-                    self.calendar.date(byAdding: .day, value: 1, to: date)! as NSDate
+                    (self.calendar.date(byAdding: .day, value: 1, to: date) ?? date) as NSDate
                 )
                 fetchRequest.fetchLimit = 1
                 
@@ -343,7 +338,7 @@ class HabitDataRepository: ObservableObject {
                     try self.context.save()
                 }
             } catch {
-                print("Failed to delete habit entry: \(error)")
+                debugLog("Failed to delete habit entry: \(error.localizedDescription)")
             }
         }
     }
@@ -394,12 +389,12 @@ struct HabitCompletionState {
     
     var stateColor: Color {
         guard isCompleted else { return .clear }
-        
+
         switch state {
-        case 1: return .green     // Success
-        case 2: return .yellow    // Partial
-        case 3: return .red       // Attempted
-        default: return .green    // Default
+        case 1: return Color(hex: "#4CAF50")   // Success - warm green
+        case 2: return Color(hex: "#FFB300")   // Partial - warm yellow
+        case 3: return Color(hex: "#EF5350")   // Attempted - soft red
+        default: return Color(hex: "#4CAF50")  // Default
         }
     }
     

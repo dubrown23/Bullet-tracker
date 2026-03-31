@@ -27,7 +27,7 @@ class BackupManager: ObservableObject {
     
     // MARK: - Constants
     
-    private let entityNames = ["Habit", "HabitEntry", "Collection", "JournalEntry", "Tag"]
+    private let entityNames = ["Habit", "HabitEntry", "Collection", "JournalEntry", "Tag", "Note"]
     
     // MARK: - Backup Creation
     
@@ -118,6 +118,9 @@ class BackupManager: ObservableObject {
         updateBackupProgress(0.6)
         
         let tags = fetchTags()
+        updateBackupProgress(0.65)
+        
+        let notes = fetchNotes()
         updateBackupProgress(0.7)
         
         return BackupData(
@@ -127,7 +130,8 @@ class BackupManager: ObservableObject {
             habitEntries: habitEntries,
             collections: collections,
             journalEntries: journalEntries,
-            tags: tags
+            tags: tags,
+            notes: notes
         )
     }
     
@@ -135,14 +139,14 @@ class BackupManager: ObservableObject {
     
     private func fetchHabits() -> [HabitData] {
         let habits = CoreDataManager.shared.fetchAllHabits()
-        
+
         return habits.map { habit in
             HabitData(
                 id: habit.id?.uuidString ?? UUID().uuidString,
                 name: habit.name ?? "",
                 icon: habit.icon ?? "circle.fill",
                 color: habit.color ?? "#007AFF",
-                frequency: habit.frequency ?? "daily",
+                frequency: habit.frequency ?? HabitFrequency.daily.rawValue,
                 customDays: habit.customDays ?? "",
                 startDate: habit.startDate ?? Date(),
                 notes: habit.notes ?? "",
@@ -150,7 +154,8 @@ class BackupManager: ObservableObject {
                 collectionID: habit.collection?.id?.uuidString,
                 trackDetails: habit.value(forKey: "trackDetails") as? Bool ?? false,
                 detailType: habit.value(forKey: "detailType") as? String ?? "general",
-                useMultipleStates: habit.value(forKey: "useMultipleStates") as? Bool ?? false
+                useMultipleStates: habit.value(forKey: "useMultipleStates") as? Bool ?? false,
+                isNegativeHabit: habit.value(forKey: "isNegativeHabit") as? Bool ?? false
             )
         }
     }
@@ -222,6 +227,24 @@ class BackupManager: ObservableObject {
                 TagData(
                     id: tag.id?.uuidString ?? UUID().uuidString,
                     name: tag.name ?? ""
+                )
+            }
+        } catch {
+            return []
+        }
+    }
+    
+    private func fetchNotes() -> [NoteData] {
+        let fetchRequest: NSFetchRequest<Note> = Note.fetchRequest()
+        
+        do {
+            let notes = try CoreDataManager.shared.container.viewContext.fetch(fetchRequest)
+            
+            return notes.map { note in
+                NoteData(
+                    id: note.id?.uuidString ?? UUID().uuidString,
+                    content: note.content ?? "",
+                    date: note.date ?? Date()
                 )
             }
         } catch {
@@ -303,6 +326,11 @@ class BackupManager: ObservableObject {
                     in: context
                 )
                 
+                updateRestoreProgress(0.92)
+                if let notes = backupData.notes {
+                    importNotes(from: notes, in: context)
+                }
+                
                 try context.save()
                 updateRestoreProgress(0.95)
                 
@@ -379,7 +407,8 @@ class BackupManager: ObservableObject {
             habit.setValue(habitData.trackDetails, forKey: "trackDetails")
             habit.setValue(habitData.detailType, forKey: "detailType")
             habit.setValue(habitData.useMultipleStates, forKey: "useMultipleStates")
-            
+            habit.setValue(habitData.isNegativeHabit, forKey: "isNegativeHabit")
+
             habitMap[habitData.id] = habit
         }
         
@@ -433,6 +462,18 @@ class BackupManager: ObservableObject {
         }
     }
     
+    private func importNotes(
+        from backupNotes: [NoteData],
+        in context: NSManagedObjectContext
+    ) {
+        for noteData in backupNotes {
+            let note = Note(context: context)
+            note.id = UUID(uuidString: noteData.id)
+            note.content = noteData.content
+            note.date = noteData.date
+        }
+    }
+    
     // MARK: - Progress Updates
     
     private func updateBackupProgress(_ progress: Float) {
@@ -470,6 +511,7 @@ struct BackupData: Codable {
     let collections: [CollectionData]
     let journalEntries: [JournalEntryData]
     let tags: [TagData]
+    let notes: [NoteData]?
 }
 
 struct HabitData: Codable {
@@ -486,6 +528,44 @@ struct HabitData: Codable {
     let trackDetails: Bool
     let detailType: String
     let useMultipleStates: Bool
+    let isNegativeHabit: Bool
+
+    // Support older backups that don't have all fields
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        icon = try container.decode(String.self, forKey: .icon)
+        color = try container.decode(String.self, forKey: .color)
+        frequency = try container.decode(String.self, forKey: .frequency)
+        customDays = try container.decode(String.self, forKey: .customDays)
+        startDate = try container.decode(Date.self, forKey: .startDate)
+        notes = try container.decode(String.self, forKey: .notes)
+        order = try container.decode(Int.self, forKey: .order)
+        collectionID = try container.decodeIfPresent(String.self, forKey: .collectionID)
+        trackDetails = try container.decodeIfPresent(Bool.self, forKey: .trackDetails) ?? false
+        detailType = try container.decodeIfPresent(String.self, forKey: .detailType) ?? "general"
+        useMultipleStates = try container.decodeIfPresent(Bool.self, forKey: .useMultipleStates) ?? false
+        isNegativeHabit = try container.decodeIfPresent(Bool.self, forKey: .isNegativeHabit) ?? false
+    }
+
+    // Standard initializer for creating backups
+    init(id: String, name: String, icon: String, color: String, frequency: String, customDays: String, startDate: Date, notes: String, order: Int, collectionID: String?, trackDetails: Bool, detailType: String, useMultipleStates: Bool, isNegativeHabit: Bool) {
+        self.id = id
+        self.name = name
+        self.icon = icon
+        self.color = color
+        self.frequency = frequency
+        self.customDays = customDays
+        self.startDate = startDate
+        self.notes = notes
+        self.order = order
+        self.collectionID = collectionID
+        self.trackDetails = trackDetails
+        self.detailType = detailType
+        self.useMultipleStates = useMultipleStates
+        self.isNegativeHabit = isNegativeHabit
+    }
 }
 
 struct HabitEntryData: Codable {
@@ -516,6 +596,12 @@ struct JournalEntryData: Codable {
 struct TagData: Codable {
     let id: String
     let name: String
+}
+
+struct NoteData: Codable {
+    let id: String
+    let content: String
+    let date: Date
 }
 
 // MARK: - Notification Names
