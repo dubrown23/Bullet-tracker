@@ -11,7 +11,7 @@ import SwiftUI
 
 // MARK: - Backup Manager
 
-class BackupManager: ObservableObject {
+class BackupManager {
     // MARK: - Singleton
     
     static let shared = BackupManager()

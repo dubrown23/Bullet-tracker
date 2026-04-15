@@ -14,7 +14,7 @@ import UniformTypeIdentifiers
 
 struct JournalExportView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel = JournalExportViewModel()
+    @State private var viewModel = JournalExportViewModel()
 
     var body: some View {
         NavigationStack {
@@ -253,7 +253,8 @@ enum ExportFormat: String, CaseIterable {
 // MARK: - View Model
 
 @MainActor
-class JournalExportViewModel: ObservableObject {
+@Observable
+class JournalExportViewModel {
     // MARK: - Static Formatters
 
     private static let mediumDateFormatter: DateFormatter = {
@@ -269,28 +270,28 @@ class JournalExportViewModel: ObservableObject {
     }()
 
     // Date range
-    @Published var rangeType: DateRangeType = .thisWeek
-    @Published var customStartDate: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
-    @Published var customEndDate: Date = Date()
+    var rangeType: DateRangeType = .thisWeek
+    var customStartDate: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+    var customEndDate: Date = Date()
 
     // Format
-    @Published var selectedFormat: ExportFormat = .pdf
+    var selectedFormat: ExportFormat = .pdf
 
     // Options
-    @Published var includeSummaryDashboard: Bool = true
+    var includeSummaryDashboard: Bool = true
 
     // Preview counts
-    @Published var previewDayCount: Int = 0
-    @Published var previewHabitCount: Int = 0
-    @Published var previewNoteCount: Int = 0
+    var previewDayCount: Int = 0
+    var previewHabitCount: Int = 0
+    var previewNoteCount: Int = 0
 
     // Export state
-    @Published var isExporting = false
-    @Published var showingShareSheet = false
-    @Published var showingSuccess = false
-    @Published var showingError = false
-    @Published var errorMessage = ""
-    @Published var exportedFileURL: URL?
+    var isExporting = false
+    var showingShareSheet = false
+    var showingSuccess = false
+    var showingError = false
+    var errorMessage = ""
+    var exportedFileURL: URL?
 
     private let calendar = Calendar.current
 

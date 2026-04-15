@@ -11,24 +11,25 @@ import CoreData
 // MARK: - Shared Habit Form View Model
 
 @MainActor
-class HabitFormViewModel: ObservableObject {
-    // MARK: - Published Properties
-    
-    @Published var name = "" {
+@Observable
+class HabitFormViewModel {
+    // MARK: - Properties
+
+    var name = "" {
         didSet { validateForm() }
     }
-    @Published var selectedIcon = "circle.fill"
-    @Published var selectedColor = "#FF8C42"
-    @Published var selectedFrequency = HabitFrequency.daily.rawValue
-    @Published var customDays: [Int] = []
-    @Published var notes = ""
-    @Published var trackDetails = false
-    @Published var detailType = "general"
-    @Published var useMultipleStates = false
-    @Published var isNegativeHabit = false
-    @Published var showingIconSheet = false
-    @Published var isValid = false
-    @Published var isSaving = false
+    var selectedIcon = "circle.fill"
+    var selectedColor = "#FF8C42"
+    var selectedFrequency = HabitFrequency.daily.rawValue
+    var customDays: [Int] = []
+    var notes = ""
+    var trackDetails = false
+    var detailType = "general"
+    var useMultipleStates = false
+    var isNegativeHabit = false
+    var showingIconSheet = false
+    var isValid = false
+    var isSaving = false
     
     // MARK: - Private Properties
     
@@ -149,14 +150,14 @@ struct EditHabitView: View {
     
     // MARK: - State Properties
     
-    @StateObject private var viewModel: HabitFormViewModel
+    @State private var viewModel: HabitFormViewModel
     @State private var showingDeleteAlert = false
-    
+
     // MARK: - Initialization
-    
+
     init(habit: Habit) {
         self.habit = habit
-        self._viewModel = StateObject(wrappedValue: HabitFormViewModel(habit: habit))
+        self._viewModel = State(wrappedValue: HabitFormViewModel(habit: habit))
     }
     
     // MARK: - Body

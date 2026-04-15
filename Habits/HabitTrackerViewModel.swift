@@ -10,16 +10,17 @@ import SwiftUI
 // MARK: - View Model
 
 @MainActor
-class HabitTrackerViewModel: ObservableObject {
-    // MARK: - Published Properties
-    
-    @Published var habits: [Habit] = []
-    @Published var selectedDate = Date()
-    @Published var visibleDates: [Date] = []
-    @Published var showingAddHabitSheet = false
-    @Published var selectedHabit: Habit? = nil
-    @Published var habitToDelete: Habit? = nil
-    @Published var showingDeleteAlert = false
+@Observable
+class HabitTrackerViewModel {
+    // MARK: - Properties
+
+    var habits: [Habit] = []
+    var selectedDate = Date()
+    var visibleDates: [Date] = []
+    var showingAddHabitSheet = false
+    var selectedHabit: Habit? = nil
+    var habitToDelete: Habit? = nil
+    var showingDeleteAlert = false
     
     // MARK: - Dependencies
     
@@ -33,13 +34,7 @@ class HabitTrackerViewModel: ObservableObject {
     
     private let calendar = Calendar.current
     private var loadTask: Task<Void, Never>?
-    
-    // MARK: - Lifecycle
-    
-    deinit {
-        loadTask?.cancel()
-    }
-    
+
     // MARK: - Public Methods
     
     /// Loads all habits from Core Data

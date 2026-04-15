@@ -8,7 +8,7 @@ struct HabitCheckboxView: View {
 
     // MARK: - Dependencies
 
-    @EnvironmentObject private var dataRepository: HabitDataRepository
+    @Environment(HabitDataRepository.self) private var dataRepository
 
     // MARK: - Size Class Adaptation
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -92,7 +92,7 @@ struct HabitCheckboxView: View {
             }
             .sheet(isPresented: $showingDetailView) {
                 HabitCompletionDetailView(habit: habit, date: date)
-                    .environmentObject(dataRepository)
+                    .environment(dataRepository)
             }
     }
 

@@ -7,10 +7,9 @@
 
 import SwiftUI
 import CoreData
-import Combine
 
 struct DayJournalView: View {
-    @StateObject private var viewModel = DayJournalViewModel()
+    @State private var viewModel = DayJournalViewModel()
     @State private var showingAddNote = false
     @State private var showingExportView = false
     @State private var newNoteText = ""
@@ -645,13 +644,14 @@ struct JournalHabitEntry: Identifiable {
 // MARK: - View Model
 
 @MainActor
-class DayJournalViewModel: ObservableObject {
-    @Published var selectedDate: Date
-    @Published var habitsWithData: [JournalHabitEntry] = []
-    @Published var binaryHabits: [JournalHabitEntry] = []
-    @Published var notes: [Note] = []
-    @Published var selectedNote: Note?
-    @Published var visibleDays: [Date] = []
+@Observable
+class DayJournalViewModel {
+    var selectedDate: Date
+    var habitsWithData: [JournalHabitEntry] = []
+    var binaryHabits: [JournalHabitEntry] = []
+    var notes: [Note] = []
+    var selectedNote: Note?
+    var visibleDays: [Date] = []
 
     private let calendar = Calendar.current
     private let daysToShow = 60 // Show 60 days back

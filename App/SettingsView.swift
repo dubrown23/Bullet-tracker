@@ -11,16 +11,17 @@ import CoreData
 // MARK: - View Model
 
 @MainActor
-class SettingsViewModel: ObservableObject {
-    // MARK: - Published Properties
+@Observable
+class SettingsViewModel {
+    // MARK: - Properties
 
-    @Published var reminderEnabled: Bool {
+    var reminderEnabled: Bool {
         didSet { savePreferences() }
     }
-    @Published var reminderTime: Date {
+    var reminderTime: Date {
         didSet { savePreferences() }
     }
-    @Published var iCloudSyncEnabled: Bool {
+    var iCloudSyncEnabled: Bool {
         didSet {
             if iCloudSyncEnabled != oldValue {
                 savePreferences()
@@ -34,10 +35,10 @@ class SettingsViewModel: ObservableObject {
     }
 
     // Alert state
-    @Published var alertConfig: AlertConfig?
+    var alertConfig: AlertConfig?
 
     // Sheet state
-    @Published var showingExportJournal = false
+    var showingExportJournal = false
 
     // MARK: - Types
 
@@ -176,7 +177,7 @@ extension Notification.Name {
 // MARK: - Main View
 
 struct SettingsView: View {
-    @StateObject private var viewModel = SettingsViewModel()
+    @State private var viewModel = SettingsViewModel()
 
     var body: some View {
         NavigationStack {

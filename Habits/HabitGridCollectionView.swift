@@ -62,7 +62,7 @@ struct HabitGridView: View {
             emptyState(message: "No habits to display")
         } else {
             mainGrid
-                .environmentObject(dataRepository)
+                .environment(dataRepository)
         }
     }
 
@@ -75,7 +75,7 @@ struct HabitGridView: View {
                 .padding()
             Spacer()
         }
-        .environmentObject(dataRepository)
+        .environment(dataRepository)
     }
 
     // MARK: - Main Grid

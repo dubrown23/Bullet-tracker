@@ -7,50 +7,49 @@
 
 import SwiftUI
 import CoreData
-import Combine
 import WidgetKit
 
 /// Centralized repository for habit data that efficiently manages Core Data operations
 /// and provides optimized data access for habit tracking views
 @MainActor
-class HabitDataRepository: ObservableObject {
-    // MARK: - Published Properties
-    
+@Observable
+class HabitDataRepository {
+    // MARK: - Properties
+
     /// Dictionary mapping habit IDs to their entries organized by date
-    @Published private(set) var habitEntries: [UUID: [Date: HabitEntry]] = [:]
-    
+    private(set) var habitEntries: [UUID: [Date: HabitEntry]] = [:]
+
     /// Currently loaded date range to avoid unnecessary reloads
-    @Published private(set) var loadedDateRange: ClosedRange<Date>?
-    
+    private(set) var loadedDateRange: ClosedRange<Date>?
+
     /// Loading state for UI feedback
-    @Published private(set) var isLoading = false
-    
+    private(set) var isLoading = false
+
     // MARK: - Private Properties
-    
+
     private var loadingTask: Task<Void, Never>?
     private let calendar = Calendar.current
     private let context = CoreDataManager.shared.container.viewContext
-    
+    private let notificationCenter = NotificationCenter.default
+
     // MARK: - Lifecycle
-    
+
     init() {
         // Listen for Core Data remote changes (from CloudKit sync or widget)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(contextDidSave(_:)),
-            name: .NSManagedObjectContextDidSave,
-            object: nil
-        )
+        notificationCenter.addObserver(
+            forName: .NSManagedObjectContextDidSave,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            MainActor.assumeIsolated {
+                self?.contextDidSave(notification)
+            }
+        }
     }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-        loadingTask?.cancel()
-    }
-    
+
     // MARK: - Notification Handlers
-    
-    @objc private func contextDidSave(_ notification: Notification) {
+
+    private func contextDidSave(_ notification: Notification) {
         // Check if this is a save from a different context (like the widget)
         guard let savedContext = notification.object as? NSManagedObjectContext,
               savedContext != context else {

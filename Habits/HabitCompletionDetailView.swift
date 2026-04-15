@@ -18,7 +18,7 @@ struct HabitCompletionDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
-    @EnvironmentObject private var dataRepository: HabitDataRepository
+    @Environment(HabitDataRepository.self) private var dataRepository
     
     // MARK: - State Properties
     

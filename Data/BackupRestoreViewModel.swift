@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 
 // MARK: - Document Picker Delegate
 
-class BackupPickerDelegate: NSObject, ObservableObject, UIDocumentPickerDelegate {
+class BackupPickerDelegate: NSObject, UIDocumentPickerDelegate {
     var onDocumentsPicked: ((URL) -> Void)?
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
@@ -46,7 +46,8 @@ class BackupPickerDelegate: NSObject, ObservableObject, UIDocumentPickerDelegate
 
 // MARK: - View Model
 
-class BackupRestoreViewModel: ObservableObject {
+@Observable
+class BackupRestoreViewModel {
     // MARK: - Alert Type
     
     enum AlertType: Identifiable {
@@ -76,15 +77,15 @@ class BackupRestoreViewModel: ObservableObject {
     
     // MARK: - Published Properties
     
-    @Published var isCreatingBackup = false
-    @Published var isRestoringBackup = false
-    @Published var backupProgress: Float = 0
-    @Published var restoreProgress: Float = 0
-    @Published var currentAlert: AlertType?
-    @Published var showImportPicker = false
-    @Published var showConfirmRestore = false
-    @Published var selectedBackupURL: URL?
-    @Published var documentPickerDelegate = BackupPickerDelegate()
+    var isCreatingBackup = false
+    var isRestoringBackup = false
+    var backupProgress: Float = 0
+    var restoreProgress: Float = 0
+    var currentAlert: AlertType?
+    var showImportPicker = false
+    var showConfirmRestore = false
+    var selectedBackupURL: URL?
+    var documentPickerDelegate = BackupPickerDelegate()
     
     // MARK: - Private Properties for Memory Management
     
@@ -263,7 +264,7 @@ class BackupRestoreViewModel: ObservableObject {
 struct BackupRestoreView: View {
     // MARK: - State Properties
     
-    @StateObject private var viewModel = BackupRestoreViewModel()
+    @State private var viewModel = BackupRestoreViewModel()
     @State private var actionSourceRect: CGRect = .zero
     @State private var actionSourceView: UIView? = nil
     

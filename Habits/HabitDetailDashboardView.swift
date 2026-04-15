@@ -14,7 +14,7 @@ struct HabitDetailDashboardView: View {
     let habit: Habit?
     let period: DashboardTimePeriod
 
-    @StateObject private var viewModel = HabitDetailViewModel()
+    @State private var viewModel = HabitDetailViewModel()
 
     var body: some View {
         ScrollView {
@@ -175,15 +175,16 @@ struct HabitDetailDashboardView: View {
 // MARK: - Habit Detail View Model
 
 @MainActor
-class HabitDetailViewModel: ObservableObject {
-    @Published var completionRate: Int = 0
-    @Published var completedDays: Int = 0
-    @Published var totalDays: Int = 0
-    @Published var currentStreak: Int = 0
-    @Published var bestStreak: Int = 0
-    @Published var heatmapDates: [Date] = []
-    @Published var dailyCompletion: [Date: Double] = [:]
-    @Published var isLoading: Bool = false
+@Observable
+class HabitDetailViewModel {
+    var completionRate: Int = 0
+    var completedDays: Int = 0
+    var totalDays: Int = 0
+    var currentStreak: Int = 0
+    var bestStreak: Int = 0
+    var heatmapDates: [Date] = []
+    var dailyCompletion: [Date: Double] = [:]
+    var isLoading: Bool = false
 
     private let calculationService = HabitCalculationService.shared
 

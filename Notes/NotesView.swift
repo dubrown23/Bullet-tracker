@@ -7,10 +7,9 @@
 
 import SwiftUI
 import CoreData
-import Combine
 
 struct NotesView: View {
-    @StateObject private var viewModel = NotesViewModel()
+    @State private var viewModel = NotesViewModel()
     @State private var showingAddNote = false
     @State private var searchText = ""
 
@@ -364,10 +363,11 @@ struct EditNoteView: View {
 // MARK: - View Model
 
 @MainActor
-class NotesViewModel: ObservableObject {
-    @Published var notes: [Note] = []
-    @Published var selectedDate = Date()
-    @Published var selectedNote: Note?
+@Observable
+class NotesViewModel {
+    var notes: [Note] = []
+    var selectedDate = Date()
+    var selectedNote: Note?
 
     private let calendar = Calendar.current
 

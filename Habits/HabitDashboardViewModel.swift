@@ -7,7 +7,6 @@
 
 import SwiftUI
 import CoreData
-import Combine
 
 // MARK: - Time Period Enum
 
@@ -49,17 +48,18 @@ struct HabitStatData: Identifiable {
 // MARK: - Dashboard View Model
 
 @MainActor
-class HabitDashboardViewModel: ObservableObject {
+@Observable
+class HabitDashboardViewModel {
 
-    @Published var selectedPeriod: DashboardTimePeriod = .month
-    @Published var habits: [Habit] = []
-    @Published var habitStats: [HabitStatData] = []
-    @Published var overallCompletionRate: Int = 0
-    @Published var bestStreak: Int = 0
-    @Published var currentStreak: Int = 0
-    @Published var heatmapDates: [Date] = []
-    @Published var dailyCompletionRates: [Date: Double] = [:]
-    @Published var isLoading: Bool = false
+    var selectedPeriod: DashboardTimePeriod = .month
+    var habits: [Habit] = []
+    var habitStats: [HabitStatData] = []
+    var overallCompletionRate: Int = 0
+    var bestStreak: Int = 0
+    var currentStreak: Int = 0
+    var heatmapDates: [Date] = []
+    var dailyCompletionRates: [Date: Double] = [:]
+    var isLoading: Bool = false
 
     private let calendar = Calendar.current
     private let calculationService = HabitCalculationService.shared

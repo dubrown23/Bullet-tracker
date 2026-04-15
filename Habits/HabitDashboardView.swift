@@ -9,7 +9,7 @@ import SwiftUI
 import CoreData
 
 struct HabitDashboardView: View {
-    @StateObject private var viewModel = HabitDashboardViewModel()
+    @State private var viewModel = HabitDashboardViewModel()
     @Environment(\.scenePhase) private var scenePhase
     @State private var hasLoadedOnce = false
 

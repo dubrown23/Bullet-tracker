@@ -17,7 +17,7 @@ struct AddHabitView: View {
     
     // MARK: - State Properties
     
-    @StateObject private var viewModel = HabitFormViewModel()
+    @State private var viewModel = HabitFormViewModel()
     
     // MARK: - Body
     

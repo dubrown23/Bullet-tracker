@@ -9,7 +9,7 @@ import SwiftUI
 import CoreData
 
 struct HabitTrackerView: View {
-    @StateObject private var viewModel = HabitTrackerViewModel()
+    @State private var viewModel = HabitTrackerViewModel()
     @State private var isEditMode: EditMode = .inactive
     @State private var lastDateCheck = Date()
     @Environment(\.scenePhase) private var scenePhase
