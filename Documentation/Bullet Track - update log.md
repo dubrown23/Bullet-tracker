@@ -788,3 +788,54 @@ Tags: #cleanup #refactor #organization #optimization #naming #widgets #v1.5
   - Faster app launch with cleaner initialization code
 - **App now production-ready** for new feature development with clean, optimized codebase
 Tags: #optimization #debug #cleanup #constants #errorhandling #performance #production
+
+---
+## 03.31.2026 - Performance Optimization Sprint: Static Formatters, Combine Removal & Modernization
+- **JournalExportView.swift - Static DateFormatter conversion (CRITICAL)**:
+  - Created 6 static formatters replacing ~10 inline DateFormatter/ISO8601DateFormatter instances
+  - `JournalExportViewModel`: static `mediumDateFormatter` and `fileNameDateFormatter`
+  - `JournalPDFGenerator`: static `summaryDateFormatter`, `dayHeaderFormatter`, `timeFormatter`, `iso8601Formatter`
+  - `JournalJSONExporter`: static `iso8601Formatter` replacing 5 inline instances (some inside loops)
+  - Significant performance improvement for export operations
+- **NotesView.swift - Static DateFormatter conversion**:
+  - Converted `monthYearString` computed property to use static `monthYearFormatter`
+  - Eliminates DateFormatter allocation on every property access
+- **EditHabitView.swift - Combine to native Swift migration**:
+  - Removed `import Combine`, `AnyCancellable`, `.sink`, `.store` patterns entirely
+  - Replaced Combine validation pipeline with simple `didSet` observer on `name` property
+  - Removed 3 debounced sinks (2 had empty closures, 1 duplicated validation logic)
+  - Reduced file from 286 to ~228 lines with cleaner, more maintainable code
+- **HabitGridCollectionView.swift - Modern async patterns**:
+  - Replaced 3 `DispatchQueue.main.asyncAfter` calls with `Task { @MainActor in try? await Task.sleep(...) }`
+  - Consistent use of structured concurrency throughout the file
+- **Code quality verification**:
+  - Confirmed both `NotesViewModel` and `HabitFormViewModel` already have `@MainActor` annotation
+  - Confirmed `import Combine` is required in NotesView.swift and DayJournalView.swift (used by ObservableObject/@Published)
+  - Build passes with zero errors and zero warnings
+Tags: #optimization #performance #dateformatter #combine #async #cleanup
+
+---
+## 04.15.2026 - File Split, PDF TextStyle Consolidation & Unit Tests
+- **JournalExportView.swift file split** (1,239 lines -> 3 focused files):
+  - `JournalExportView.swift` (448 lines) - View + ViewModel + types only
+  - `JournalPDFGenerator.swift` (488 lines) - PDF generation, stats, data types
+  - `JournalJSONExporter.swift` (85 lines) - JSON export
+- **PDF TextStyle consolidation**:
+  - Created `TextStyle` enum with 14 named attribute constants
+  - Replaced ~12 inline `[NSAttributedString.Key: Any]` dictionaries across 6 methods
+  - Single source of truth for all PDF text styling
+- **Unit tests** (31 tests, 9 suites - all passing):
+  - `HabitFrequencyTests` (9): all frequency modes, custom days, start date, nil/invalid defaults
+  - `HabitFrequencyEnumTests` (3): raw values, display names, case count
+  - `CompletionStateTests` (3): raw values, icons, case count
+  - `EntryTypeTests` (2): symbols, display names
+  - `TaskStatusTests` (2): symbols, display names
+  - `ExportFormatTests` (3): titles, file extensions, case count
+  - `DateRangeTypeTests` (2): cases, raw values
+  - `ColorHexTests` (5): 3/6/8-char hex, no prefix, invalid input
+  - `LayoutConstantsTests` (2): positive values, ordering
+- **Future Optimizations audit**: all remaining items reviewed and resolved
+  - SettingsView alerts: already consolidated (AlertConfig pattern)
+  - HabitCompletionDetailView workout: already well-extracted into sub-views
+  - HabitTrackerViewModel filtering: no filtering exists in current code
+Tags: #refactor #filesplit #testing #pdf #cleanup
