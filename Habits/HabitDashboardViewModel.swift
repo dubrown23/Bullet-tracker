@@ -96,7 +96,7 @@ class HabitDashboardViewModel {
         let habitObjectIDs = habits.map { $0.objectID }
         let period = selectedPeriod
 
-        Task.detached {
+        Task {
             let bgContext = CoreDataManager.shared.container.newBackgroundContext()
             let service = HabitCalculationService.shared
 
@@ -161,16 +161,14 @@ class HabitDashboardViewModel {
                 return (stats, overallRate, best, current, dates, rates)
             }
 
-            // Update UI on main thread
-            await MainActor.run {
-                self.habitStats = results.stats
-                self.overallCompletionRate = results.overallRate
-                self.bestStreak = results.best
-                self.currentStreak = results.current
-                self.heatmapDates = results.dates
-                self.dailyCompletionRates = results.rates
-                self.isLoading = false
-            }
+            // Update UI (already on @MainActor via Task inheritance)
+            self.habitStats = results.stats
+            self.overallCompletionRate = results.overallRate
+            self.bestStreak = results.best
+            self.currentStreak = results.current
+            self.heatmapDates = results.dates
+            self.dailyCompletionRates = results.rates
+            self.isLoading = false
         }
     }
 }

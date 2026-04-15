@@ -839,3 +839,29 @@ Tags: #optimization #performance #dateformatter #combine #async #cleanup
   - HabitCompletionDetailView workout: already well-extracted into sub-views
   - HabitTrackerViewModel filtering: no filtering exists in current code
 Tags: #refactor #filesplit #testing #pdf #cleanup
+
+---
+## 04.15.2026 - @Observable Macro Migration (Combine Elimination)
+- **Migrated 10 ViewModels** from `ObservableObject` to `@Observable`:
+  - HabitTrackerViewModel, HabitFormViewModel, HabitDataRepository
+  - HabitDashboardViewModel, HabitDetailViewModel
+  - NotesViewModel, DayJournalViewModel, JournalExportViewModel
+  - SettingsViewModel, BackupRestoreViewModel
+- **Removed ObservableObject** from BackupManager (had no @Published properties)
+- **View wrapper updates** across 8 files:
+  - `@StateObject` → `@State` (6 views)
+  - `@EnvironmentObject` → `@Environment(Type.self)` (HabitCheckboxView, HabitCompletionDetailView)
+  - `.environmentObject()` → `.environment()` (HabitGridCollectionView, HabitCheckboxView)
+- **Eliminated `import Combine`** from 4 files (DayJournalView, HabitDashboardViewModel, HabitDataRepository, NotesView)
+- **HabitDataRepository refactor**:
+  - Converted `@objc` selector-based NotificationCenter observer to closure-based API
+  - Required because `@Observable` classes don't inherit from NSObject
+  - Used `MainActor.assumeIsolated` for main-queue notification callbacks
+- **Concurrency fixes**:
+  - Resolved `deinit` isolation errors for `@MainActor`-isolated properties
+  - Zero errors, zero warnings on clean build
+- **Performance benefits**:
+  - SwiftUI now tracks individual property access (finer-grained view updates)
+  - Previously, any `@Published` change triggered re-render of all observing views
+  - Simpler code: removed all `@Published` annotations (45+ occurrences)
+Tags: #observable #modernization #combine #performance #swiftui

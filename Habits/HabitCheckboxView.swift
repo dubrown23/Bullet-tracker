@@ -178,7 +178,8 @@ struct HabitCheckboxView: View {
 
             Button(action: {
                 performCheck()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(300))
                     showingDetailView = true
                 }
             }) {
@@ -224,22 +225,21 @@ struct HabitCheckboxView: View {
         dataRepository.updateEntry(for: habit, on: date, completed: true, state: 1)
 
         // Pop in the checkmark slightly delayed
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
             withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
                 showCheckmarkPop = true
             }
-        }
 
-        // Reset circle animation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            // Reset circle animation
+            try? await Task.sleep(for: .milliseconds(150))
             withAnimation {
                 isAnimating = false
             }
-        }
 
-        // Show detail view if this habit tracks details
-        if shouldTrackDetails {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            // Show detail view if this habit tracks details
+            if shouldTrackDetails {
+                try? await Task.sleep(for: .milliseconds(150))
                 showingDetailView = true
             }
         }
@@ -254,18 +254,17 @@ struct HabitCheckboxView: View {
             showCheckmarkPop = false
         }
 
-        // Then animate circle
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
-                isAnimating = true
-            }
-        }
-
         // Remove entry
         dataRepository.removeEntry(for: habit, on: date)
 
-        // Reset animation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+        // Animate circle then reset
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                isAnimating = true
+            }
+
+            try? await Task.sleep(for: .milliseconds(150))
             withAnimation {
                 isAnimating = false
             }
@@ -300,7 +299,8 @@ struct HabitCheckboxView: View {
             dataRepository.updateEntry(for: habit, on: date, completed: true, state: nextState)
             // Quick pop for icon change
             showCheckmarkPop = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(100))
                 withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
                     showCheckmarkPop = true
                 }
@@ -308,7 +308,8 @@ struct HabitCheckboxView: View {
         }
 
         // Reset animation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
             withAnimation {
                 isAnimating = false
             }

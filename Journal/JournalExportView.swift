@@ -367,19 +367,15 @@ class JournalExportViewModel {
         let format = selectedFormat
         let includeSummary = includeSummaryDashboard
 
-        Task.detached(priority: .userInitiated) { [weak self] in
-            guard let self = self else { return }
-
+        Task {
             switch format {
             case .pdf:
-                await self.exportToPDF(startDate: startDate, endDate: endDate, includeSummary: includeSummary)
+                await exportToPDF(startDate: startDate, endDate: endDate, includeSummary: includeSummary)
             case .json:
-                await self.exportToJSON(startDate: startDate, endDate: endDate)
+                await exportToJSON(startDate: startDate, endDate: endDate)
             }
 
-            await MainActor.run {
-                self.isExporting = false
-            }
+            isExporting = false
         }
     }
 

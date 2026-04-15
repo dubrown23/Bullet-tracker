@@ -110,18 +110,17 @@ class BackupRestoreViewModel {
     func createBackup(from viewController: UIViewController, sourceView: UIView) {
         isCreatingBackup = true
         backupProgress = 0
-        
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.setupBackupProgressObserver()
-            
-            if let backupURL = BackupManager.shared.createBackup() {
-                self?.handleBackupSuccess(
-                    with: backupURL,
-                    from: viewController,
-                    sourceView: sourceView
-                )
+        setupBackupProgressObserver()
+
+        Task {
+            let backupURL = await Task.detached(priority: .userInitiated) {
+                BackupManager.shared.createBackup()
+            }.value
+
+            if let backupURL {
+                handleBackupSuccess(with: backupURL, from: viewController, sourceView: sourceView)
             } else {
-                self?.handleBackupError()
+                handleBackupError()
             }
         }
     }
@@ -140,16 +139,17 @@ class BackupRestoreViewModel {
     /// Restores from the selected backup file
     func restoreFromBackup() {
         guard let backupURL = selectedBackupURL else { return }
-        
+
         isRestoringBackup = true
         restoreProgress = 0
-        
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.setupRestoreProgressObserver()
-            
-            let success = BackupManager.shared.restoreFromURL(backupURL)
-            
-            self?.handleRestoreCompletion(success: success)
+        setupRestoreProgressObserver()
+
+        Task {
+            let success = await Task.detached(priority: .userInitiated) {
+                BackupManager.shared.restoreFromURL(backupURL)
+            }.value
+
+            handleRestoreCompletion(success: success)
         }
     }
     
@@ -208,53 +208,41 @@ class BackupRestoreViewModel {
         from viewController: UIViewController,
         sourceView: UIView
     ) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            let activityVC = UIActivityViewController(
-                activityItems: [url],
-                applicationActivities: nil
-            )
-            
-            if let popoverController = activityVC.popoverPresentationController {
-                popoverController.sourceView = sourceView
-                popoverController.sourceRect = sourceView.bounds
-            }
-            
-            self.isCreatingBackup = false
-            self.backupProgress = 1.0
-            self.removeBackupProgressObserver()
-            
-            viewController.present(activityVC, animated: true)
+        let activityVC = UIActivityViewController(
+            activityItems: [url],
+            applicationActivities: nil
+        )
+
+        if let popoverController = activityVC.popoverPresentationController {
+            popoverController.sourceView = sourceView
+            popoverController.sourceRect = sourceView.bounds
         }
+
+        isCreatingBackup = false
+        backupProgress = 1.0
+        removeBackupProgressObserver()
+
+        viewController.present(activityVC, animated: true)
     }
-    
+
     private func handleBackupError() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            self.isCreatingBackup = false
-            self.removeBackupProgressObserver()
-            
-            let errorMessage = BackupManager.shared.errorMessage ?? "Failed to create backup"
-            self.currentAlert = .error(errorMessage)
-        }
+        isCreatingBackup = false
+        removeBackupProgressObserver()
+
+        let errorMessage = BackupManager.shared.errorMessage ?? "Failed to create backup"
+        currentAlert = .error(errorMessage)
     }
-    
+
     private func handleRestoreCompletion(success: Bool) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            self.isRestoringBackup = false
-            self.restoreProgress = 1.0
-            self.removeRestoreProgressObserver()
-            
-            if success {
-                self.currentAlert = .success("Backup restored successfully! Restart the app to see your data.")
-            } else {
-                let errorMessage = BackupManager.shared.errorMessage ?? "Failed to restore from backup"
-                self.currentAlert = .error(errorMessage)
-            }
+        isRestoringBackup = false
+        restoreProgress = 1.0
+        removeRestoreProgressObserver()
+
+        if success {
+            currentAlert = .success("Backup restored successfully! Restart the app to see your data.")
+        } else {
+            let errorMessage = BackupManager.shared.errorMessage ?? "Failed to restore from backup"
+            currentAlert = .error(errorMessage)
         }
     }
 }
@@ -424,14 +412,14 @@ struct BackupRestoreView: View {
     }
     
     private var captureSourceView: some View {
-        GeometryReader { geometry -> Color in
-            DispatchQueue.main.async {
-                actionSourceRect = geometry.frame(in: .global)
-                if actionSourceView == nil {
-                    actionSourceView = UIView(frame: actionSourceRect)
+        GeometryReader { geometry in
+            Color.clear
+                .onAppear {
+                    actionSourceRect = geometry.frame(in: .global)
+                    if actionSourceView == nil {
+                        actionSourceView = UIView(frame: actionSourceRect)
+                    }
                 }
-            }
-            return Color.clear
         }
     }
     

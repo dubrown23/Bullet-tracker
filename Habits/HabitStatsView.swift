@@ -348,7 +348,7 @@ struct EnhancedHabitProgressView: View {
         let periodStart = timeframe.getStartDate(from: endDate)
         let currentTimeframe = timeframe
         
-        Task.detached {
+        Task {
             let bgContext = CoreDataManager.shared.container.newBackgroundContext()
             
             let result: HabitStats? = await bgContext.perform {
@@ -414,15 +414,13 @@ struct EnhancedHabitProgressView: View {
                 return newStats
             }
             
-            await MainActor.run {
-                if let result = result {
-                    stats = result
-                    Self.statsCache.set(stats, for: habit, timeframe: currentTimeframe, endDate: endDate)
-                } else {
-                    stats = HabitStats()
-                }
-                isLoading = false
+            if let result = result {
+                stats = result
+                Self.statsCache.set(stats, for: habit, timeframe: currentTimeframe, endDate: endDate)
+            } else {
+                stats = HabitStats()
             }
+            isLoading = false
         }
     }
     

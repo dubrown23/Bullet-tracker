@@ -906,8 +906,7 @@ class DayJournalViewModel {
     private func buildExportData(for dates: [Date]) -> String {
         var lines: [String] = []
         let context = CoreDataManager.shared.container.viewContext
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateFormatter = DateFormatters.iso
 
         for date in dates {
             let startOfDay = calendar.startOfDay(for: date)

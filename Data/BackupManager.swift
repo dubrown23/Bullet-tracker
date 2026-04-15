@@ -494,10 +494,14 @@ class BackupManager {
     
     // MARK: - Helper Methods
     
-    private func formattedDate() -> String {
+    private static let backupDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd_HHmmss"
-        return formatter.string(from: Date())
+        return formatter
+    }()
+
+    private func formattedDate() -> String {
+        Self.backupDateFormatter.string(from: Date())
     }
 }
 

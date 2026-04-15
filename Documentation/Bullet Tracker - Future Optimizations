@@ -54,10 +54,10 @@ All optimization items from the original audit have been completed or resolved. 
 - Future: Could migrate to SwiftData for more modern persistence
 - Blocker: Need to ensure CloudKit compatibility
 
-### Observable Macro
-- Current: Uses ObservableObject + @Published (requires Combine import)
-- Future: Could migrate to @Observable macro (iOS 17+)
-- Benefit: Remove Combine dependency, simpler code, better performance
+### Observable Macro - DONE (04.15.2026)
+- COMPLETED: All 10 ViewModels migrated to @Observable
+- COMPLETED: Combine eliminated from all app files
+- COMPLETED: @StateObject → @State, @EnvironmentObject → @Environment
 
 ### Structured Concurrency
 - Current: Mix of Task.detached and Task { @MainActor }

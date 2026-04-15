@@ -194,7 +194,7 @@ class HabitDetailViewModel {
         // Capture for background
         let habitObjectID = habit.objectID
 
-        Task.detached {
+        Task {
             let bgContext = CoreDataManager.shared.container.newBackgroundContext()
             let service = HabitCalculationService.shared
 
@@ -249,16 +249,14 @@ class HabitDetailViewModel {
                 return (rate, completed, total, streak, best, dates, completion)
             }
 
-            await MainActor.run {
-                self.completionRate = results.rate
-                self.completedDays = results.completed
-                self.totalDays = results.total
-                self.currentStreak = results.streak
-                self.bestStreak = results.best
-                self.heatmapDates = results.dates
-                self.dailyCompletion = results.completion
-                self.isLoading = false
-            }
+            self.completionRate = results.rate
+            self.completedDays = results.completed
+            self.totalDays = results.total
+            self.currentStreak = results.streak
+            self.bestStreak = results.best
+            self.heatmapDates = results.dates
+            self.dailyCompletion = results.completion
+            self.isLoading = false
         }
     }
 }
