@@ -116,11 +116,19 @@ struct TodayView: View {
 
                 Text("\(viewModel.completedCount)")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .contentTransition(.numericText())
+                    .animation(.default, value: viewModel.completedCount)
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(viewModel.completedCount) of \(viewModel.totalCount) complete")
-                    .font(.headline)
+                HStack(spacing: 0) {
+                    Text("\(viewModel.completedCount)")
+                        .font(.system(.headline, design: .rounded, weight: .bold))
+                        .contentTransition(.numericText())
+                    Text(" of \(viewModel.totalCount) complete")
+                        .font(.headline)
+                }
+                .animation(.default, value: viewModel.completedCount)
 
                 Text(viewModel.progressMessage)
                     .font(.subheadline)

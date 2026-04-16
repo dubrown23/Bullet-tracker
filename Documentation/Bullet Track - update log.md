@@ -914,3 +914,26 @@ Tags: #concurrency #async #performance #dispatchqueue #modernization
   - Added HabitCompletionStateTests (5 tests): unchecked, success, partial, failed, details flag
 - **Net result**: ~1,000 lines of dead code removed, 33 tests green, zero build errors
 Tags: #refactor #cleanup #deadcode #testing #architecture #repository #performance
+
+---
+## 04.16.2026 - UI Polish & Widget Redesign
+- **Today view enhancements**:
+  - Added habit icon with colored background badge to each habit row
+  - Added last 7 days completion mini dots (visual streak history)
+  - Added flame icon with streak count (replaces plain text "X day streak")
+  - Animated progress count with `.contentTransition(.numericText())`
+  - Split completion text for selective rounded font on numbers
+- **Dashboard polish**:
+  - Added icons (chart.bar.fill, trophy.fill, flame.fill) to summary stat cards
+  - Applied `.contentTransition(.numericText())` for animated stat values
+  - Applied rounded semibold font to per-habit completion percentages
+- **Detail view polish**:
+  - Applied rounded design font to all numeric values (completion rate, days, streaks)
+- **Widget complete redesign** (visual, widget-native approach):
+  - Small: Progress ring with count + colored habit status dots
+  - Medium: Thin progress bar + row of tappable habit circles with icons
+  - Large: Header with mini ring + 4-column grid of tappable habit circles
+  - New HabitCircleButton component: colored outline + icon (uncompleted) / filled + checkmark (completed)
+  - All sizes support tap-to-complete via CompleteHabitIntent
+  - Added .systemSmall to supported widget families
+Tags: #ui #polish #widget #redesign #animation

@@ -60,6 +60,12 @@ All optimization items from the original audit have been completed or resolved. 
 - COMPLETED: Removed unused AppConstants.swift
 - COMPLETED: Updated test suites — replaced dead enum tests with CompletionStyle and HabitCompletionState tests
 
+### UI Polish & Widget Redesign - DONE (04.16.2026)
+- COMPLETED: Today view — habit icons, 7-day completion dots, flame streak indicator, animated number transitions
+- COMPLETED: Dashboard — stat icons, animated values, rounded fonts on percentages
+- COMPLETED: Detail view — rounded design font on all numeric values
+- COMPLETED: Widget redesign — visual circle-based design (small/medium/large), tappable HabitCircleButton component, CompleteHabitIntent for tap-to-complete
+
 ## Architecture Considerations (Long-term)
 
 ### SwiftData Migration

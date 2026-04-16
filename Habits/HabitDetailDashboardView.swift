@@ -45,11 +45,12 @@ struct HabitDetailDashboardView: View {
                     Section("Statistics") {
                         LabeledContent("Completion Rate") {
                             Text("\(viewModel.completionRate)%")
-                                .fontWeight(.semibold)
+                                .font(.system(.body, design: .rounded, weight: .bold))
                                 .foregroundStyle(Color(hex: habit.color ?? "#007AFF"))
                         }
                         LabeledContent("Days Completed") {
                             Text("\(viewModel.completedDays) of \(viewModel.totalDays)")
+                                .font(.system(.body, design: .rounded))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -61,7 +62,7 @@ struct HabitDetailDashboardView: View {
                                 Text("Current")
                                 Spacer()
                                 Text("\(viewModel.currentStreak) days")
-                                    .fontWeight(.semibold)
+                                    .font(.system(.body, design: .rounded, weight: .semibold))
                             }
                         } icon: {
                             Image(systemName: "flame.fill")
@@ -73,7 +74,7 @@ struct HabitDetailDashboardView: View {
                                 Text("Best")
                                 Spacer()
                                 Text("\(viewModel.bestStreak) days")
-                                    .fontWeight(.semibold)
+                                    .font(.system(.body, design: .rounded, weight: .semibold))
                             }
                         } icon: {
                             Image(systemName: "trophy.fill")
@@ -85,7 +86,7 @@ struct HabitDetailDashboardView: View {
                                 Text("Total Completions")
                                 Spacer()
                                 Text("\(viewModel.completedDays)")
-                                    .fontWeight(.semibold)
+                                    .font(.system(.body, design: .rounded, weight: .semibold))
                             }
                         } icon: {
                             Image(systemName: "checkmark.circle.fill")

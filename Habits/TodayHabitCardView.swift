@@ -45,22 +45,56 @@ struct TodayHabitRowView: View {
         Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: Date())
     }
 
+    @Environment(\.calendar) private var calendar
+
+    /// Last 7 days completion for mini dots
+    private var last7Days: [Bool] {
+        let today = calendar.startOfDay(for: Date())
+        return (0..<7).reversed().map { daysAgo in
+            guard let d = calendar.date(byAdding: .day, value: -daysAgo, to: today) else { return false }
+            return dataRepository.getCompletionState(for: habit, on: d).isCompleted
+        }
+    }
+
     var body: some View {
         HStack(spacing: 14) {
             // Checkbox
             checkboxView
                 .onTapGesture { handleCheckboxTap() }
 
+            // Habit icon
+            Image(systemName: habit.icon ?? "circle")
+                .font(.system(size: 14))
+                .foregroundStyle(habitColor)
+                .frame(width: 32, height: 32)
+                .background(habitColor.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
             // Habit info
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(habit.name ?? "")
                     .font(.body)
                     .foregroundStyle(isChecked ? .secondary : .primary)
 
-                if streak > 0 {
-                    Text("\(streak) day streak")
-                        .font(.caption)
+                HStack(spacing: 6) {
+                    // Last 7 days mini dots
+                    HStack(spacing: 3) {
+                        ForEach(0..<7, id: \.self) { index in
+                            Circle()
+                                .fill(last7Days[index] ? habitColor : Color(.systemGray4))
+                                .frame(width: 6, height: 6)
+                        }
+                    }
+
+                    if streak > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: 10))
+                            Text("\(streak)")
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        }
                         .foregroundStyle(isChecked ? Color.secondary : Color.orange)
+                    }
                 }
             }
 

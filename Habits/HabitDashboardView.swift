@@ -41,18 +41,21 @@ struct HabitDashboardView: View {
                     Section("Overall Progress") {
                         HStack(spacing: 0) {
                             summaryStatView(
+                                icon: "chart.bar.fill",
                                 value: "\(viewModel.overallCompletionRate)%",
                                 label: "Completion",
                                 color: .accentColor
                             )
                             summaryStatView(
+                                icon: "trophy.fill",
                                 value: "\(viewModel.bestStreak)",
                                 label: "Best Streak",
                                 color: .orange
                             )
                             summaryStatView(
+                                icon: "flame.fill",
                                 value: "\(viewModel.currentStreak)",
-                                label: "Current Streak",
+                                label: "Current",
                                 color: .green
                             )
                         }
@@ -93,11 +96,17 @@ struct HabitDashboardView: View {
 
     // MARK: - Summary Stat
 
-    private func summaryStatView(value: String, label: String, color: Color) -> some View {
-        VStack(spacing: 4) {
+    private func summaryStatView(icon: String, value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(color)
+
             Text(value)
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(color)
+                .contentTransition(.numericText())
+
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -123,7 +132,7 @@ struct HabitDashboardView: View {
                 Spacer()
 
                 Text("\(stat.completionRate)%")
-                    .font(.subheadline)
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
 
