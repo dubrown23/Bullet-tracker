@@ -17,158 +17,104 @@ struct HabitDetailDashboardView: View {
     @State private var viewModel = HabitDetailViewModel()
 
     var body: some View {
-        ScrollView {
+        Group {
             if let habit = habit {
-                VStack(spacing: 20) {
+                List {
                     // Habit header
-                    habitHeader(habit)
+                    Section {
+                        HStack(spacing: 14) {
+                            Image(systemName: habit.icon ?? "circle")
+                                .font(.title2)
+                                .foregroundStyle(Color(hex: habit.color ?? "#007AFF"))
+                                .frame(width: 44, height: 44)
+                                .background(Color(hex: habit.color ?? "#007AFF").opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
 
-                    // Stats cards
-                    statsCards
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(habit.name ?? "")
+                                    .font(.headline)
+                                Text(habit.frequency?.capitalized ?? "Daily")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
 
-                    // Calendar heatmap for this habit
-                    habitHeatmapCard
+                    // Stats
+                    Section("Statistics") {
+                        LabeledContent("Completion Rate") {
+                            Text("\(viewModel.completionRate)%")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Color(hex: habit.color ?? "#007AFF"))
+                        }
+                        LabeledContent("Days Completed") {
+                            Text("\(viewModel.completedDays) of \(viewModel.totalDays)")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
 
-                    // Streak info
-                    streakCard
+                    // Streaks
+                    Section("Streaks") {
+                        Label {
+                            HStack {
+                                Text("Current")
+                                Spacer()
+                                Text("\(viewModel.currentStreak) days")
+                                    .fontWeight(.semibold)
+                            }
+                        } icon: {
+                            Image(systemName: "flame.fill")
+                                .foregroundStyle(.orange)
+                        }
+
+                        Label {
+                            HStack {
+                                Text("Best")
+                                Spacer()
+                                Text("\(viewModel.bestStreak) days")
+                                    .fontWeight(.semibold)
+                            }
+                        } icon: {
+                            Image(systemName: "trophy.fill")
+                                .foregroundStyle(.yellow)
+                        }
+
+                        Label {
+                            HStack {
+                                Text("Total Completions")
+                                Spacer()
+                                Text("\(viewModel.completedDays)")
+                                    .fontWeight(.semibold)
+                            }
+                        } icon: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+                    }
+
+                    // Calendar heatmap
+                    Section("Activity") {
+                        CalendarHeatmapView(
+                            dates: viewModel.heatmapDates,
+                            completionData: viewModel.dailyCompletion,
+                            habitColor: Color(hex: habit.color ?? "#007AFF")
+                        )
+                        .padding(.vertical, 4)
+                    }
                 }
-                .padding()
+                .listStyle(.insetGrouped)
             } else {
-                Text("Habit not found")
-                    .foregroundColor(.secondary)
+                ContentUnavailableView("Habit Not Found", systemImage: "questionmark.circle")
             }
         }
-        .background(Color(UIColor.systemGroupedBackground))
-        .navigationTitle(habit?.name ?? "Habit Details")
+        .navigationTitle(habit?.name ?? "Details")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if let habit = habit {
                 viewModel.loadData(for: habit, period: period)
             }
         }
-    }
-
-    private func habitHeader(_ habit: Habit) -> some View {
-        HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(Color(hex: habit.color ?? "#007AFF").opacity(0.15))
-                    .frame(width: 60, height: 60)
-
-                Image(systemName: habit.icon ?? "circle")
-                    .font(.system(size: 28))
-                    .foregroundColor(Color(hex: habit.color ?? "#007AFF"))
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(habit.name ?? "")
-                    .font(.title2)
-                    .fontWeight(.bold)
-
-                Text(habit.frequency?.capitalized ?? "Daily")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding()
-        .background(Color(UIColor.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
-    }
-
-    private var statsCards: some View {
-        HStack(spacing: 12) {
-            StatCard(
-                title: "Completion",
-                value: "\(viewModel.completionRate)%",
-                subtitle: "\(viewModel.completedDays)/\(viewModel.totalDays) days",
-                color: Color(hex: habit?.color ?? "#007AFF")
-            )
-
-            StatCard(
-                title: "Current Streak",
-                value: "\(viewModel.currentStreak)",
-                subtitle: "days",
-                color: .green
-            )
-
-            StatCard(
-                title: "Best Streak",
-                value: "\(viewModel.bestStreak)",
-                subtitle: "days",
-                color: .orange
-            )
-        }
-    }
-
-    private var habitHeatmapCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "calendar")
-                    .font(.subheadline)
-                    .foregroundColor(Color(hex: habit?.color ?? "#007AFF"))
-                Text("Completion Calendar")
-                    .font(.headline)
-            }
-
-            CalendarHeatmapView(
-                dates: viewModel.heatmapDates,
-                completionData: viewModel.dailyCompletion,
-                habitColor: Color(hex: habit?.color ?? "#007AFF")
-            )
-        }
-        .padding()
-        .background(Color(UIColor.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
-    }
-
-    private var streakCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "flame")
-                    .font(.subheadline)
-                    .foregroundColor(.orange)
-                Text("Streak History")
-                    .font(.headline)
-            }
-
-            VStack(spacing: 8) {
-                HStack {
-                    Label("Current Streak", systemImage: "flame.fill")
-                        .foregroundColor(.orange)
-                    Spacer()
-                    Text("\(viewModel.currentStreak) days")
-                        .fontWeight(.semibold)
-                }
-
-                Divider()
-
-                HStack {
-                    Label("Best Streak", systemImage: "trophy.fill")
-                        .foregroundColor(.yellow)
-                    Spacer()
-                    Text("\(viewModel.bestStreak) days")
-                        .fontWeight(.semibold)
-                }
-
-                Divider()
-
-                HStack {
-                    Label("Total Completions", systemImage: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Spacer()
-                    Text("\(viewModel.completedDays)")
-                        .fontWeight(.semibold)
-                }
-            }
-        }
-        .padding()
-        .background(Color(UIColor.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
     }
 }
 
@@ -191,7 +137,6 @@ class HabitDetailViewModel {
     func loadData(for habit: Habit, period: DashboardTimePeriod) {
         isLoading = true
 
-        // Capture for background
         let habitObjectID = habit.objectID
 
         Task {
@@ -207,7 +152,6 @@ class HabitDetailViewModel {
                 let endDate = Date()
                 let startDate = period.startDate(from: endDate)
 
-                // Build dates array
                 var dates: [Date] = []
                 var currentDate = calendar.startOfDay(for: startDate)
                 let endDay = calendar.startOfDay(for: endDate)
@@ -217,13 +161,11 @@ class HabitDetailViewModel {
                     currentDate = nextDate
                 }
 
-                // Single batch fetch covering both period stats and streak lookback
                 let today = calendar.startOfDay(for: Date())
                 let streakStart = calendar.date(byAdding: .day, value: -365, to: today) ?? startDate
                 let fetchStart = min(streakStart, startDate)
                 let entries = service.fetchEntries(for: bgHabit, from: fetchStart, to: endDate, using: bgContext)
 
-                // Completion rate
                 let completionResult = service.calculateCompletionRate(
                     for: bgHabit, using: entries, from: startDate, to: endDate
                 )
@@ -231,7 +173,6 @@ class HabitDetailViewModel {
                 let completed = completionResult.completed
                 let rate = total > 0 ? Int(completionResult.rate * 100) : 0
 
-                // Daily completion map
                 var completion: [Date: Double] = [:]
                 for date in dates {
                     let dayStart = calendar.startOfDay(for: date)
@@ -242,7 +183,6 @@ class HabitDetailViewModel {
                     }
                 }
 
-                // Streaks
                 let streak = service.calculateCurrentStreak(for: bgHabit, using: entries)
                 let best = service.calculateBestStreak(for: bgHabit, using: entries, from: startDate, to: endDate)
 

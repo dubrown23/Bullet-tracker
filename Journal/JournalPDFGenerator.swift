@@ -397,9 +397,15 @@ struct JournalPDFGenerator {
 
         let overallCompletionRate = totalExpected > 0 ? Double(totalActual) / Double(totalExpected) : 0
 
+        // Batch-fetch entries for streak calculation (avoids N+1 queries)
+        let today = calendar.startOfDay(for: Date())
+        let streakStart = calendar.date(byAdding: .day, value: -365, to: today) ?? startDate
+        let allEntries = HabitCalculationService.shared.fetchAllEntries(for: allHabits, from: streakStart, to: today)
+
         var bestStreak: (habitName: String, streak: Int)?
         for habit in allHabits {
-            let streak = HabitCalculationService.shared.calculateCurrentStreak(for: habit)
+            let habitEntries = allEntries[habit.id ?? UUID()] ?? [:]
+            let streak = HabitCalculationService.shared.calculateCurrentStreak(for: habit, using: habitEntries)
             if streak > 0 && (bestStreak.map { streak > $0.streak } ?? true) {
                 bestStreak = (habit.name ?? "Unknown", streak)
             }

@@ -222,7 +222,7 @@ struct NotesView: View {
 // MARK: - Note Row View
 
 struct NoteRowView: View {
-    @ObservedObject var note: Note
+    let note: Note
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -309,7 +309,7 @@ struct AddNoteView: View {
 
 struct EditNoteView: View {
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var note: Note
+    let note: Note
     @State private var content: String = ""
     @FocusState private var isFocused: Bool
 

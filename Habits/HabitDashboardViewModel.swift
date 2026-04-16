@@ -52,7 +52,6 @@ struct HabitStatData: Identifiable {
 class HabitDashboardViewModel {
 
     var selectedPeriod: DashboardTimePeriod = .month
-    var habits: [Habit] = []
     var habitStats: [HabitStatData] = []
     var overallCompletionRate: Int = 0
     var bestStreak: Int = 0
@@ -61,24 +60,16 @@ class HabitDashboardViewModel {
     var dailyCompletionRates: [Date: Double] = [:]
     var isLoading: Bool = false
 
+    private let dataRepository = HabitDataRepository.shared
     private let calendar = Calendar.current
     private let calculationService = HabitCalculationService.shared
 
+    /// Habits from the shared repository
+    var habits: [Habit] { dataRepository.habits }
+
     func loadData() {
-        loadHabits()
+        dataRepository.loadHabits()
         calculateStatsInBackground()
-    }
-
-    private func loadHabits() {
-        let context = CoreDataManager.shared.container.viewContext
-        let request: NSFetchRequest<Habit> = Habit.fetchRequest()
-        request.sortDescriptors = [NSSortDescriptor(key: "order", ascending: true)]
-
-        do {
-            habits = try context.fetch(request)
-        } catch {
-            habits = []
-        }
     }
 
     private func calculateStatsInBackground() {

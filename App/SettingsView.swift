@@ -188,7 +188,6 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $viewModel.showingExportJournal) {
                 JournalExportView()
             }
@@ -201,26 +200,24 @@ struct SettingsView: View {
     // MARK: - Sections
 
     private var syncSection: some View {
-        Section(header: Text("Sync")) {
+        Section("Sync") {
             Toggle("iCloud Sync", isOn: $viewModel.iCloudSyncEnabled)
-                .tint(AppTheme.accent)
 
             if viewModel.iCloudSyncEnabled {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(AppTheme.success)
+                        .foregroundStyle(.green)
                     Text("Syncing with iCloud")
-                        .font(AppTheme.Font.caption)
-                        .foregroundStyle(AppTheme.textSecondary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
     }
 
     private var remindersSection: some View {
-        Section(header: Text("Reminders")) {
+        Section("Reminders") {
             Toggle("Daily Reminder", isOn: $viewModel.reminderEnabled)
-                .tint(AppTheme.accent)
 
             if viewModel.reminderEnabled {
                 DatePicker(
@@ -228,41 +225,36 @@ struct SettingsView: View {
                     selection: $viewModel.reminderTime,
                     displayedComponents: .hourAndMinute
                 )
-                .tint(AppTheme.accent)
             }
         }
     }
 
     private var dataManagementSection: some View {
-        Section(header: Text("Data Management")) {
+        Section("Data Management") {
             NavigationLink(destination: BackupRestoreView()) {
                 Label("Backup & Restore", systemImage: "arrow.clockwise.icloud")
-                    .foregroundStyle(AppTheme.textPrimary)
             }
 
             Button(action: { viewModel.showingExportJournal = true }) {
                 Label("Export Journal", systemImage: "square.and.arrow.up")
-                    .foregroundStyle(AppTheme.textPrimary)
             }
 
-            Button(action: viewModel.confirmClearData) {
+            Button(role: .destructive, action: viewModel.confirmClearData) {
                 Label("Clear All Data", systemImage: "trash")
-                    .foregroundStyle(AppTheme.failed)
             }
         }
     }
 
     private var aboutSection: some View {
-        Section(header: Text("About")) {
+        Section("About") {
             LabeledContent("Version", value: "1.0")
 
-            LabeledContent("Made with", value: "❤️ & SwiftUI")
+            LabeledContent("Made with", value: "SwiftUI")
 
             NavigationLink {
                 HelpView()
             } label: {
                 Label("Help & Support", systemImage: "questionmark.circle")
-                    .foregroundStyle(AppTheme.textPrimary)
             }
         }
     }
@@ -310,47 +302,56 @@ private extension Alert.Button {
 
 struct HelpView: View {
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.xl) {
-                helpSection(
+        List {
+            Section {
+                helpRow(
                     title: "Getting Started",
-                    content: "Track your daily habits by tapping on the checkboxes in the Habits tab. Swipe through dates to view your history."
+                    content: "Track your daily habits by tapping on the checkboxes in the Today tab. Swipe through dates to view your history."
                 )
+            }
 
-                helpSection(
+            Section {
+                helpRow(
                     title: "Dashboard",
                     content: "View your habit statistics, streaks, and completion rates at a glance."
                 )
+            }
 
-                helpSection(
+            Section {
+                helpRow(
                     title: "Journal",
                     content: "Add notes and review your daily activity. Tap on a date to see details for that day."
                 )
+            }
 
-                helpSection(
+            Section {
+                helpRow(
                     title: "Backup & Sync",
                     content: "Enable iCloud Sync to keep your data synchronized across all your devices. Use Backup & Restore for manual backups."
                 )
+            }
 
-                helpSection(
+            Section {
+                helpRow(
                     title: "Export Journal",
                     content: "Export your journal entries as PDF for archiving or JSON for backup. Choose custom date ranges."
                 )
             }
-            .padding(AppTheme.Spacing.lg)
         }
+        .listStyle(.insetGrouped)
         .navigationTitle("Help & Support")
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func helpSection(title: String, content: String) -> some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+    private func helpRow(title: String, content: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(AppTheme.Font.headline)
+                .font(.headline)
             Text(content)
-                .font(AppTheme.Font.body)
-                .foregroundStyle(AppTheme.textSecondary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
+        .padding(.vertical, 2)
     }
 }
 

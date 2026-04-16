@@ -23,7 +23,7 @@ extension CoreDataManager {
             return nil
         }
         
-        return entry.value(forKey: "details") as? String
+        return entry.details
     }
     
     /// Updates or creates a habit entry with details for a specific date
@@ -35,7 +35,7 @@ extension CoreDataManager {
     func updateHabitEntryDetails(habit: Habit, date: Date, details: String) -> HabitEntry? {
         if let existingEntry = fetchHabitEntry(for: habit, on: date) {
             // Update existing entry
-            existingEntry.setValue(details, forKey: "details")
+            existingEntry.details = details
             saveContext()
             return existingEntry
         } else {
@@ -72,9 +72,10 @@ extension CoreDataManager {
         newEntry.id = UUID()
         newEntry.date = date
         newEntry.completed = true
-        newEntry.setValue(details, forKey: "details")
+        newEntry.completionState = 1
+        newEntry.details = details
         newEntry.habit = habit
-        
+
         saveContext()
         return newEntry
     }

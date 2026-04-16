@@ -865,3 +865,52 @@ Tags: #refactor #filesplit #testing #pdf #cleanup
   - Previously, any `@Published` change triggered re-render of all observing views
   - Simpler code: removed all `@Published` annotations (45+ occurrences)
 Tags: #observable #modernization #combine #performance #swiftui
+
+---
+## 04.15.2026 - Legacy Concurrency Elimination Sprint
+- **HabitCheckboxView.swift** - Replaced 8 `DispatchQueue.main.asyncAfter` with `Task.sleep`:
+  - Consolidated scattered delays into sequential async chains
+  - performCheck, performUncheck, cycleToNextState all modernized
+- **BackupRestoreViewModel.swift** - Full async/await conversion:
+  - Replaced 6 `DispatchQueue` calls (2 `.global`, 4 `.main`)
+  - Background work now uses `Task.detached` for CPU-heavy backup/restore
+  - Handler methods simplified: removed `[weak self]`/`guard` boilerplate
+  - GeometryReader capture converted from `DispatchQueue.main.async` to `.onAppear`
+- **Task.detached -> Task** (4 ViewModels):
+  - HabitDashboardViewModel, HabitStatsView, HabitDetailDashboardView, JournalExportView
+  - Removed redundant `MainActor.run` blocks (Task inherits @MainActor isolation)
+- **Last inline DateFormatters converted to static**:
+  - DayJournalView: reused existing `DateFormatters.iso`
+  - BackupManager: new static `backupDateFormatter`
+- **Final audit results**: Zero `DispatchQueue` calls, zero `Task.detached` (except intentional background work in BackupRestoreVM), zero inline `DateFormatter()` allocations in entire app codebase
+- Build: zero errors, zero warnings
+Tags: #concurrency #async #performance #dispatchqueue #modernization
+
+---
+## 04.16.2026 - Architectural Cleanup: Dead Code Removal, Repository Centralization & Test Updates
+- **Removed 8 dead code files** no longer referenced anywhere in the app:
+  - HabitGridCollectionView, HabitTrackerView, HabitTrackerViewModel, HabitCheckboxView
+  - HabitProgressView, HabitStatsView, HabitDetailIndicatorView, HabitRowLabelView
+- **CoreDataManager.swift massive cleanup** (~500 lines removed):
+  - Removed all journal entry CRUD, collection CRUD, tag management methods
+  - Removed toggleHabitEntry, getHabitEntriesForDate/Range, getCompletionRateForHabit
+  - Removed all Future Entry/Migration methods, Year Collection management
+  - Kept only: init, saveContext, fetchAllCollections (for BackupManager), habit CRUD
+- **Replaced ~40 value(forKey:)/setValue() calls** with direct Core Data property access
+- **HabitDataRepository centralization**:
+  - Made singleton with shared `habits` array as single source of truth
+  - Added `loadHabits()`, `reorderHabits()`, `updateEntryDetails()` methods
+  - TodayViewModel and HabitDashboardViewModel now use `dataRepository.habits` computed property
+  - HabitCompletionDetailView routes all data through repository (no direct CoreDataManager)
+- **@ObservedObject → let** for non-observed Core Data objects (EditHabitView, HabitCompletionDetailView, NotesView)
+- **N+1 query fix verified** — all streak/completion calculations use batch-fetched entries
+- **Dead enum cleanup**:
+  - Removed CompletionState, EntryType, TaskStatus from Constants.swift
+  - Removed LayoutConstants from HabitCalculations.swift
+  - Removed unused AppConstants.swift from Documentation
+- **Test suite updated** (33 tests, all passing):
+  - Removed 4 dead enum test suites (CompletionState, EntryType, TaskStatus, LayoutConstants)
+  - Added CompletionStyleTests (3 tests): fromBools, asBools round-trip, allCases
+  - Added HabitCompletionStateTests (5 tests): unchecked, success, partial, failed, details flag
+- **Net result**: ~1,000 lines of dead code removed, 33 tests green, zero build errors
+Tags: #refactor #cleanup #deadcode #testing #architecture #repository #performance

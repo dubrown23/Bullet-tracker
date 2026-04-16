@@ -14,7 +14,14 @@ import WidgetKit
 @MainActor
 @Observable
 class HabitDataRepository {
+    // MARK: - Singleton
+
+    static let shared = HabitDataRepository()
+
     // MARK: - Properties
+
+    /// Single source of truth for all habits, sorted by order
+    private(set) var habits: [Habit] = []
 
     /// Dictionary mapping habit IDs to their entries organized by date
     private(set) var habitEntries: [UUID: [Date: HabitEntry]] = [:]
@@ -75,8 +82,46 @@ class HabitDataRepository {
         }
     }
     
+    // MARK: - Habit List Management
+
+    /// Fetches all habits from Core Data, sorted by order then name
+    func loadHabits() {
+        let request: NSFetchRequest<Habit> = Habit.fetchRequest()
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "order", ascending: true),
+            NSSortDescriptor(key: "name", ascending: true)
+        ]
+
+        do {
+            let fetched = try context.fetch(request)
+
+            // Ensure all habits have an order value
+            var needsSave = false
+            for (index, habit) in fetched.enumerated() where habit.order == 0 && index > 0 {
+                habit.order = Int32(index)
+                needsSave = true
+            }
+            if needsSave {
+                try? context.save()
+            }
+
+            habits = fetched
+        } catch {
+            habits = []
+        }
+    }
+
+    /// Reorders habits and persists the new order
+    func reorderHabits(from source: IndexSet, to destination: Int) {
+        habits.move(fromOffsets: source, toOffset: destination)
+        for (index, habit) in habits.enumerated() {
+            habit.order = Int32(index)
+        }
+        try? context.save()
+    }
+
     // MARK: - Public Methods
-    
+
     /// Loads habit entries for the specified habits and date range
     /// Uses efficient batch loading to minimize Core Data queries
     func loadEntries(for habits: [Habit], dateRange: ClosedRange<Date>) async {
@@ -122,7 +167,7 @@ class HabitDataRepository {
             return HabitCompletionState(isCompleted: false, state: 0, hasDetails: false)
         }
         
-        let state = (entry.value(forKey: "completionState") as? Int) ?? 1
+        let state = Int(entry.completionState)
         let hasDetails = checkForMeaningfulDetails(in: entry, habit: habit, state: state)
         
         // Fix: isCompleted should be true when state > 0, regardless of entry.completed
@@ -148,14 +193,14 @@ class HabitDataRepository {
         // Update local cache immediately
         if let existingEntry = habitEntries[habitId]?[dayStart] {
             existingEntry.completed = completed
-            existingEntry.setValue(state, forKey: "completionState")
+            existingEntry.completionState = Int16(state)
         } else if completed {
             // Create temporary entry for optimistic update
             let tempEntry = HabitEntry(context: context)
             tempEntry.id = UUID()
             tempEntry.date = dayStart
             tempEntry.completed = completed
-            tempEntry.setValue(state, forKey: "completionState")
+            tempEntry.completionState = Int16(state)
             tempEntry.habit = habit
             
             habitEntries[habitId]?[dayStart] = tempEntry
@@ -193,11 +238,51 @@ class HabitDataRepository {
         }
     }
     
-    /// Invalidates cached data for a specific habit and date
+    /// Updates or creates a habit entry with details (for detail logging views)
+    func updateEntryDetails(for habit: Habit, on date: Date, state: Int, details: String) {
+        guard let habitId = habit.id else { return }
+        let dayStart = calendar.startOfDay(for: date)
+
+        let entry = CoreDataManager.shared.updateHabitEntryDetails(
+            habit: habit,
+            date: dayStart,
+            details: details
+        )
+
+        if let entry = entry {
+            entry.completionState = Int16(state)
+            CoreDataManager.shared.saveContext()
+
+            // Update cache
+            if habitEntries[habitId] == nil {
+                habitEntries[habitId] = [:]
+            }
+            habitEntries[habitId]?[dayStart] = entry
+        }
+    }
+
+    /// Refreshes cached data for a specific habit and date by re-fetching from Core Data
     func invalidateCache(for habit: Habit, on date: Date) {
         guard let habitId = habit.id else { return }
         let dayStart = calendar.startOfDay(for: date)
-        habitEntries[habitId]?[dayStart] = nil
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: dayStart) else { return }
+
+        let context = CoreDataManager.shared.container.viewContext
+        let request: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "habit == %@ AND date >= %@ AND date < %@",
+            habit, dayStart as NSDate, endOfDay as NSDate
+        )
+        request.fetchLimit = 1
+
+        if let entry = try? context.fetch(request).first {
+            if habitEntries[habitId] == nil {
+                habitEntries[habitId] = [:]
+            }
+            habitEntries[habitId]?[dayStart] = entry
+        } else {
+            habitEntries[habitId]?[dayStart] = nil
+        }
     }
     
     /// Clears all cached data
@@ -303,7 +388,7 @@ class HabitDataRepository {
                         entry.habit = habit
                     }
                     entry.completed = true
-                    entry.setValue(state, forKey: "completionState")
+                    entry.completionState = Int16(state)
                 } else {
                     // Remove entry if uncompleted
                     if let entry = results.first {
@@ -355,7 +440,7 @@ class HabitDataRepository {
         }
         
         let isWorkoutHabit = checkIsWorkoutHabit(habit)
-        let useMultipleStates = (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
+        let useMultipleStates = habit.useMultipleStates
         
         // For workout habits with multiple states
         if isWorkoutHabit && useMultipleStates {
@@ -372,7 +457,7 @@ class HabitDataRepository {
     private func checkIsWorkoutHabit(_ habit: Habit) -> Bool {
         let workoutKeywords = ["workout", "exercise", "gym", "fitness", "training", "movement"]
         let habitName = (habit.name ?? "").lowercased()
-        let detailType = (habit.value(forKey: "detailType") as? String) ?? ""
+        let detailType = habit.detailType ?? ""
         
         return workoutKeywords.contains { habitName.contains($0) } || detailType == "workout"
     }

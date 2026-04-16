@@ -152,10 +152,10 @@ class BackupManager {
                 notes: habit.notes ?? "",
                 order: Int(habit.order),
                 collectionID: habit.collection?.id?.uuidString,
-                trackDetails: habit.value(forKey: "trackDetails") as? Bool ?? false,
-                detailType: habit.value(forKey: "detailType") as? String ?? "general",
-                useMultipleStates: habit.value(forKey: "useMultipleStates") as? Bool ?? false,
-                isNegativeHabit: habit.value(forKey: "isNegativeHabit") as? Bool ?? false
+                trackDetails: habit.trackDetails,
+                detailType: habit.detailType ?? "general",
+                useMultipleStates: habit.useMultipleStates,
+                isNegativeHabit: habit.isNegativeHabit
             )
         }
     }
@@ -173,7 +173,7 @@ class BackupManager {
                     completed: entry.completed,
                     details: entry.details ?? "",
                     habitID: entry.habit?.id?.uuidString ?? "",
-                    completionState: entry.value(forKey: "completionState") as? Int ?? 0
+                    completionState: Int(entry.completionState)
                 )
             }
         } catch {
@@ -404,10 +404,10 @@ class BackupManager {
                 habit.collection = collection
             }
             
-            habit.setValue(habitData.trackDetails, forKey: "trackDetails")
-            habit.setValue(habitData.detailType, forKey: "detailType")
-            habit.setValue(habitData.useMultipleStates, forKey: "useMultipleStates")
-            habit.setValue(habitData.isNegativeHabit, forKey: "isNegativeHabit")
+            habit.trackDetails = habitData.trackDetails
+            habit.detailType = habitData.detailType
+            habit.useMultipleStates = habitData.useMultipleStates
+            habit.isNegativeHabit = habitData.isNegativeHabit
 
             habitMap[habitData.id] = habit
         }
@@ -430,7 +430,7 @@ class BackupManager {
             entry.details = entryData.details
             entry.habit = habit
             
-            entry.setValue(entryData.completionState, forKey: "completionState")
+            entry.completionState = Int16(entryData.completionState)
         }
     }
     

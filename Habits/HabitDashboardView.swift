@@ -15,28 +15,66 @@ struct HabitDashboardView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: AppTheme.Spacing.xl) {
-                    // Time period selector
-                    periodSelector
+            List {
+                // Time period selector
+                Section {
+                    Picker("Period", selection: $viewModel.selectedPeriod) {
+                        ForEach(DashboardTimePeriod.allCases) { period in
+                            Text(period.rawValue).tag(period)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                }
 
-                    if viewModel.habits.isEmpty {
-                        emptyState
-                    } else {
-                        // Overall summary card
-                        overallSummaryCard
+                if viewModel.habits.isEmpty {
+                    Section {
+                        ContentUnavailableView {
+                            Label("No Habits Yet", systemImage: "chart.bar")
+                        } description: {
+                            Text("Add habits in the Today tab to see your analytics here.")
+                        }
+                        .listRowBackground(Color.clear)
+                    }
+                } else {
+                    // Overall summary
+                    Section("Overall Progress") {
+                        HStack(spacing: 0) {
+                            summaryStatView(
+                                value: "\(viewModel.overallCompletionRate)%",
+                                label: "Completion",
+                                color: .accentColor
+                            )
+                            summaryStatView(
+                                value: "\(viewModel.bestStreak)",
+                                label: "Best Streak",
+                                color: .orange
+                            )
+                            summaryStatView(
+                                value: "\(viewModel.currentStreak)",
+                                label: "Current Streak",
+                                color: .green
+                            )
+                        }
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    }
 
-                        // Per-habit breakdown - tap to see details
-                        habitsBreakdownCard
+                    // Per-habit breakdown
+                    Section("By Habit") {
+                        ForEach(viewModel.habitStats) { stat in
+                            NavigationLink(destination: HabitDetailDashboardView(
+                                habit: viewModel.habits.first { $0.id == stat.id },
+                                period: viewModel.selectedPeriod
+                            )) {
+                                habitStatRow(stat)
+                            }
+                        }
                     }
                 }
-                .padding(AppTheme.Spacing.lg)
             }
-            .background(Color(UIColor.systemGroupedBackground))
+            .listStyle(.insetGrouped)
             .navigationTitle("Dashboard")
-            .navigationBarTitleDisplayMode(.inline)
             .onAppear {
-                // Only load on first appear, not every tab switch
                 if !hasLoadedOnce {
                     viewModel.loadData()
                     hasLoadedOnce = true
@@ -46,7 +84,6 @@ struct HabitDashboardView: View {
                 viewModel.loadData()
             }
             .onChange(of: scenePhase) { _, newPhase in
-                // Reload when app becomes active (to catch widget changes)
                 if newPhase == .active {
                     viewModel.loadData()
                 }
@@ -54,136 +91,57 @@ struct HabitDashboardView: View {
         }
     }
 
-    // MARK: - Period Selector
+    // MARK: - Summary Stat
 
-    private var periodSelector: some View {
-        Picker("Period", selection: $viewModel.selectedPeriod) {
-            ForEach(DashboardTimePeriod.allCases) { period in
-                Text(period.rawValue).tag(period)
-            }
+    private func summaryStatView(value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .pickerStyle(.segmented)
+        .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Empty State
+    // MARK: - Habit Stat Row
 
-    private var emptyState: some View {
-        VStack(spacing: AppTheme.Spacing.xl) {
-            ZStack {
-                Circle()
-                    .fill(AppTheme.accent.opacity(0.15))
-                    .frame(width: 100, height: 100)
-
-                Image(systemName: "chart.bar")
-                    .font(.system(size: 40))
-                    .foregroundColor(AppTheme.accent)
-            }
-
-            Text("No Habits Yet")
-                .font(AppTheme.Font.title)
-
-            Text("Add habits in the Habits tab to see your analytics here.")
-                .font(AppTheme.Font.body)
-                .foregroundColor(AppTheme.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-        }
-        .padding(40)
-    }
-
-    // MARK: - Overall Summary Card
-
-    private var overallSummaryCard: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+    private func habitStatRow(_ stat: HabitStatData) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Image(systemName: "chart.line.uptrend.xyaxis")
-                    .font(.subheadline)
-                    .foregroundColor(AppTheme.accent)
-                Text("Overall Progress")
-                    .font(AppTheme.Font.headline)
-            }
+                Image(systemName: stat.icon)
+                    .font(.body)
+                    .foregroundStyle(Color(hex: stat.color))
+                    .frame(width: 28, height: 28)
+                    .background(Color(hex: stat.color).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
 
-            HStack(spacing: AppTheme.Spacing.xl) {
-                StatBox(
-                    title: "Completion",
-                    value: "\(viewModel.overallCompletionRate)%",
-                    color: AppTheme.accent
-                )
-
-                StatBox(
-                    title: "Best Streak",
-                    value: "\(viewModel.bestStreak) days",
-                    color: AppTheme.partial
-                )
-
-                StatBox(
-                    title: "Current Streak",
-                    value: "\(viewModel.currentStreak) days",
-                    color: AppTheme.success
-                )
-            }
-        }
-        .padding(AppTheme.Spacing.lg)
-        .background(AppTheme.cardBackground)
-        .cornerRadius(AppTheme.Radius.medium)
-        .shadow(color: AppTheme.Shadow.small.color, radius: AppTheme.Shadow.small.radius, x: AppTheme.Shadow.small.x, y: AppTheme.Shadow.small.y)
-    }
-
-    // MARK: - Calendar Heatmap Card
-
-    private var calendarHeatmapCard: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-            HStack {
-                Image(systemName: "calendar")
-                    .font(.subheadline)
-                    .foregroundColor(AppTheme.success)
-                Text("Activity")
-                    .font(AppTheme.Font.headline)
-            }
-
-            CalendarHeatmapView(
-                dates: viewModel.heatmapDates,
-                completionData: viewModel.dailyCompletionRates
-            )
-        }
-        .padding(AppTheme.Spacing.lg)
-        .background(AppTheme.cardBackground)
-        .cornerRadius(AppTheme.Radius.medium)
-        .shadow(color: AppTheme.Shadow.small.color, radius: AppTheme.Shadow.small.radius, x: AppTheme.Shadow.small.x, y: AppTheme.Shadow.small.y)
-    }
-
-    // MARK: - Habits Breakdown Card
-
-    private var habitsBreakdownCard: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-            HStack {
-                Image(systemName: "list.bullet")
-                    .font(.subheadline)
-                    .foregroundColor(AppTheme.accentLight)
-                Text("By Habit")
-                    .font(AppTheme.Font.headline)
+                Text(stat.name)
+                    .font(.body)
 
                 Spacer()
 
-                Text("Tap for details")
-                    .font(AppTheme.Font.caption)
-                    .foregroundColor(AppTheme.textTertiary)
+                Text("\(stat.completionRate)%")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
 
-            ForEach(viewModel.habitStats) { stat in
-                NavigationLink(destination: HabitDetailDashboardView(
-                    habit: viewModel.habits.first { $0.id == stat.id },
-                    period: viewModel.selectedPeriod
-                )) {
-                    HabitStatRow(stat: stat)
+            // Progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color(.systemGray5))
+                        .frame(height: 6)
+
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color(hex: stat.color))
+                        .frame(width: geometry.size.width * CGFloat(stat.completionRate) / 100, height: 6)
                 }
-                .buttonStyle(PlainButtonStyle())
             }
+            .frame(height: 6)
         }
-        .padding(AppTheme.Spacing.lg)
-        .background(AppTheme.cardBackground)
-        .cornerRadius(AppTheme.Radius.medium)
-        .shadow(color: AppTheme.Shadow.small.color, radius: AppTheme.Shadow.small.radius, x: AppTheme.Shadow.small.x, y: AppTheme.Shadow.small.y)
+        .padding(.vertical, 4)
     }
 }
 

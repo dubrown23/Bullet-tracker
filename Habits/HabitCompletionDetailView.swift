@@ -2,409 +2,308 @@
 //  HabitCompletionDetailView.swift
 //  Bullet Tracker
 //
-//  Created by Dustin Brown on 5/12/25.
+//  Native iOS Form-based detail entry for habit logging
 //
 
 import SwiftUI
-import CoreData
 
 struct HabitCompletionDetailView: View {
     // MARK: - Properties
-    
-    @ObservedObject var habit: Habit
+
+    let habit: Habit
     let date: Date
-    
-    // MARK: - Environment Properties
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.managedObjectContext) private var viewContext
     @Environment(HabitDataRepository.self) private var dataRepository
-    
-    // MARK: - State Properties
-    
-    @State private var details: String = ""
+
+    // MARK: - State
+
+    @State private var notes: String = ""
     @State private var completionState: Int = 1
     @State private var entryExists: Bool = false
-    
-    // Workout-specific fields
+
+    // Workout
     @State private var duration: String = ""
     @State private var selectedWorkoutTypes: Set<String> = []
     @State private var intensity: Int = 3
-    
+
+    // Reading
+    @State private var pagesRead: String = ""
+    @State private var bookTitle: String = ""
+
+    // Mood
+    @State private var selectedMood: Int = 3
+
     // MARK: - Constants
-    
+
     private let workoutTypes = ["Cardio", "Strength", "Functional", "Core/Pre-Hab", "HIIT/Jump", "Other"]
-    
-    // MARK: - Computed Properties
-    
+    private let durationOptions = ["15", "30", "45", "60", "75", "90"]
+
+    // MARK: - Computed
+
+    private var habitColor: Color { Color(hex: habit.color ?? "#FF8C42") }
+
     private var useMultipleStates: Bool {
-        (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
+        habit.useMultipleStates
     }
-    
-    private var isWorkoutHabit: Bool {
-        let workoutKeywords = ["workout", "exercise", "gym", "fitness", "training", "movement"]
-        let habitName = (habit.name ?? "").lowercased()
-        let detailType = (habit.value(forKey: "detailType") as? String) ?? ""
-        
-        return workoutKeywords.contains { habitName.contains($0) } || detailType == "workout"
+
+    private var detailType: String {
+        habit.detailType ?? "general"
     }
-    
-    private var shouldShowWorkoutSection: Bool {
-        isWorkoutHabit && (!useMultipleStates || completionState == 1)
-    }
-    
-    // MARK: - Static Formatters
-    
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
-    }()
-    
+
     // MARK: - Body
-    
+
     var body: some View {
         NavigationStack {
             Form {
-                habitInfoSection
-                
-                if shouldShowWorkoutSection {
-                    workoutSection
+                // Habit header
+                Section {
+                    HStack(spacing: 12) {
+                        Image(systemName: habit.icon ?? "circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(habitColor)
+
+                        VStack(alignment: .leading) {
+                            Text(habit.name ?? "Habit")
+                                .font(.headline)
+                            Text(DateFormatters.weekdayMonthDay.string(from: date))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
-                
-                notesSection
-                
+
+                // Completion state
+                if useMultipleStates {
+                    Section("How'd it go?") {
+                        Picker("State", selection: $completionState) {
+                            Label("Success", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                                .tag(1)
+                            Label("Partial", systemImage: "circle.lefthalf.filled")
+                                .foregroundStyle(.orange)
+                                .tag(2)
+                            Label("Tried", systemImage: "xmark.circle.fill")
+                                .foregroundStyle(.red)
+                                .tag(3)
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                    }
+                }
+
+                // Type-specific sections
+                switch detailType {
+                case "workout":
+                    workoutSection
+                case "reading":
+                    readingSection
+                case "mood":
+                    moodSection
+                default:
+                    EmptyView()
+                }
+
+                // Notes
+                Section("Notes") {
+                    TextEditor(text: $notes)
+                        .frame(minHeight: 80)
+                }
+
+                // Clear entry
                 if entryExists {
-                    clearEntrySection
+                    Section {
+                        Button("Clear Entry", role: .destructive) {
+                            clearEntry()
+                        }
+                    }
                 }
             }
             .navigationTitle("Log Details")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel", action: dismiss.callAsFunction)
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save", action: saveDetails)
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { saveAndDismiss() }
+                        .fontWeight(.semibold)
                 }
             }
             .onAppear(perform: loadExistingDetails)
         }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
-    
-    // MARK: - View Components
-    
-    private var habitInfoSection: some View {
+
+    // MARK: - Workout
+
+    @ViewBuilder
+    private var workoutSection: some View {
+        Section("Workout Type") {
+            FlowLayout(spacing: 8) {
+                ForEach(workoutTypes, id: \.self) { type in
+                    let isSelected = selectedWorkoutTypes.contains(type)
+                    Button(action: {
+                        if isSelected { selectedWorkoutTypes.remove(type) }
+                        else { selectedWorkoutTypes.insert(type) }
+                    }) {
+                        Text(type)
+                            .font(.subheadline)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(isSelected ? habitColor : Color(.systemGray5))
+                            .foregroundStyle(isSelected ? .white : .primary)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+        }
+
+        Section("Duration") {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(durationOptions, id: \.self) { mins in
+                        let isSelected = duration == mins
+                        Button(action: { duration = mins }) {
+                            Text("\(mins) min")
+                                .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(isSelected ? habitColor : Color(.systemGray5))
+                                .foregroundStyle(isSelected ? .white : .primary)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+        }
+
         Section {
             HStack {
-                Image(systemName: habit.icon ?? "circle.fill")
-                    .foregroundStyle(Color(hex: habit.color ?? "#007AFF"))
-                
-                Text(habit.name ?? "Habit")
-                    .font(.headline)
-                
+                Text("Intensity")
                 Spacer()
-                
-                Text(date, formatter: Self.dateFormatter)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            
-            if useMultipleStates {
-                Picker("Completion", selection: $completionState) {
-                    Text("Success").tag(1)
-                    Text("Partial").tag(2)
-                    Text("Attempted").tag(3)
+                Picker("Intensity", selection: $intensity) {
+                    ForEach(1...5, id: \.self) { level in
+                        Text("\(level)").tag(level)
+                    }
                 }
                 .pickerStyle(.segmented)
+                .frame(width: 200)
             }
         }
     }
-    
-    private var workoutSection: some View {
-        Section {
-            workoutTypesView
-            durationView
-            intensityView
-        }
-    }
-    
-    private var workoutTypesView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Workout Types")
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-            
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(workoutTypes, id: \.self) { type in
-                    workoutTypeButton(for: type)
-                }
+
+    // MARK: - Reading
+
+    @ViewBuilder
+    private var readingSection: some View {
+        Section("Reading") {
+            TextField("Book or article title", text: $bookTitle)
+            HStack {
+                Text("Pages read")
+                Spacer()
+                TextField("0", text: $pagesRead)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 60)
             }
         }
     }
-    
-    private func workoutTypeButton(for type: String) -> some View {
-        Button(action: { toggleWorkoutType(type) }) {
-            Text(type)
-                .font(.system(size: 14))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(selectedWorkoutTypes.contains(type) ? Color.blue : Color(.systemGray5))
-                .foregroundColor(selectedWorkoutTypes.contains(type) ? .white : .primary)
-                .cornerRadius(8)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    private var durationView: some View {
-        HStack {
-            Picker("Duration", selection: $duration) {
-                Text("15 min").tag("15")
-                Text("30 min").tag("30")
-                Text("45 min").tag("45")
-                Text("60 min").tag("60")
-                Text("75 min").tag("75")
-                Text("90 min").tag("90")
+
+    // MARK: - Mood
+
+    @ViewBuilder
+    private var moodSection: some View {
+        Section("How are you feeling?") {
+            Picker("Mood", selection: $selectedMood) {
+                Label("Rough", systemImage: "cloud.rain").tag(1)
+                Label("Low", systemImage: "cloud").tag(2)
+                Label("Okay", systemImage: "cloud.sun").tag(3)
+                Label("Good", systemImage: "sun.max").tag(4)
+                Label("Great", systemImage: "sun.max.fill").tag(5)
             }
-            
-            Button(action: addFiveMinutes) {
-                Label("+5", systemImage: "plus.circle.fill")
-                    .labelStyle(.titleOnly)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.blue)
-            }
-            .buttonStyle(BorderlessButtonStyle())
-        }
-        .onChange(of: duration) { _, _ in
-            updateNotesWithWorkoutInfo()
+            .pickerStyle(.inline)
+            .labelsHidden()
         }
     }
-    
-    private var intensityView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Intensity")
-                .foregroundStyle(.primary)
-            
-            Picker("Intensity", selection: $intensity) {
-                ForEach(1...5, id: \.self) { level in
-                    Text("\(level)").tag(level)
-                }
-            }
-            .pickerStyle(.segmented)
-        }
-    }
-    
-    private var notesSection: some View {
-        Section(header: Text("Notes")) {
-            TextEditor(text: $details)
-                .frame(minHeight: 100)
-        }
-    }
-    
-    private var clearEntrySection: some View {
-        Section {
-            Button(role: .destructive, action: clearEntry) {
-                HStack {
-                    Spacer()
-                    Text("Clear Entry")
-                    Spacer()
-                }
-            }
-        }
-    }
-    
-    // MARK: - Helper Methods
-    
-    private func toggleWorkoutType(_ type: String) {
-        if selectedWorkoutTypes.contains(type) {
-            selectedWorkoutTypes.remove(type)
-        } else {
-            selectedWorkoutTypes.insert(type)
-        }
-        updateNotesWithWorkoutInfo()
-    }
-    
-    private func addFiveMinutes() {
-        let currentDuration = Int(duration) ?? 0
-        duration = String(currentDuration + 5)
-        updateNotesWithWorkoutInfo()
-    }
-    
-    private func updateNotesWithWorkoutInfo() {
-        guard shouldShowWorkoutSection else { return }
-        
-        var workoutTemplate = ""
-        
-        if !duration.isEmpty {
-            workoutTemplate = "\(duration) min\n"
-        }
-        
-        for type in selectedWorkoutTypes.sorted() {
-            workoutTemplate += "\(type):\n"
-        }
-        
-        // Preserve user content
-        let existingLines = details.components(separatedBy: "\n")
-        let userContent = existingLines
-            .filter { !$0.hasSuffix(" min") && !$0.hasSuffix(":") && !$0.isEmpty }
-            .joined(separator: "\n")
-        
-        details = workoutTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !userContent.isEmpty {
-            details += "\n" + userContent
-        }
-    }
-    
+
+    // MARK: - Data
+
     private func loadExistingDetails() {
-        let startOfDay = Calendar.current.startOfDay(for: date)
-        guard let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) else { return }
-        
-        let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        fetchRequest.predicate = NSPredicate(
-            format: "habit == %@ AND date >= %@ AND date < %@",
-            habit, startOfDay as NSDate, endOfDay as NSDate
-        )
-        fetchRequest.fetchLimit = 1
-        
-        do {
-            let entries = try viewContext.fetch(fetchRequest)
-            entryExists = !entries.isEmpty
-            
-            if let entry = entries.first {
-                loadEntryData(from: entry)
-            }
-        } catch {
-            // Handle error silently in production
+        if let entry = dataRepository.getEntry(for: habit, on: date) {
+            entryExists = true
+            loadEntryData(from: entry)
+        } else {
+            entryExists = false
         }
     }
-    
+
     private func loadEntryData(from entry: HabitEntry) {
-        if useMultipleStates {
-            completionState = (entry.value(forKey: "completionState") as? Int) ?? 1
-        }
-        
-        guard let existingDetails = entry.details else { return }
-        details = existingDetails
-        
-        // Try to parse JSON data
-        guard let data = existingDetails.data(using: .utf8),
+        completionState = Int(entry.completionState)
+
+        guard let existingDetails = entry.details,
+              let data = existingDetails.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            notes = entry.details ?? ""
             return
         }
-        
-        if useMultipleStates, let jsonState = json["completionState"] as? Int {
-            completionState = jsonState
-        }
-        
-        // Load workout types
-        if let types = json["types"] as? [String] {
-            selectedWorkoutTypes = Set(types)
-        } else if let type = json["type"] as? String {
-            selectedWorkoutTypes = [type]
-        }
-        
-        if let durationValue = json["duration"] as? String {
-            duration = durationValue
-        }
-        
-        if let intensityValue = json["intensity"] as? Int {
-            intensity = intensityValue
-        }
-        
-        if let notes = json["notes"] as? String {
-            details = notes
+
+        if let existingNotes = json["notes"] as? String { notes = existingNotes }
+
+        switch detailType {
+        case "workout":
+            if let types = json["types"] as? [String] {
+                selectedWorkoutTypes = Set(types)
+            } else if let type = json["type"] as? String, !type.isEmpty {
+                selectedWorkoutTypes = [type]
+            }
+            if let d = json["duration"] as? String { duration = d }
+            if let i = json["intensity"] as? Int { intensity = i }
+        case "reading":
+            if let title = json["bookTitle"] as? String { bookTitle = title }
+            if let pages = json["pagesRead"] as? String { pagesRead = pages }
+        case "mood":
+            if let mood = json["mood"] as? Int { selectedMood = mood }
+        default:
+            break
         }
     }
-    
-    private func saveDetails() {
-        let detailsToSave = createDetailsJSON()
-        
-        let entry = CoreDataManager.shared.updateHabitEntryDetails(
-            habit: habit,
-            date: date,
-            details: detailsToSave
-        )
-        
-        if useMultipleStates, let entry = entry {
-            entry.setValue(completionState, forKey: "completionState")
-            CoreDataManager.shared.saveContext()
-        }
-        
-        // Invalidate the cache so the checkbox reflects the updated details
-        dataRepository.invalidateCache(for: habit, on: date)
-        
+
+    private func saveAndDismiss() {
+        let detailsJSON = buildDetailsJSON()
+        dataRepository.updateEntryDetails(for: habit, on: date, state: completionState, details: detailsJSON)
         dismiss()
     }
-    
-    private func createDetailsJSON() -> String {
-        if shouldShowWorkoutSection {
-            var workoutData: [String: Any] = [
-                "types": Array(selectedWorkoutTypes),
-                "type": selectedWorkoutTypes.first ?? "",
-                "duration": duration,
-                "intensity": intensity,
-                "notes": details
-            ]
-            
-            if useMultipleStates {
-                workoutData["completionState"] = completionState
-            }
-            
-            if let jsonData = try? JSONSerialization.data(withJSONObject: workoutData),
-               let jsonString = String(data: jsonData, encoding: .utf8) {
-                return jsonString
-            }
-        } else if useMultipleStates {
-            let stateData: [String: Any] = [
-                "completionState": completionState,
-                "notes": details
-            ]
-            
-            if let jsonData = try? JSONSerialization.data(withJSONObject: stateData),
-               let jsonString = String(data: jsonData, encoding: .utf8) {
-                return jsonString
-            }
+
+    private func buildDetailsJSON() -> String {
+        var data: [String: Any] = ["notes": notes]
+
+        switch detailType {
+        case "workout":
+            data["types"] = Array(selectedWorkoutTypes)
+            data["type"] = selectedWorkoutTypes.first ?? ""
+            data["duration"] = duration
+            data["intensity"] = intensity
+        case "reading":
+            data["bookTitle"] = bookTitle
+            data["pagesRead"] = pagesRead
+        case "mood":
+            data["mood"] = selectedMood
+        default:
+            break
         }
-        
-        return details
+
+        if let jsonData = try? JSONSerialization.data(withJSONObject: data),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            return jsonString
+        }
+        return notes
     }
-    
+
     private func clearEntry() {
-        let startOfDay = Calendar.current.startOfDay(for: date)
-        guard let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) else { return }
-
-        let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        fetchRequest.predicate = NSPredicate(
-            format: "habit == %@ AND date >= %@ AND date < %@",
-            habit, startOfDay as NSDate, endOfDay as NSDate
-        )
-
-        do {
-            let entries = try viewContext.fetch(fetchRequest)
-            entries.forEach(viewContext.delete)
-            try viewContext.save()
-
-            // Invalidate the cache so the checkbox updates
-            dataRepository.invalidateCache(for: habit, on: date)
-
-            dismiss()
-        } catch {
-            // Handle error silently in production
-        }
+        dataRepository.removeEntry(for: habit, on: date)
+        dismiss()
     }
-}
-
-// MARK: - Preview
-
-#Preview {
-    let context = CoreDataManager.shared.container.viewContext
-    let habit = Habit(context: context)
-    habit.name = "Morning Movement"
-    habit.icon = "figure.run"
-    habit.color = "#FF3B30"
-    habit.setValue(true, forKey: "useMultipleStates")
-    habit.setValue(true, forKey: "trackDetails")
-    
-    return HabitCompletionDetailView(habit: habit, date: Date())
 }

@@ -20,39 +20,66 @@ struct DayJournalView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Date selector
+                // Date selector (custom — keep as-is, works well)
                 dateSelector
 
-                // Quick add note bar at top
+                // Quick add note bar
                 quickAddNoteBar
 
-                // Binary habits right under add note (quick glance)
-                if !viewModel.binaryHabits.isEmpty {
-                    binaryHabitsBar
-                }
-
-                // Content for selected day
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Habits with data (workout, diet, etc.)
-                        if !viewModel.habitsWithData.isEmpty {
-                            dataHabitsSection
-                        }
-
-                        // Notes section
-                        if !viewModel.notes.isEmpty {
-                            notesSection
-                        }
-
-                        // Empty state
-                        if viewModel.habitsWithData.isEmpty && viewModel.binaryHabits.isEmpty && viewModel.notes.isEmpty {
-                            emptyState
+                // Main content
+                List {
+                    // Binary habits (compact completed icons)
+                    if !viewModel.binaryHabits.isEmpty {
+                        Section("Completed") {
+                            FlowLayout(spacing: 12) {
+                                ForEach(viewModel.binaryHabits) { entry in
+                                    BinaryHabitIcon(entry: entry)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         }
                     }
-                    .padding()
+
+                    // Habits with data (workout, diet, etc.)
+                    if !viewModel.habitsWithData.isEmpty {
+                        Section("Activity Details") {
+                            ForEach(viewModel.habitsWithData) { entry in
+                                DataHabitRow(entry: entry)
+                            }
+                        }
+                    }
+
+                    // Notes section
+                    if !viewModel.notes.isEmpty {
+                        Section("Notes") {
+                            ForEach(viewModel.notes) { note in
+                                NoteRow(note: note, onTap: {
+                                    viewModel.selectedNote = note
+                                })
+                            }
+                            .onDelete { offsets in
+                                for index in offsets {
+                                    viewModel.deleteNote(viewModel.notes[index])
+                                }
+                            }
+                        }
+                    }
+
+                    // Empty state
+                    if viewModel.habitsWithData.isEmpty && viewModel.binaryHabits.isEmpty && viewModel.notes.isEmpty {
+                        Section {
+                            ContentUnavailableView {
+                                Label("No Entries", systemImage: "doc.text")
+                            } description: {
+                                Text("Complete habits or add notes to see them here.")
+                            }
+                            .listRowBackground(Color.clear)
+                        }
+                    }
                 }
+                .listStyle(.insetGrouped)
             }
-            .background(Color(UIColor.systemGroupedBackground))
             .navigationTitle("Journal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -73,8 +100,6 @@ struct DayJournalView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
-                    .accessibilityLabel("Export options")
-                    .accessibilityHint("Export journal data")
                 }
             }
             .sheet(isPresented: $showingExportView) {
@@ -86,14 +111,12 @@ struct DayJournalView: View {
                 EditNoteView(note: note)
             }
             .onAppear {
-                // Only load on first appear, not every tab switch
                 if !hasLoadedOnce {
                     viewModel.loadData()
                     hasLoadedOnce = true
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in
-                // Reload when app becomes active (to catch widget changes)
                 if newPhase == .active {
                     viewModel.loadData()
                 }
@@ -104,31 +127,26 @@ struct DayJournalView: View {
     // MARK: - Date Selector
 
     private var dateSelector: some View {
-        VStack(spacing: AppTheme.Spacing.sm) {
+        VStack(spacing: 6) {
             // Month/Year header with navigation
             HStack {
                 Button(action: { viewModel.goToPreviousWeek() }) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(AppTheme.accent)
                         .frame(width: 32, height: 32)
                 }
 
                 Spacer()
 
                 Text(viewModel.monthYearString)
-                    .font(AppTheme.Font.headline)
+                    .font(.headline)
 
                 Spacer()
 
-                // Today button - always show but disable/hide when already on today
-                Button(action: {
+                Button("Today") {
                     viewModel.goToToday()
-                }) {
-                    Text("Today")
-                        .font(AppTheme.Font.caption)
-                        .foregroundColor(AppTheme.accent)
                 }
+                .font(.caption)
                 .frame(width: 50)
                 .opacity(viewModel.isToday ? 0 : 1)
                 .disabled(viewModel.isToday)
@@ -136,12 +154,12 @@ struct DayJournalView: View {
                 Button(action: { viewModel.goToNextWeek() }) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(viewModel.isToday ? .gray.opacity(0.5) : AppTheme.accent)
+                        .foregroundStyle(viewModel.isToday ? Color.secondary : Color.accentColor)
                         .frame(width: 32, height: 32)
                 }
                 .disabled(viewModel.isToday)
             }
-            .padding(.horizontal, AppTheme.Spacing.sm)
+            .padding(.horizontal, 8)
 
             // Horizontal day slider
             ScrollViewReader { proxy in
@@ -182,7 +200,7 @@ struct DayJournalView: View {
     // MARK: - Quick Add Note Bar
 
     private var quickAddNoteBar: some View {
-        HStack(spacing: AppTheme.Spacing.md) {
+        HStack(spacing: 12) {
             TextField("Add a note...", text: $newNoteText)
                 .textFieldStyle(.plain)
                 .focused($isNoteFieldFocused)
@@ -195,13 +213,13 @@ struct DayJournalView: View {
                 Button(action: saveQuickNote) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundColor(AppTheme.accent)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
         }
-        .padding(.horizontal, AppTheme.Spacing.lg)
-        .padding(.vertical, AppTheme.Spacing.md)
-        .background(AppTheme.cardBackground)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color(.systemBackground))
     }
 
     private func saveQuickNote() {
@@ -211,107 +229,6 @@ struct DayJournalView: View {
         viewModel.addNote(trimmed)
         newNoteText = ""
         isNoteFieldFocused = false
-    }
-
-    // MARK: - Empty State
-
-    private var emptyState: some View {
-        VStack(spacing: AppTheme.Spacing.xl) {
-            ZStack {
-                Circle()
-                    .fill(AppTheme.accent.opacity(0.15))
-                    .frame(width: 100, height: 100)
-
-                Image(systemName: "doc.text")
-                    .font(.system(size: 40))
-                    .foregroundColor(AppTheme.accent)
-            }
-
-            Text("No entries for this day")
-                .font(AppTheme.Font.title)
-                .foregroundColor(AppTheme.textPrimary)
-
-            Text("Complete habits or add notes above")
-                .font(AppTheme.Font.body)
-                .foregroundColor(AppTheme.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(40)
-    }
-
-    // MARK: - Data Habits Section (Workout, Diet, etc.)
-
-    private var dataHabitsSection: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-            HStack {
-                Image(systemName: "list.bullet.clipboard")
-                    .font(.caption)
-                    .foregroundColor(AppTheme.accent)
-                Text("Activity Details")
-                    .font(AppTheme.Font.callout)
-                    .foregroundColor(AppTheme.textSecondary)
-            }
-            .padding(.horizontal, AppTheme.Spacing.xs)
-
-            ForEach(viewModel.habitsWithData) { entry in
-                DataHabitCard(entry: entry)
-            }
-        }
-    }
-
-    // MARK: - Binary Habits Bar (compact wrapping grid at top)
-
-    private var binaryHabitsBar: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-            HStack {
-                Image(systemName: "checkmark.circle")
-                    .font(.caption)
-                    .foregroundColor(AppTheme.success)
-                Text("Completed")
-                    .font(AppTheme.Font.callout)
-                    .foregroundColor(AppTheme.textSecondary)
-            }
-            .padding(.horizontal, AppTheme.Spacing.lg)
-            .padding(.top, AppTheme.Spacing.sm)
-
-            FlowLayout(spacing: AppTheme.Spacing.md) {
-                ForEach(viewModel.binaryHabits) { entry in
-                    BinaryHabitIcon(entry: entry)
-                }
-            }
-            .padding(.horizontal, AppTheme.Spacing.lg)
-            .padding(.bottom, AppTheme.Spacing.md)
-        }
-        .background(AppTheme.cardBackground)
-    }
-
-    // MARK: - Notes Section
-
-    private var notesSection: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-            HStack {
-                Image(systemName: "note.text")
-                    .font(.caption)
-                    .foregroundColor(AppTheme.accentLight)
-                Text("Notes")
-                    .font(AppTheme.Font.callout)
-                    .foregroundColor(AppTheme.textSecondary)
-            }
-            .padding(.horizontal, AppTheme.Spacing.xs)
-
-            VStack(spacing: 1) {
-                ForEach(viewModel.notes) { note in
-                    NoteRow(note: note, onTap: {
-                        viewModel.selectedNote = note
-                    }, onDelete: {
-                        viewModel.deleteNote(note)
-                    })
-                }
-            }
-            .background(AppTheme.cardBackground)
-            .cornerRadius(AppTheme.Radius.medium)
-            .shadow(color: AppTheme.Shadow.small.color, radius: AppTheme.Shadow.small.radius, x: AppTheme.Shadow.small.x, y: AppTheme.Shadow.small.y)
-        }
     }
 }
 
@@ -323,36 +240,12 @@ struct DayCell: View {
     let isToday: Bool
     let onTap: () -> Void
 
-    // Size class adaptation
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-
-    // Adaptive dimensions
-    private var cellWidth: CGFloat {
-        horizontalSizeClass == .regular ? 56 : 44
-    }
-
-    private var cellHeight: CGFloat {
-        horizontalSizeClass == .regular ? 68 : 56
-    }
-
-    private var dayNumberSize: CGFloat {
-        horizontalSizeClass == .regular ? 22 : 18
-    }
-
-    private var dayOfWeekSize: CGFloat {
-        horizontalSizeClass == .regular ? 12 : 10
-    }
-
     private var dayNumber: String {
         DateFormatters.dayNumber.string(from: date)
     }
 
     private var dayOfWeek: String {
         DateFormatters.shortDayOfWeek.string(from: date).prefix(3).uppercased()
-    }
-
-    private var isWeekend: Bool {
-        Calendar.current.isDateInWeekend(date)
     }
 
     private var isFuture: Bool {
@@ -363,138 +256,113 @@ struct DayCell: View {
         Button(action: onTap) {
             VStack(spacing: 4) {
                 Text(dayNumber)
-                    .font(.system(size: dayNumberSize, weight: isSelected ? .bold : .semibold))
-                    .foregroundColor(textColor)
+                    .font(.system(size: 18, weight: isSelected ? .bold : .semibold))
+                    .foregroundStyle(textColor)
 
                 Text(dayOfWeek)
-                    .font(.system(size: dayOfWeekSize, weight: .medium))
-                    .foregroundColor(isSelected ? .white.opacity(0.9) : .secondary)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(isSelected ? .white.opacity(0.9) : .secondary)
             }
-            .frame(width: cellWidth, height: cellHeight)
+            .frame(width: 44, height: 56)
             .background(backgroundView)
         }
         .buttonStyle(.plain)
         .disabled(isFuture)
         .opacity(isFuture ? 0.4 : 1.0)
-        .accessibilityLabel("\(dayOfWeek) \(dayNumber)")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var textColor: Color {
         if isSelected {
             return .white
         } else if isToday {
-            return AppTheme.accent
-        } else if isWeekend {
-            return AppTheme.accentLight
+            return .accentColor
         } else {
-            return AppTheme.textPrimary
+            return .primary
         }
     }
 
     @ViewBuilder
     private var backgroundView: some View {
         if isSelected {
-            RoundedRectangle(cornerRadius: AppTheme.Radius.medium)
-                .fill(AppTheme.accent)
-                .shadow(color: AppTheme.accent.opacity(0.3), radius: 4, x: 0, y: 2)
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.accentColor)
         } else if isToday {
-            RoundedRectangle(cornerRadius: AppTheme.Radius.medium)
-                .strokeBorder(AppTheme.accent, lineWidth: 2)
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.accentColor, lineWidth: 2)
                 .background(
-                    RoundedRectangle(cornerRadius: AppTheme.Radius.medium)
-                        .fill(AppTheme.accent.opacity(0.1))
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.accentColor.opacity(0.1))
                 )
         } else {
-            RoundedRectangle(cornerRadius: AppTheme.Radius.medium)
-                .fill(AppTheme.cardBackground)
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(.secondarySystemBackground))
         }
     }
 }
 
-// MARK: - Data Habit Card (for habits with captured data)
+// MARK: - Data Habit Row (for habits with captured data)
 
-struct DataHabitCard: View {
+struct DataHabitRow: View {
     let entry: JournalHabitEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-            // Header with icon
-            HStack(spacing: AppTheme.Spacing.md) {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header
+            HStack(spacing: 10) {
                 Image(systemName: entry.icon)
-                    .font(.system(size: 20))
-                    .foregroundColor(Color(hex: entry.color))
-                    .frame(width: 32, height: 32)
-                    .background(Color(hex: entry.color).opacity(0.15))
-                    .cornerRadius(AppTheme.Radius.small)
+                    .font(.body)
+                    .foregroundStyle(Color(hex: entry.color))
+                    .frame(width: 28, height: 28)
+                    .background(Color(hex: entry.color).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
 
                 Text(entry.habitName)
-                    .font(AppTheme.Font.callout)
-                    .foregroundColor(AppTheme.textSecondary)
-
-                Spacer()
+                    .font(.body)
             }
 
             // Data content
             if let details = entry.parsedDetails {
-                VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                    // Workout types as tags
+                VStack(alignment: .leading, spacing: 6) {
                     if let types = details.workoutTypes, !types.isEmpty {
-                        FlowLayout(spacing: AppTheme.Spacing.sm) {
+                        FlowLayout(spacing: 6) {
                             ForEach(types, id: \.self) { type in
                                 Text(type)
-                                    .font(AppTheme.Font.caption)
-                                    .foregroundColor(AppTheme.textPrimary)
-                                    .padding(.horizontal, AppTheme.Spacing.md)
-                                    .padding(.vertical, AppTheme.Spacing.xs)
-                                    .background(Color(UIColor.tertiarySystemFill))
-                                    .cornerRadius(AppTheme.Radius.small)
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Color(.tertiarySystemFill))
+                                    .clipShape(Capsule())
                             }
                         }
                     }
 
-                    // Duration and intensity in a row
-                    HStack(spacing: AppTheme.Spacing.lg) {
+                    HStack(spacing: 16) {
                         if let duration = details.duration, !duration.isEmpty {
-                            HStack(spacing: AppTheme.Spacing.xs) {
-                                Image(systemName: "clock")
-                                    .font(.caption)
-                                Text("\(duration) min")
-                                    .font(AppTheme.Font.body)
-                            }
-                            .foregroundColor(AppTheme.textPrimary)
+                            Label("\(duration) min", systemImage: "clock")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
 
                         if let intensity = details.intensity {
-                            HStack(spacing: AppTheme.Spacing.xs) {
-                                Image(systemName: "flame.fill")
-                                    .font(.caption)
-                                    .foregroundColor(AppTheme.accent)
-                                Text("\(intensity)/5")
-                                    .font(AppTheme.Font.body)
-                            }
-                            .foregroundColor(AppTheme.textPrimary)
+                            Label("\(intensity)/5", systemImage: "flame.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(.orange)
                         }
                     }
 
-                    // Notes
                     if let notes = details.notes, !notes.isEmpty {
                         Text(notes)
-                            .font(AppTheme.Font.body)
-                            .foregroundColor(AppTheme.textPrimary)
-                            .padding(.top, AppTheme.Spacing.xxs)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
             } else if let rawDetails = entry.rawDetails, !rawDetails.isEmpty {
                 Text(rawDetails)
-                    .font(AppTheme.Font.body)
-                    .foregroundColor(AppTheme.textPrimary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
         }
-        .padding(AppTheme.Spacing.lg)
-        .background(AppTheme.cardBackground)
-        .cornerRadius(AppTheme.Radius.medium)
-        .shadow(color: AppTheme.Shadow.small.color, radius: AppTheme.Shadow.small.radius, x: AppTheme.Shadow.small.x, y: AppTheme.Shadow.small.y)
+        .padding(.vertical, 4)
     }
 }
 
@@ -504,14 +372,14 @@ struct BinaryHabitIcon: View {
     let entry: JournalHabitEntry
 
     var body: some View {
-        VStack(spacing: AppTheme.Spacing.xxs) {
+        VStack(spacing: 2) {
             Image(systemName: entry.icon)
                 .font(.system(size: 20))
-                .foregroundColor(iconColor)
+                .foregroundStyle(iconColor)
 
             Text(entry.habitName)
                 .font(.system(size: 8))
-                .foregroundColor(AppTheme.textSecondary)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
         .frame(width: 44)
@@ -519,11 +387,9 @@ struct BinaryHabitIcon: View {
 
     private var iconColor: Color {
         if entry.isNegativeHabit {
-            // Negative habit marked = relapse (red)
-            return entry.completionState > 0 ? AppTheme.failed : AppTheme.success
+            return entry.completionState > 0 ? .red : .green
         }
-        // Normal habit completed = green
-        return AppTheme.success
+        return .green
     }
 }
 
@@ -532,7 +398,6 @@ struct BinaryHabitIcon: View {
 struct NoteRow: View {
     let note: Note
     let onTap: () -> Void
-    let onDelete: () -> Void
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -546,27 +411,20 @@ struct NoteRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(alignment: .top, spacing: AppTheme.Spacing.md) {
+            HStack(alignment: .top, spacing: 10) {
                 Text(timeString)
-                    .font(AppTheme.Font.caption)
-                    .foregroundColor(AppTheme.textTertiary)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
                     .frame(width: 60, alignment: .leading)
 
                 Text(note.content ?? "")
-                    .font(AppTheme.Font.body)
-                    .foregroundColor(AppTheme.textPrimary)
+                    .font(.body)
+                    .foregroundStyle(.primary)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, AppTheme.Spacing.md)
-            .padding(.vertical, AppTheme.Spacing.md)
         }
-        .buttonStyle(PlainButtonStyle())
-        .contextMenu {
-            Button(role: .destructive, action: onDelete) {
-                Label("Delete", systemImage: "trash")
-            }
-        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -654,7 +512,7 @@ class DayJournalViewModel {
     var visibleDays: [Date] = []
 
     private let calendar = Calendar.current
-    private let daysToShow = 60 // Show 60 days back
+    private let daysToShow = 60
 
     var dateString: String {
         DateFormatters.fullDate.string(from: selectedDate)
@@ -673,7 +531,6 @@ class DayJournalViewModel {
     }
 
     init() {
-        // Initialize selectedDate to start of today
         self.selectedDate = Calendar.current.startOfDay(for: Date())
         generateVisibleDays()
     }
@@ -689,7 +546,6 @@ class DayJournalViewModel {
         var days: [Date] = []
         let today = calendar.startOfDay(for: Date())
 
-        // Generate days from 60 days ago to today
         for offset in stride(from: -(daysToShow - 1), through: 0, by: 1) {
             if let date = calendar.date(byAdding: .day, value: offset, to: today) {
                 days.append(date)
@@ -706,11 +562,9 @@ class DayJournalViewModel {
 
     func goToPreviousWeek() {
         if let newDate = calendar.date(byAdding: .day, value: -7, to: selectedDate) {
-            // Extend visible days if needed
             let startOfNewDate = calendar.startOfDay(for: newDate)
             if let firstVisible = visibleDays.first,
                startOfNewDate < firstVisible {
-                // Add more days to the beginning
                 var newDays: [Date] = []
                 for offset in stride(from: -7, through: -1, by: 1) {
                     if let date = calendar.date(byAdding: .day, value: offset, to: firstVisible) {
@@ -846,7 +700,6 @@ class DayJournalViewModel {
         note.id = UUID()
         note.content = content
 
-        // Use selected date with current time
         let dateComponents = calendar.dateComponents([.year, .month, .day], from: selectedDate)
         let timeComponents = calendar.dateComponents([.hour, .minute], from: Date())
 

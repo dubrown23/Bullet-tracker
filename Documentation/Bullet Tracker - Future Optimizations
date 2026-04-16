@@ -1,5 +1,5 @@
 # BULLET TRACKER - Optimization Status
-(Updated April 15, 2026)
+(Updated April 16, 2026)
 
 ## Overview
 All optimization items from the original audit have been completed or resolved. This document now serves as a reference for what was done and lists only long-term architecture considerations.
@@ -12,7 +12,7 @@ All optimization items from the original audit have been completed or resolved. 
 - DONE: Removed 140+ DEBUG print statements across all files
 - DONE: Converted 20+ inline DateFormatters to static instances
 - DONE: Replaced fatalError with graceful error handling
-- DONE: Created centralized AppConstants.swift
+- DONE: Created centralized AppConstants.swift (later removed — unused)
 - DONE: Removed Combine from EditHabitView (replaced with didSet)
 - DONE: Replaced DispatchQueue.main.asyncAfter with Task.sleep
 - DONE: Added @MainActor to all ViewModels
@@ -25,10 +25,11 @@ All optimization items from the original audit have been completed or resolved. 
 - DONE: JournalJSONExporter.swift (85 lines) - JSON export
 - DONE: JournalExportView.swift (448 lines) - View + ViewModel only
 
-### Unit Tests (April 15, 2026)
-- DONE: 31 unit tests across 9 test suites, all passing
-- Tests cover: HabitFrequency logic, CompletionState, EntryType, TaskStatus,
-  ExportFormat, DateRangeType, Color+Hex, LayoutConstants
+### Unit Tests (April 16, 2026)
+- DONE: 33 unit tests across 8 test suites, all passing
+- Tests cover: HabitFrequency logic, CompletionStyle, HabitCompletionState,
+  ExportFormat, DateRangeType, Color+Hex
+- Removed legacy test suites for dead enums (CompletionState, EntryType, TaskStatus, LayoutConstants)
 
 ### Reviewed & Resolved (No Changes Needed)
 - SettingsView alerts: Already consolidated with AlertConfig pattern
@@ -47,6 +48,18 @@ All optimization items from the original audit have been completed or resolved. 
 
 ---
 
+### Architectural Cleanup - DONE (04.16.2026)
+- COMPLETED: Replaced ~40 value(forKey:)/setValue() calls with direct Core Data property access
+- COMPLETED: HabitDataRepository made singleton (shared cache across all ViewModels)
+- COMPLETED: Removed 8 dead code files (HabitGridCollectionView, HabitTrackerView, HabitTrackerViewModel, HabitCheckboxView, HabitProgressView, HabitStatsView, HabitDetailIndicatorView, HabitRowLabelView)
+- COMPLETED: @ObservedObject → let for non-observed Habit/Note properties (4 files)
+- COMPLETED: HabitCompletionDetailView routes all data through HabitDataRepository (no direct CoreDataManager)
+- COMPLETED: Centralized habit list in HabitDataRepository — TodayViewModel and HabitDashboardViewModel use shared habits
+- COMPLETED: Removed ~500 lines of dead code from CoreDataManager.swift (journal CRUD, collection CRUD, migration methods)
+- COMPLETED: Removed dead enums (CompletionState, EntryType, TaskStatus, LayoutConstants) from Constants.swift and HabitCalculations.swift
+- COMPLETED: Removed unused AppConstants.swift
+- COMPLETED: Updated test suites — replaced dead enum tests with CompletionStyle and HabitCompletionState tests
+
 ## Architecture Considerations (Long-term)
 
 ### SwiftData Migration
@@ -59,10 +72,10 @@ All optimization items from the original audit have been completed or resolved. 
 - COMPLETED: Combine eliminated from all app files
 - COMPLETED: @StateObject → @State, @EnvironmentObject → @Environment
 
-### Structured Concurrency
-- Current: Mix of Task.detached and Task { @MainActor }
-- Future: Could use actors more consistently
-- Benefit: Better thread safety guarantees
+### Structured Concurrency - DONE (04.15.2026)
+- COMPLETED: All DispatchQueue calls eliminated (replaced with async/await)
+- COMPLETED: All Task.detached replaced with Task (except intentional background in BackupRestoreVM)
+- COMPLETED: All inline DateFormatter allocations converted to static
 
 ### Protocol-Based ViewModel Testing
 - Current: ViewModels directly reference CoreDataManager.shared

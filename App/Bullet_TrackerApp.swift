@@ -12,6 +12,7 @@ struct BulletTrackerApp: App {
     // MARK: - Properties
 
     private let coreDataManager = CoreDataManager.shared
+    private let dataRepository = HabitDataRepository.shared
     @Environment(\.scenePhase) private var scenePhase
 
     // MARK: - Initialization
@@ -27,6 +28,7 @@ struct BulletTrackerApp: App {
         WindowGroup {
             ContentView()
                 .environment(\.managedObjectContext, coreDataManager.container.viewContext)
+                .environment(dataRepository)
         }
     }
 }

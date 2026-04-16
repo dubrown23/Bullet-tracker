@@ -10,8 +10,8 @@ import SwiftUI
 struct ContentView: View {
     // MARK: - State Properties
 
-    @State private var selectedTab: Tab = .habits
-    @State private var previousTab: Tab = .habits
+    @State private var selectedTab: Tab = .today
+    @State private var previousTab: Tab = .today
 
     // MARK: - Environment
 
@@ -20,7 +20,7 @@ struct ContentView: View {
     // MARK: - Constants
 
     private enum Tab: Int, CaseIterable, Identifiable {
-        case habits = 0
+        case today = 0
         case dashboard = 1
         case journal = 2
         case settings = 3
@@ -29,7 +29,7 @@ struct ContentView: View {
 
         var title: String {
             switch self {
-            case .habits: return "Habits"
+            case .today: return "Today"
             case .dashboard: return "Dashboard"
             case .journal: return "Journal"
             case .settings: return "Settings"
@@ -38,7 +38,7 @@ struct ContentView: View {
 
         var icon: String {
             switch self {
-            case .habits: return "checkmark.circle"
+            case .today: return "sun.max"
             case .dashboard: return "chart.bar.fill"
             case .journal: return "book"
             case .settings: return "gear"
@@ -47,7 +47,7 @@ struct ContentView: View {
 
         var selectedIcon: String {
             switch self {
-            case .habits: return "checkmark.circle.fill"
+            case .today: return "sun.max.fill"
             case .dashboard: return "chart.bar.fill"
             case .journal: return "book.fill"
             case .settings: return "gear"
@@ -59,7 +59,7 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            habitsTab
+            todayTab
             dashboardTab
             journalTab
             settingsTab
@@ -83,13 +83,13 @@ struct ContentView: View {
 
     // MARK: - Tab Views
 
-    /// Habits tab for daily habit tracking
-    private var habitsTab: some View {
-        HabitTrackerView()
+    /// Today tab - daily habit checklist (default landing)
+    private var todayTab: some View {
+        TodayView()
             .tabItem {
-                Label(Tab.habits.title, systemImage: selectedTab == .habits ? Tab.habits.selectedIcon : Tab.habits.icon)
+                Label(Tab.today.title, systemImage: selectedTab == .today ? Tab.today.selectedIcon : Tab.today.icon)
             }
-            .tag(Tab.habits)
+            .tag(Tab.today)
     }
 
     /// Dashboard tab for habit analytics

@@ -90,36 +90,6 @@ enum DateFormatters {
     }()
 }
 
-// MARK: - Layout Constants
-
-enum LayoutConstants {
-    // Grid dimensions
-    static let dateColumnWidth: CGFloat = 52
-    static let habitColumnWidth: CGFloat = 50
-    static let rowHeight: CGFloat = 44
-    static let headerHeight: CGFloat = 60
-
-    // Spacing
-    static let standardPadding: CGFloat = 16
-    static let smallPadding: CGFloat = 8
-    static let tinyPadding: CGFloat = 4
-
-    // Corner radius
-    static let cardRadius: CGFloat = 12
-    static let buttonRadius: CGFloat = 8
-    static let smallRadius: CGFloat = 6
-
-    // Icon sizes
-    static let smallIcon: CGFloat = 14
-    static let mediumIcon: CGFloat = 20
-    static let largeIcon: CGFloat = 24
-
-    // Font sizes
-    static let captionSize: CGFloat = 12
-    static let bodySize: CGFloat = 14
-    static let headlineSize: CGFloat = 16
-}
-
 // MARK: - Habit Frequency Utility (Static - No Dependencies)
 
 enum HabitFrequencyHelper {

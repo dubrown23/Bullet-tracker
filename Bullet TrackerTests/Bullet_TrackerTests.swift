@@ -160,59 +160,61 @@ struct HabitFrequencyEnumTests {
     }
 }
 
-// MARK: - CompletionState Tests
+// MARK: - CompletionStyle Tests
 
-struct CompletionStateTests {
-    @Test func rawValuesAreCorrect() {
-        #expect(CompletionState.none.rawValue == 0)
-        #expect(CompletionState.success.rawValue == 1)
-        #expect(CompletionState.partial.rawValue == 2)
-        #expect(CompletionState.attempted.rawValue == 3)
+struct CompletionStyleTests {
+    @Test func fromBoolsReturnsCorrectStyle() {
+        #expect(CompletionStyle.from(useMultipleStates: false, isNegativeHabit: false) == .simple)
+        #expect(CompletionStyle.from(useMultipleStates: true, isNegativeHabit: false) == .multiState)
+        #expect(CompletionStyle.from(useMultipleStates: false, isNegativeHabit: true) == .avoidance)
     }
 
-    @Test func iconsAreCorrect() {
-        #expect(CompletionState.none.icon == "")
-        #expect(CompletionState.success.icon == "checkmark")
-        #expect(CompletionState.partial.icon == "circle.lefthalf.filled")
-        #expect(CompletionState.attempted.icon == "xmark")
+    @Test func asBoolsRoundTrips() {
+        for style in CompletionStyle.allCases {
+            let bools = style.asBools
+            let roundTripped = CompletionStyle.from(
+                useMultipleStates: bools.useMultipleStates,
+                isNegativeHabit: bools.isNegativeHabit
+            )
+            #expect(roundTripped == style)
+        }
     }
 
     @Test func allCasesExist() {
-        #expect(CompletionState.allCases.count == 4)
+        #expect(CompletionStyle.allCases.count == 3)
     }
 }
 
-// MARK: - EntryType Tests
+// MARK: - HabitCompletionState Tests
 
-struct EntryTypeTests {
-    @Test func symbolsAreCorrect() {
-        #expect(EntryType.task.symbol == "•")
-        #expect(EntryType.event.symbol == "○")
-        #expect(EntryType.note.symbol == "—")
+struct HabitCompletionStateTests {
+    @Test func uncheckedStateIsNotCompleted() {
+        let state = HabitCompletionState(isCompleted: false, state: 0, hasDetails: false)
+        #expect(!state.isCompleted)
+        #expect(state.stateColor == .clear)
     }
 
-    @Test func displayNamesAreCorrect() {
-        #expect(EntryType.task.displayName == "Task")
-        #expect(EntryType.event.displayName == "Event")
-        #expect(EntryType.note.displayName == "Note")
-    }
-}
-
-// MARK: - TaskStatus Tests
-
-struct TaskStatusTests {
-    @Test func symbolsAreCorrect() {
-        #expect(TaskStatus.pending.symbol == "•")
-        #expect(TaskStatus.completed.symbol == "✓")
-        #expect(TaskStatus.migrated.symbol == ">")
-        #expect(TaskStatus.scheduled.symbol == "<")
+    @Test func successStateShowsGreen() {
+        let state = HabitCompletionState(isCompleted: true, state: 1, hasDetails: false)
+        #expect(state.isCompleted)
+        #expect(state.stateIcon == "checkmark")
     }
 
-    @Test func displayNamesAreCorrect() {
-        #expect(TaskStatus.pending.displayName == "Pending")
-        #expect(TaskStatus.completed.displayName == "Completed")
-        #expect(TaskStatus.migrated.displayName == "Migrated")
-        #expect(TaskStatus.scheduled.displayName == "Scheduled")
+    @Test func partialStateShowsCorrectIcon() {
+        let state = HabitCompletionState(isCompleted: true, state: 2, hasDetails: false)
+        #expect(state.stateIcon == "circle.lefthalf.filled")
+    }
+
+    @Test func failedStateShowsXmark() {
+        let state = HabitCompletionState(isCompleted: true, state: 3, hasDetails: false)
+        #expect(state.stateIcon == "xmark")
+    }
+
+    @Test func detailsFlagIsPreserved() {
+        let withDetails = HabitCompletionState(isCompleted: true, state: 1, hasDetails: true)
+        let withoutDetails = HabitCompletionState(isCompleted: true, state: 1, hasDetails: false)
+        #expect(withDetails.hasDetails)
+        #expect(!withoutDetails.hasDetails)
     }
 }
 
@@ -283,18 +285,3 @@ struct ColorHexTests {
     }
 }
 
-// MARK: - LayoutConstants Tests
-
-struct LayoutConstantsTests {
-    @Test func gridDimensionsArePositive() {
-        #expect(LayoutConstants.dateColumnWidth > 0)
-        #expect(LayoutConstants.habitColumnWidth > 0)
-        #expect(LayoutConstants.rowHeight > 0)
-        #expect(LayoutConstants.headerHeight > 0)
-    }
-
-    @Test func paddingValuesAreOrdered() {
-        #expect(LayoutConstants.tinyPadding < LayoutConstants.smallPadding)
-        #expect(LayoutConstants.smallPadding < LayoutConstants.standardPadding)
-    }
-}

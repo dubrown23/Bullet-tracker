@@ -25,69 +25,70 @@ class HabitFormViewModel {
     var notes = ""
     var trackDetails = false
     var detailType = "general"
-    var useMultipleStates = false
-    var isNegativeHabit = false
+    var completionStyle: CompletionStyle = .simple
     var showingIconSheet = false
     var isValid = false
     var isSaving = false
-    
+
     // MARK: - Private Properties
-    
+
     private var habit: Habit?
-    
+
     // MARK: - Initialization
-    
+
     init(habit: Habit? = nil) {
         self.habit = habit
-        
+
         if let habit = habit {
             loadHabitData(from: habit)
         }
-        
+
         validateForm()
     }
-    
+
     // MARK: - Validation
-    
+
     private func validateForm() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         isValid = !trimmedName.isEmpty && trimmedName.count >= 2
     }
-    
+
     // MARK: - Data Loading
-    
+
     private func loadHabitData(from habit: Habit) {
         name = habit.name ?? ""
         selectedIcon = habit.icon ?? "circle.fill"
         selectedColor = habit.color ?? "#007AFF"
         selectedFrequency = habit.frequency ?? HabitFrequency.daily.rawValue
         notes = habit.notes ?? ""
-        
+
         if let customDaysString = habit.customDays, !customDaysString.isEmpty {
             customDays = customDaysString
                 .components(separatedBy: ",")
                 .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
         }
-        
-        trackDetails = (habit.value(forKey: "trackDetails") as? Bool) ?? false
-        detailType = (habit.value(forKey: "detailType") as? String) ?? "general"
-        useMultipleStates = (habit.value(forKey: "useMultipleStates") as? Bool) ?? false
-        isNegativeHabit = (habit.value(forKey: "isNegativeHabit") as? Bool) ?? false
+
+        trackDetails = habit.trackDetails
+        detailType = habit.detailType ?? "general"
+
+        let useMultipleStates = habit.useMultipleStates
+        let isNegativeHabit = habit.isNegativeHabit
+        completionStyle = CompletionStyle.from(useMultipleStates: useMultipleStates, isNegativeHabit: isNegativeHabit)
     }
-    
+
     // MARK: - Save Methods
-    
+
     func saveHabit() async throws {
         guard isValid, !isSaving else { return }
-        
+
         isSaving = true
         defer { isSaving = false }
-        
+
         let customDaysString = customDays.sorted().map(String.init).joined(separator: ",")
-        
+        let bools = completionStyle.asBools
+
         await MainActor.run {
             if let existingHabit = habit {
-                // Update existing habit
                 CoreDataManager.shared.updateHabit(
                     existingHabit,
                     name: name,
@@ -98,14 +99,12 @@ class HabitFormViewModel {
                     notes: notes,
                     collection: nil
                 )
-                
-                // Set dynamic properties
-                existingHabit.setValue(trackDetails, forKey: "trackDetails")
-                existingHabit.setValue(detailType, forKey: "detailType")
-                existingHabit.setValue(isNegativeHabit ? false : useMultipleStates, forKey: "useMultipleStates")
-                existingHabit.setValue(isNegativeHabit, forKey: "isNegativeHabit")
+
+                existingHabit.trackDetails = trackDetails
+                existingHabit.detailType = detailType
+                existingHabit.useMultipleStates = bools.useMultipleStates
+                existingHabit.isNegativeHabit = bools.isNegativeHabit
             } else {
-                // Create new habit
                 let newHabit = CoreDataManager.shared.createHabit(
                     name: name,
                     color: selectedColor,
@@ -116,21 +115,20 @@ class HabitFormViewModel {
                     notes: notes,
                     collection: nil
                 )
-                
-                // Set dynamic properties
-                newHabit.setValue(trackDetails, forKey: "trackDetails")
-                newHabit.setValue(detailType, forKey: "detailType")
-                newHabit.setValue(isNegativeHabit ? false : useMultipleStates, forKey: "useMultipleStates")
-                newHabit.setValue(isNegativeHabit, forKey: "isNegativeHabit")
+
+                newHabit.trackDetails = trackDetails
+                newHabit.detailType = detailType
+                newHabit.useMultipleStates = bools.useMultipleStates
+                newHabit.isNegativeHabit = bools.isNegativeHabit
             }
-            
+
             CoreDataManager.shared.saveContext()
         }
     }
-    
+
     func deleteHabit() async throws {
         guard let habit = habit else { return }
-        
+
         await MainActor.run {
             CoreDataManager.shared.deleteHabit(habit)
         }
@@ -140,28 +138,17 @@ class HabitFormViewModel {
 // MARK: - Edit Habit View
 
 struct EditHabitView: View {
-    // MARK: - Environment Properties
-    
     @Environment(\.dismiss) private var dismiss
-    
-    // MARK: - Properties
-    
-    @ObservedObject var habit: Habit
-    
-    // MARK: - State Properties
-    
+
+    let habit: Habit
     @State private var viewModel: HabitFormViewModel
     @State private var showingDeleteAlert = false
-
-    // MARK: - Initialization
 
     init(habit: Habit) {
         self.habit = habit
         self._viewModel = State(wrappedValue: HabitFormViewModel(habit: habit))
     }
-    
-    // MARK: - Body
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -174,11 +161,10 @@ struct EditHabitView: View {
                     notes: $viewModel.notes,
                     trackDetails: $viewModel.trackDetails,
                     detailType: $viewModel.detailType,
-                    useMultipleStates: $viewModel.useMultipleStates,
-                    isNegativeHabit: $viewModel.isNegativeHabit,
+                    completionStyle: $viewModel.completionStyle,
                     showingIconSheet: $viewModel.showingIconSheet
                 )
-                
+
                 Section {
                     Button("Delete Habit", role: .destructive) {
                         showingDeleteAlert = true
@@ -186,25 +172,19 @@ struct EditHabitView: View {
                 }
             }
             .navigationTitle("Edit Habit")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         dismiss()
                     }
                     .disabled(viewModel.isSaving)
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
                         saveHabit()
-                    } label: {
-                        if viewModel.isSaving {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                                .scaleEffect(0.8)
-                        } else {
-                            Text("Save")
-                        }
                     }
+                    .fontWeight(.semibold)
                     .disabled(!viewModel.isValid || viewModel.isSaving)
                 }
             }
@@ -224,28 +204,22 @@ struct EditHabitView: View {
             }
         }
     }
-    
-    // MARK: - Helper Methods
-    
+
     private func saveHabit() {
         Task {
             do {
                 try await viewModel.saveHabit()
                 dismiss()
-            } catch {
-                // Handle error if needed
-            }
+            } catch { }
         }
     }
-    
+
     private func deleteHabit() {
         Task {
             do {
                 try await viewModel.deleteHabit()
                 dismiss()
-            } catch {
-                // Handle error if needed
-            }
+            } catch { }
         }
     }
 }

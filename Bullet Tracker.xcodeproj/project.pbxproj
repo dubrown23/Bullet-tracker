@@ -7,8 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		77043D242EB8F04C006B4683 /* HabitTrackerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77043D232EB8F04C006B4683 /* HabitTrackerViewModel.swift */; };
-		77043D262EB8F462006B4683 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77043D252EB8F462006B4683 /* AppConstants.swift */; };
 		770A78BB2F8FBAF600AC52AC /* JournalJSONExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770A78B92F8FBAF600AC52AC /* JournalJSONExporter.swift */; };
 		770A78BC2F8FBAF600AC52AC /* JournalPDFGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770A78BA2F8FBAF600AC52AC /* JournalPDFGenerator.swift */; };
 		77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */; };
@@ -17,14 +15,15 @@
 		772D05842EB3A2DC00186D04 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 772D05832EB3A2DC00186D04 /* WidgetKit.framework */; };
 		772D05862EB3A2DC00186D04 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 772D05852EB3A2DC00186D04 /* SwiftUI.framework */; };
 		772D05972EB3A2DD00186D04 /* BulletTrackerWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 772D05812EB3A2DC00186D04 /* BulletTrackerWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		772F01262F903D6800AA7F11 /* TodayViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772F01252F903D6800AA7F11 /* TodayViewModel.swift */; };
+		772F01282F903D6800AA7F11 /* TodayHabitCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772F01272F903D6800AA7F11 /* TodayHabitCardView.swift */; };
+		772F012A2F903D6900AA7F11 /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772F01292F903D6900AA7F11 /* TodayView.swift */; };
+		772F012D2F91152400AA7F11 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772F012C2F91143D00AA7F11 /* NotesView.swift */; };
 		774843FF2EB2D27A007F3B9B /* HabitDataRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */; };
 		7770B1EA2EB8117000DA97EB /* CoreDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B52DEBFBB4004E2ED9 /* CoreDataManager.swift */; };
 		77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535962DD62DAE008BBCD8 /* BackupManager.swift */; };
 		77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */; };
-		77D9A51D2F29435B0019C64C /* HabitGridCollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A51C2F29435B0019C64C /* HabitGridCollectionView.swift */; };
 		77D9A51F2F294BBB0019C64C /* HabitDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A51E2F294BBB0019C64C /* HabitDashboardView.swift */; };
-		77D9A5222F294D660019C64C /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A5202F294D660019C64C /* NotesView.swift */; };
-		77D9A5232F294D660019C64C /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A5202F294D660019C64C /* NotesView.swift */; };
 		77D9A5272F2952730019C64C /* DayJournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A5262F2952730019C64C /* DayJournalView.swift */; };
 		77D9A5292F29A1B60019C64C /* HabitCalculations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A5282F29A1B60019C64C /* HabitCalculations.swift */; };
 		77D9A52D2F2A5AAF0019C64C /* HabitDashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A52B2F2A5AAF0019C64C /* HabitDashboardViewModel.swift */; };
@@ -37,21 +36,15 @@
 		77DB372C2DEBD616004E2ED9 /* Bullet Track - Context.md in Resources */ = {isa = PBXBuildFile; fileRef = 77DB372B2DEBD616004E2ED9 /* Bullet Track - Context.md */; };
 		77DB372E2DEBD64D004E2ED9 /* Bullet Track - protocol in Resources */ = {isa = PBXBuildFile; fileRef = 77DB372D2DEBD64D004E2ED9 /* Bullet Track - protocol */; };
 		77DB37CE2DEBFBB4004E2ED9 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C72DEBFBB4004E2ED9 /* SettingsView.swift */; };
-		77DB37CF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37BF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift */; };
 		77DB37D12DEBFBB4004E2ED9 /* CoreDataManager+HabitDetails.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B62DEBFBB4004E2ED9 /* CoreDataManager+HabitDetails.swift */; };
-		77DB37D22DEBFBB4004E2ED9 /* HabitCheckboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37BD2DEBFBB4004E2ED9 /* HabitCheckboxView.swift */; };
 		77DB37D42DEBFBB4004E2ED9 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B32DEBFBB4004E2ED9 /* Constants.swift */; };
 		77DB37D62DEBFBB4004E2ED9 /* CoreDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B52DEBFBB4004E2ED9 /* CoreDataManager.swift */; };
 		77DB37DA2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37AF2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift */; };
-		77DB37DC2DEBFBB4004E2ED9 /* HabitRowLabelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C12DEBFBB4004E2ED9 /* HabitRowLabelView.swift */; };
-		77DB37DD2DEBFBB4004E2ED9 /* HabitStatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C22DEBFBB4004E2ED9 /* HabitStatsView.swift */; };
 		77DB37E02DEBFBB4004E2ED9 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B42DEBFBB4004E2ED9 /* ContentView.swift */; };
 		77DB37E12DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37BE2DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift */; };
 		77DB37E62DEBFBB4004E2ED9 /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37B22DEBFBB4004E2ED9 /* Color+Hex.swift */; };
-		77DB37E72DEBFBB4004E2ED9 /* HabitTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C32DEBFBB4004E2ED9 /* HabitTrackerView.swift */; };
 		77DB37E92DEBFBB4004E2ED9 /* EditHabitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37BA2DEBFBB4004E2ED9 /* EditHabitView.swift */; };
 		77DB37EA2DEBFBB4004E2ED9 /* AddHabitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37AB2DEBFBB4004E2ED9 /* AddHabitView.swift */; };
-		77DB37EB2DEBFBB4004E2ED9 /* HabitProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DB37C02DEBFBB4004E2ED9 /* HabitProgressView.swift */; };
 		77DB38052DEC0768004E2ED9 /* feature list.md in Resources */ = {isa = PBXBuildFile; fileRef = 77DB38042DEC0768004E2ED9 /* feature list.md */; };
 /* End PBXBuildFile section */
 
@@ -92,8 +85,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		77043D232EB8F04C006B4683 /* HabitTrackerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitTrackerViewModel.swift; sourceTree = "<group>"; };
-		77043D252EB8F462006B4683 /* AppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConstants.swift; sourceTree = "<group>"; };
 		770A78B92F8FBAF600AC52AC /* JournalJSONExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalJSONExporter.swift; sourceTree = "<group>"; };
 		770A78BA2F8FBAF600AC52AC /* JournalPDFGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalPDFGenerator.swift; sourceTree = "<group>"; };
 		77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitFormView.swift; sourceTree = "<group>"; };
@@ -103,15 +94,17 @@
 		772D05832EB3A2DC00186D04 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		772D05852EB3A2DC00186D04 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		772D059D2EB3A47E00186D04 /* BulletTrackerWidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BulletTrackerWidgetsExtension.entitlements; sourceTree = "<group>"; };
+		772F01252F903D6800AA7F11 /* TodayViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayViewModel.swift; sourceTree = "<group>"; };
+		772F01272F903D6800AA7F11 /* TodayHabitCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayHabitCardView.swift; sourceTree = "<group>"; };
+		772F01292F903D6900AA7F11 /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
+		772F012C2F91143D00AA7F11 /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
 		774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitDataRepository.swift; sourceTree = "<group>"; };
 		7783B25B2DD2894B0008E0F3 /* Bullet Tracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Bullet Tracker.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7783B26D2DD2894D0008E0F3 /* Bullet TrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Bullet TrackerTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7783B2772DD2894D0008E0F3 /* Bullet TrackerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Bullet TrackerUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		77B535962DD62DAE008BBCD8 /* BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManager.swift; sourceTree = "<group>"; };
 		77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRestoreViewModel.swift; sourceTree = "<group>"; };
-		77D9A51C2F29435B0019C64C /* HabitGridCollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitGridCollectionView.swift; sourceTree = "<group>"; };
 		77D9A51E2F294BBB0019C64C /* HabitDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitDashboardView.swift; sourceTree = "<group>"; };
-		77D9A5202F294D660019C64C /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
 		77D9A5262F2952730019C64C /* DayJournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayJournalView.swift; sourceTree = "<group>"; };
 		77D9A5282F29A1B60019C64C /* HabitCalculations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitCalculations.swift; sourceTree = "<group>"; };
 		77D9A52A2F2A5AAF0019C64C /* DashboardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardComponents.swift; sourceTree = "<group>"; };
@@ -131,13 +124,7 @@
 		77DB37B52DEBFBB4004E2ED9 /* CoreDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreDataManager.swift; sourceTree = "<group>"; };
 		77DB37B62DEBFBB4004E2ED9 /* CoreDataManager+HabitDetails.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CoreDataManager+HabitDetails.swift"; sourceTree = "<group>"; };
 		77DB37BA2DEBFBB4004E2ED9 /* EditHabitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditHabitView.swift; sourceTree = "<group>"; };
-		77DB37BD2DEBFBB4004E2ED9 /* HabitCheckboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitCheckboxView.swift; sourceTree = "<group>"; };
 		77DB37BE2DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitCompletionDetailView.swift; sourceTree = "<group>"; };
-		77DB37BF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitDetailIndicatorView.swift; sourceTree = "<group>"; };
-		77DB37C02DEBFBB4004E2ED9 /* HabitProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitProgressView.swift; sourceTree = "<group>"; };
-		77DB37C12DEBFBB4004E2ED9 /* HabitRowLabelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitRowLabelView.swift; sourceTree = "<group>"; };
-		77DB37C22DEBFBB4004E2ED9 /* HabitStatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitStatsView.swift; sourceTree = "<group>"; };
-		77DB37C32DEBFBB4004E2ED9 /* HabitTrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitTrackerView.swift; sourceTree = "<group>"; };
 		77DB37C72DEBFBB4004E2ED9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		77DB38042DEC0768004E2ED9 /* feature list.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "feature list.md"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -232,19 +219,14 @@
 				77D9A52B2F2A5AAF0019C64C /* HabitDashboardViewModel.swift */,
 				77D9A52C2F2A5AAF0019C64C /* HabitDetailDashboardView.swift */,
 				77D9A51E2F294BBB0019C64C /* HabitDashboardView.swift */,
-				77D9A51C2F29435B0019C64C /* HabitGridCollectionView.swift */,
 				77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */,
 				77DB37AB2DEBFBB4004E2ED9 /* AddHabitView.swift */,
 				77DB37BA2DEBFBB4004E2ED9 /* EditHabitView.swift */,
-				77DB37C02DEBFBB4004E2ED9 /* HabitProgressView.swift */,
-				77DB37C22DEBFBB4004E2ED9 /* HabitStatsView.swift */,
-				77DB37C32DEBFBB4004E2ED9 /* HabitTrackerView.swift */,
-				77DB37BD2DEBFBB4004E2ED9 /* HabitCheckboxView.swift */,
 				77DB37BE2DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift */,
-				77DB37BF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift */,
-				77DB37C12DEBFBB4004E2ED9 /* HabitRowLabelView.swift */,
 				774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */,
-				77043D232EB8F04C006B4683 /* HabitTrackerViewModel.swift */,
+				772F01252F903D6800AA7F11 /* TodayViewModel.swift */,
+				772F01272F903D6800AA7F11 /* TodayHabitCardView.swift */,
+				772F01292F903D6900AA7F11 /* TodayView.swift */,
 			);
 			path = Habits;
 			sourceTree = "<group>";
@@ -314,7 +296,7 @@
 		77D9A5212F294D660019C64C /* Notes */ = {
 			isa = PBXGroup;
 			children = (
-				77D9A5202F294D660019C64C /* NotesView.swift */,
+				772F012C2F91143D00AA7F11 /* NotesView.swift */,
 			);
 			path = Notes;
 			sourceTree = "<group>";
@@ -328,7 +310,6 @@
 				77DB372B2DEBD616004E2ED9 /* Bullet Track - Context.md */,
 				77DB372D2DEBD64D004E2ED9 /* Bullet Track - protocol */,
 				77166BCC2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations */,
-				77043D252EB8F462006B4683 /* AppConstants.swift */,
 			);
 			path = Documentation;
 			sourceTree = "<group>";
@@ -510,48 +491,41 @@
 		772D057D2EB3A2DC00186D04 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
-				77D9A5232F294D660019C64C /* NotesView.swift in Sources */,
 				7770B1EA2EB8117000DA97EB /* CoreDataManager.swift in Sources */,
 			);
 		};
 		7783B2572DD2894B0008E0F3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
+				772F012D2F91152400AA7F11 /* NotesView.swift in Sources */,
 				77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */,
 				77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */,
-				77043D262EB8F462006B4683 /* AppConstants.swift in Sources */,
 				77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */,
 				77D9A5312F2C03AA0019C64C /* JournalExportView.swift in Sources */,
 				77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */,
 				77DB37CE2DEBFBB4004E2ED9 /* SettingsView.swift in Sources */,
-				77DB37CF2DEBFBB4004E2ED9 /* HabitDetailIndicatorView.swift in Sources */,
+				772F01282F903D6800AA7F11 /* TodayHabitCardView.swift in Sources */,
+				772F01262F903D6800AA7F11 /* TodayViewModel.swift in Sources */,
 				770A78BB2F8FBAF600AC52AC /* JournalJSONExporter.swift in Sources */,
 				770A78BC2F8FBAF600AC52AC /* JournalPDFGenerator.swift in Sources */,
 				77DB37D12DEBFBB4004E2ED9 /* CoreDataManager+HabitDetails.swift in Sources */,
-				77DB37D22DEBFBB4004E2ED9 /* HabitCheckboxView.swift in Sources */,
 				77DB37D42DEBFBB4004E2ED9 /* Constants.swift in Sources */,
 				77DB37D62DEBFBB4004E2ED9 /* CoreDataManager.swift in Sources */,
 				77DB37DA2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift in Sources */,
-				77DB37DC2DEBFBB4004E2ED9 /* HabitRowLabelView.swift in Sources */,
 				77D9A52D2F2A5AAF0019C64C /* HabitDashboardViewModel.swift in Sources */,
+				772F012A2F903D6900AA7F11 /* TodayView.swift in Sources */,
 				77D9A52E2F2A5AAF0019C64C /* DashboardComponents.swift in Sources */,
 				77D9A5332F2D112C0019C64C /* AppTheme.swift in Sources */,
 				77D9A52F2F2A5AAF0019C64C /* HabitDetailDashboardView.swift in Sources */,
-				77D9A51D2F29435B0019C64C /* HabitGridCollectionView.swift in Sources */,
-				77DB37DD2DEBFBB4004E2ED9 /* HabitStatsView.swift in Sources */,
-				77D9A5222F294D660019C64C /* NotesView.swift in Sources */,
 				77D9A51F2F294BBB0019C64C /* HabitDashboardView.swift in Sources */,
 				77DB37E02DEBFBB4004E2ED9 /* ContentView.swift in Sources */,
 				77DB37E12DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift in Sources */,
 				77D9A5272F2952730019C64C /* DayJournalView.swift in Sources */,
 				774843FF2EB2D27A007F3B9B /* HabitDataRepository.swift in Sources */,
-				77043D242EB8F04C006B4683 /* HabitTrackerViewModel.swift in Sources */,
 				77DB37E62DEBFBB4004E2ED9 /* Color+Hex.swift in Sources */,
-				77DB37E72DEBFBB4004E2ED9 /* HabitTrackerView.swift in Sources */,
 				77D9A5292F29A1B60019C64C /* HabitCalculations.swift in Sources */,
 				77DB37E92DEBFBB4004E2ED9 /* EditHabitView.swift in Sources */,
 				77DB37EA2DEBFBB4004E2ED9 /* AddHabitView.swift in Sources */,
-				77DB37EB2DEBFBB4004E2ED9 /* HabitProgressView.swift in Sources */,
 			);
 		};
 		7783B2692DD2894D0008E0F3 /* Sources */ = {
