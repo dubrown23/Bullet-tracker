@@ -6,29 +6,14 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct BulletTrackerApp: App {
-    // MARK: - Properties
-
-    private let coreDataManager = CoreDataManager.shared
-    private let dataRepository = HabitDataRepository.shared
-    @Environment(\.scenePhase) private var scenePhase
-
-    // MARK: - Initialization
-
-    init() {
-        // Setup on first launch
-        coreDataManager.setupDefaultData()
-    }
-
-    // MARK: - Body
-
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(\.managedObjectContext, coreDataManager.container.viewContext)
-                .environment(dataRepository)
         }
+        .modelContainer(DataStore.shared)
     }
 }

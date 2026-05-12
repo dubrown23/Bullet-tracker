@@ -1,6 +1,6 @@
 # Project Status
 
-**Last updated:** 2026-05-12 (init via /init-project; fresh-eyes review; `bt-0001` decided + shipped — migrate to SwiftData; `bt-0002` Phase 1 activated; strategy set to "(b) one focused push" on the `swiftdata-migration` branch; `Models.swift` first-pass written)
+**Last updated:** 2026-05-12 (init via /init-project; fresh-eyes review; `bt-0001` decided + shipped — migrate to SwiftData; `bt-0002` Phase 1 activated, strategy "(b) one focused push" on the `swiftdata-migration` branch; baseline committed `37045dc` (`@Model` types + codegen off); Wave 1 done — `DataStore.swift` + slimmed `Bullet_TrackerApp` (uncommitted on the branch); next session = Wave 2)
 
 Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 
@@ -13,7 +13,10 @@ Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 
 ## In progress
 
-- `bt-0002` — **SwiftData migration, Phase 1** (engine swap, model shape unchanged). Activated 2026-05-12, scope locked (~22 Core-Data-touching `.swift` + the model XML + the project file). **Strategy = "(b)": one focused data-layer push on the `swiftdata-migration` branch** — no Core-Data-coexistence period (the earlier "turn off codegen, gradual migrate" plan was wrong: `@Model` types aren't `NSManagedObject` drop-ins; coexistence needs a fragile dual-model setup — see bt-0002 Decision log). App won't build for the duration; JSON backup is the safety net; merge when it compiles + works. Branch created. `Data/Models.swift` written (first-pass `@Model` types, currently un-targeted so `main`-state still builds). **Next:** Claude writes the migration code on the branch in commit-stages (DataStore → Habits views → widget → calc → Journal/Notes/Settings/Backup → delete CoreData); Dustin's Xcode work is at the end (codegen toggle, re-target Models.swift, build+fix together, test on device + CloudKit + widget + backup round-trip). Dustin TODO before testing: export a JSON backup from Settings.
+- `bt-0002` — **SwiftData migration, Phase 1** (engine swap, model shape unchanged). On the `swiftdata-migration` branch. Scope locked (~22 Core-Data-touching `.swift` + the model XML + the project file). **Strategy "(b)": one focused data-layer push** — no Core-Data-coexistence period (the earlier "turn off codegen, gradual migrate" plan was wrong: `@Model` types aren't `NSManagedObject` drop-ins — see bt-0002 Decision log). App stays red until the last wave; JSON backup is the safety net; merge when it compiles + works.
+  - **Done:** baseline `37045dc` (`@Model` types in `Models.swift` mirroring the `.xcdatamodeld`; Codegen → Manual/None on all 6 entities; `Models.swift` in both targets). **Wave 1** (uncommitted on the branch): `Data/DataStore.swift` (the `ModelContainer` — App-Group `BulletTracker.sqlite`, `cloudKitDatabase: .automatic`, in-place open of the existing store) + `App/Bullet_TrackerApp.swift` slimmed to `.modelContainer(DataStore.shared)` — both compiled clean.
+  - **Next session = Wave 2:** read the unread Habits files first (`TodayView`, `TodayViewModel`, `TodayHabitCardView`, `HabitCompletionDetailView`, `HabitDashboardView`, `HabitDashboardViewModel`, `HabitDetailDashboardView`, `EditHabitView`, `HabitFormView`, `AddHabitView`, `ContentView`, `HabitCalculations`), then rewrite `HabitDataRepository` (keep `getCompletionState`/`HabitCompletionState`, `reorderHabits`, post-write `WidgetCenter.reloadTimelines`; delete the cache machinery + the `NSManagedObjectContextDidSave` listener) → `@Query` in views; convert those view files; fold in flag #4 (kill name-keyword "is this a workout?", use `detailType`). Chunk: Today tab → Dashboard/Detail → Edit/Add. Then Waves 3–5 (calc → Journal/Notes/Settings/Backup → widget) → delete `CoreDataManager*` + `.xcdatamodeld` → build → fix → test → merge.
+  - **Dustin TODO before testing:** export a JSON backup from Settings.
 
 ### Queued (backlog)
 
@@ -21,14 +24,14 @@ Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 
 ## Next (1–3 items)
 
-1. `bt-0002` Stage A — get `Data/Models.swift` compiling (Xcode codegen toggle + target membership), then `ModelContainer` setup + app wiring, then the Stage-A verification gate.
+1. `bt-0002` **Wave 2** — read the unread Habits view/VM files, rewrite `HabitDataRepository` → `@Query`, convert the Habits screens, fold in flag #4. Chunk it (Today tab → Dashboard/Detail → Edit/Add). Then Waves 3–5.
 2. (Independent, anytime) #5 — repo-layout cleanup: finish the folder refactor, delete `WidgetEnums.txt` / committed `.DS_Store`s, archive the old `Documentation/` files.
 3. After Phase 1 ships: create `bt-0003` — Phase 2 model restructure (`details` JSON blob → typed; collapse 3-way completion state → one enum; drop vestigial `JournalEntry` fields). Blocked on `bt-0002` + the #9 Journal-intent question.
 
 ## Open questions / blockers
 
 - ~~Data foundation: stay on custom Core Data or migrate to SwiftData?~~ — **resolved 2026-05-12: migrate to SwiftData, two-phase** (`bt-0001`).
-- What is the Journal "future log / migration" feature meant to do? Vestigial model fields remain (`JournalEntry.isFutureEntry`, `isSpecialEntry`, `hasMigrated`, `targetMonth`, `scheduledDate`, `specialEntryType`, `taskStatus`) but no live UI — Dustin to clarify intent (flag #9). **Now also blocks `bt-0001` Phase 2** (those fields get removed there).
+- What is the Journal "future log / migration" feature meant to do? Vestigial model fields remain (`JournalEntry.isFutureEntry`, `isSpecialEntry`, `hasMigrated`, `targetMonth`, `scheduledDate`, `specialEntryType`, `taskStatus`) but no live UI — Dustin to clarify intent (flag #9). **Blocks Phase 2** (the future `bt-0003` — those fields get removed there).
 
 ## Recent build (last 3)
 
