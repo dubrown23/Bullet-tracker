@@ -81,7 +81,9 @@ class TodayViewModel {
 
     func loadEntries() async {
         guard !habits.isEmpty else { return }
-        let dateRange = selectedDate...selectedDate
+        // Load 7 days back from selectedDate so the mini streak dots have data
+        let sevenDaysAgo = calendar.date(byAdding: .day, value: -6, to: selectedDate) ?? selectedDate
+        let dateRange = sevenDaysAgo...selectedDate
         await dataRepository.loadEntries(for: habits, dateRange: dateRange)
     }
 
@@ -105,6 +107,24 @@ class TodayViewModel {
         selectedDate = calendar.startOfDay(for: Date())
         dataRepository.clearCache()
         Task { await loadEntries() }
+    }
+
+    func selectDate(_ date: Date) {
+        let day = calendar.startOfDay(for: date)
+        let today = calendar.startOfDay(for: Date())
+        guard day <= today else { return }
+        selectedDate = day
+        dataRepository.clearCache()
+        Task { await loadEntries() }
+    }
+
+    /// The 7-day window centered around selectedDate's week (Mon–Sun containing selectedDate)
+    var weekDates: [Date] {
+        let today = calendar.startOfDay(for: Date())
+        // Show the week ending on today, going back 6 days
+        return (0..<7).compactMap { offset in
+            calendar.date(byAdding: .day, value: offset - 6, to: today)
+        }
     }
 
     func currentStreak(for habit: Habit) -> Int {

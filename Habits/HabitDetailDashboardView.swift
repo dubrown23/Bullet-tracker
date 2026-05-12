@@ -12,15 +12,35 @@ import CoreData
 
 struct HabitDetailDashboardView: View {
     let habit: Habit?
-    let period: DashboardTimePeriod
 
     @State private var viewModel = HabitDetailViewModel()
+    @State private var rangeEnd: Date = Calendar.current.startOfDay(for: Date())
+    @State private var rangeStart: Date = Calendar.current.date(
+        byAdding: .day, value: -83,
+        to: Calendar.current.startOfDay(for: Date())
+    )!
+
+    private let calendar = Calendar.current
+
+    private var weekCount: Int {
+        let days = calendar.dateComponents([.day], from: rangeStart, to: rangeEnd).day ?? 0
+        return max(1, (days + 7) / 7)
+    }
+
+    private var dateRangeText: String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MMM d"
+        return "\(fmt.string(from: rangeStart)) – \(fmt.string(from: rangeEnd))"
+    }
+
+    private var isAtToday: Bool {
+        rangeEnd >= calendar.startOfDay(for: Date())
+    }
 
     var body: some View {
         Group {
             if let habit = habit {
                 List {
-                    // Habit header
                     Section {
                         HStack(spacing: 14) {
                             Image(systemName: habit.icon ?? "circle")
@@ -41,7 +61,6 @@ struct HabitDetailDashboardView: View {
                         .padding(.vertical, 4)
                     }
 
-                    // Stats
                     Section("Statistics") {
                         LabeledContent("Completion Rate") {
                             Text("\(viewModel.completionRate)%")
@@ -55,7 +74,6 @@ struct HabitDetailDashboardView: View {
                         }
                     }
 
-                    // Streaks
                     Section("Streaks") {
                         Label {
                             HStack {
@@ -94,9 +112,66 @@ struct HabitDetailDashboardView: View {
                         }
                     }
 
-                    // Calendar heatmap
                     Section("Activity") {
-                        CalendarHeatmapView(
+                        // Navigation + month picker
+                        HStack {
+                            Button {
+                                rangeStart = calendar.date(byAdding: .day, value: -7, to: rangeStart)!
+                                rangeEnd = calendar.date(byAdding: .day, value: -7, to: rangeEnd)!
+                            } label: {
+                                Image(systemName: "chevron.left")
+                            }
+                            .buttonStyle(.borderless)
+
+                            Spacer()
+
+                            Menu {
+                                Button("Today") {
+                                    let today = calendar.startOfDay(for: Date())
+                                    let duration = calendar.dateComponents([.day], from: rangeStart, to: rangeEnd).day ?? 83
+                                    rangeEnd = today
+                                    rangeStart = calendar.date(byAdding: .day, value: -duration, to: today)!
+                                }
+                                Divider()
+                                ForEach(0..<12, id: \.self) { i in
+                                    let monthDate = calendar.date(byAdding: .month, value: -i, to: Date())!
+                                    Button(monthDisplayName(for: monthDate)) {
+                                        selectMonth(monthDate)
+                                    }
+                                }
+                            } label: {
+                                Text(dateRangeText)
+                                    .font(.subheadline)
+                                    .foregroundStyle(isAtToday ? .secondary : .primary)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                let today = calendar.startOfDay(for: Date())
+                                let newEnd = min(calendar.date(byAdding: .day, value: 7, to: rangeEnd)!, today)
+                                rangeStart = calendar.date(byAdding: .day, value: 7, to: rangeStart)!
+                                rangeEnd = newEnd
+                            } label: {
+                                Image(systemName: "chevron.right")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(isAtToday)
+                        }
+
+                        // Week count stepper
+                        Stepper("\(weekCount) weeks") {
+                            if weekCount < 52 {
+                                rangeStart = calendar.date(byAdding: .day, value: -7, to: rangeStart)!
+                            }
+                        } onDecrement: {
+                            if weekCount > 2 {
+                                rangeStart = calendar.date(byAdding: .day, value: 7, to: rangeStart)!
+                            }
+                        }
+
+                        // Heatmap
+                        ContributionHeatmapView(
                             dates: viewModel.heatmapDates,
                             completionData: viewModel.dailyCompletion,
                             habitColor: Color(hex: habit.color ?? "#007AFF")
@@ -111,11 +186,34 @@ struct HabitDetailDashboardView: View {
         }
         .navigationTitle(habit?.name ?? "Details")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            if let habit = habit {
-                viewModel.loadData(for: habit, period: period)
-            }
+        .onAppear { reloadData() }
+        .onChange(of: rangeStart) { reloadData() }
+        .onChange(of: rangeEnd) { reloadData() }
+    }
+
+    private func reloadData() {
+        if let habit = habit {
+            viewModel.loadData(for: habit, from: rangeStart, to: rangeEnd)
         }
+    }
+
+    // MARK: - Month Selection
+
+    private func monthDisplayName(for date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MMMM yyyy"
+        return fmt.string(from: date)
+    }
+
+    private func selectMonth(_ monthDate: Date) {
+        let comps = calendar.dateComponents([.year, .month], from: monthDate)
+        guard let monthStart = calendar.date(from: comps),
+              let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthStart),
+              let monthEnd = calendar.date(byAdding: .day, value: -1, to: nextMonth) else { return }
+
+        let today = calendar.startOfDay(for: Date())
+        rangeStart = monthStart
+        rangeEnd = min(monthEnd, today)
     }
 }
 
@@ -135,7 +233,7 @@ class HabitDetailViewModel {
 
     private let calculationService = HabitCalculationService.shared
 
-    func loadData(for habit: Habit, period: DashboardTimePeriod) {
+    func loadData(for habit: Habit, from startDate: Date, to endDate: Date) {
         isLoading = true
 
         let habitObjectID = habit.objectID
@@ -150,12 +248,11 @@ class HabitDetailViewModel {
                 }
 
                 let calendar = Calendar.current
-                let endDate = Date()
-                let startDate = period.startDate(from: endDate)
+                let heatmapStart = calendar.startOfDay(for: startDate)
+                let endDay = calendar.startOfDay(for: endDate)
 
                 var dates: [Date] = []
-                var currentDate = calendar.startOfDay(for: startDate)
-                let endDay = calendar.startOfDay(for: endDate)
+                var currentDate = heatmapStart
                 while currentDate <= endDay {
                     dates.append(currentDate)
                     guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
@@ -163,12 +260,12 @@ class HabitDetailViewModel {
                 }
 
                 let today = calendar.startOfDay(for: Date())
-                let streakStart = calendar.date(byAdding: .day, value: -365, to: today) ?? startDate
-                let fetchStart = min(streakStart, startDate)
+                let streakStart = calendar.date(byAdding: .day, value: -365, to: today) ?? heatmapStart
+                let fetchStart = min(streakStart, heatmapStart)
                 let entries = service.fetchEntries(for: bgHabit, from: fetchStart, to: endDate, using: bgContext)
 
                 let completionResult = service.calculateCompletionRate(
-                    for: bgHabit, using: entries, from: startDate, to: endDate
+                    for: bgHabit, using: entries, from: heatmapStart, to: endDay
                 )
                 let total = completionResult.expected
                 let completed = completionResult.completed
@@ -185,7 +282,7 @@ class HabitDetailViewModel {
                 }
 
                 let streak = service.calculateCurrentStreak(for: bgHabit, using: entries)
-                let best = service.calculateBestStreak(for: bgHabit, using: entries, from: startDate, to: endDate)
+                let best = service.calculateBestStreak(for: bgHabit, using: entries, from: heatmapStart, to: endDay)
 
                 return (rate, completed, total, streak, best, dates, completion)
             }
@@ -204,6 +301,6 @@ class HabitDetailViewModel {
 
 #Preview {
     NavigationStack {
-        HabitDetailDashboardView(habit: nil, period: .month)
+        HabitDetailDashboardView(habit: nil)
     }
 }

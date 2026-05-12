@@ -66,8 +66,7 @@ struct HabitDashboardView: View {
                     Section("By Habit") {
                         ForEach(viewModel.habitStats) { stat in
                             NavigationLink(destination: HabitDetailDashboardView(
-                                habit: viewModel.habits.first { $0.id == stat.id },
-                                period: viewModel.selectedPeriod
+                                habit: viewModel.habits.first { $0.id == stat.id }
                             )) {
                                 habitStatRow(stat)
                             }

@@ -35,8 +35,6 @@ struct TodayView: View {
                             .environment(viewModel.dataRepository)
                             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         }
-                    } header: {
-                        Text(viewModel.isToday ? "" : viewModel.fullDateString)
                     }
                 }
             }
@@ -44,17 +42,25 @@ struct TodayView: View {
             .navigationTitle(viewModel.dateDisplayString)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 16) {
                         Button(action: { viewModel.goToPreviousDay() }) {
                             Image(systemName: "chevron.left")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
-                        if !viewModel.isToday {
-                            Button(action: { viewModel.goToNextDay() }) {
-                                Image(systemName: "chevron.right")
-                            }
+
+                        Button(action: { viewModel.goToNextDay() }) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
+                        .disabled(viewModel.isToday)
+                        .opacity(viewModel.isToday ? 0.3 : 1.0)
                     }
                 }
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 16) {
                         if !viewModel.isToday {
