@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		770A78BB2F8FBAF600AC52AC /* JournalJSONExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770A78B92F8FBAF600AC52AC /* JournalJSONExporter.swift */; };
 		770A78BC2F8FBAF600AC52AC /* JournalPDFGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770A78BA2F8FBAF600AC52AC /* JournalPDFGenerator.swift */; };
+		770AC4D22FB3E12900E99F98 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770AC4CF2FB3DCBB00E99F98 /* Models.swift */; };
+		770AC4D32FB3E12900E99F98 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770AC4CF2FB3DCBB00E99F98 /* Models.swift */; };
 		77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */; };
 		77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */; };
 		77166BCD2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations in Resources */ = {isa = PBXBuildFile; fileRef = 77166BCC2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations */; };
@@ -87,6 +89,7 @@
 /* Begin PBXFileReference section */
 		770A78B92F8FBAF600AC52AC /* JournalJSONExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalJSONExporter.swift; sourceTree = "<group>"; };
 		770A78BA2F8FBAF600AC52AC /* JournalPDFGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalPDFGenerator.swift; sourceTree = "<group>"; };
+		770AC4CF2FB3DCBB00E99F98 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitFormView.swift; sourceTree = "<group>"; };
 		77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconSelectorView.swift; sourceTree = "<group>"; };
 		77166BCC2DF46F7B0071BED6 /* Bullet Tracker - Future Optimizations */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Bullet Tracker - Future Optimizations"; sourceTree = "<group>"; };
@@ -234,6 +237,7 @@
 		77166BC12DF329530071BED6 /* Data */ = {
 			isa = PBXGroup;
 			children = (
+				770AC4CF2FB3DCBB00E99F98 /* Models.swift */,
 				77DB37B52DEBFBB4004E2ED9 /* CoreDataManager.swift */,
 				77DB37B62DEBFBB4004E2ED9 /* CoreDataManager+HabitDetails.swift */,
 				77B535962DD62DAE008BBCD8 /* BackupManager.swift */,
@@ -491,6 +495,7 @@
 		772D057D2EB3A2DC00186D04 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
+				770AC4D32FB3E12900E99F98 /* Models.swift in Sources */,
 				7770B1EA2EB8117000DA97EB /* CoreDataManager.swift in Sources */,
 			);
 		};
@@ -520,6 +525,7 @@
 				77D9A51F2F294BBB0019C64C /* HabitDashboardView.swift in Sources */,
 				77DB37E02DEBFBB4004E2ED9 /* ContentView.swift in Sources */,
 				77DB37E12DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift in Sources */,
+				770AC4D22FB3E12900E99F98 /* Models.swift in Sources */,
 				77D9A5272F2952730019C64C /* DayJournalView.swift in Sources */,
 				774843FF2EB2D27A007F3B9B /* HabitDataRepository.swift in Sources */,
 				77DB37E62DEBFBB4004E2ED9 /* Color+Hex.swift in Sources */,
