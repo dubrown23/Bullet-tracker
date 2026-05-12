@@ -1,6 +1,6 @@
 # Project Status
 
-**Last updated:** 2026-05-12 (project initialized via /init-project)
+**Last updated:** 2026-05-12 (initialized via /init-project; fresh-eyes review; `bt-0001` queued)
 
 Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 
