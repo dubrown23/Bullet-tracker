@@ -4,11 +4,17 @@
 //
 //  Created by Dustin Brown on 10/30/25.
 //
+//  SwiftData migration (bt-0002 Wave 4): the widget process opens its own
+//  `ModelContext` from `DataStore.shared` (which is in both targets and points at
+//  the same App-Group SQLite store as the main app). `CompleteHabitIntent` runs
+//  async with a fresh per-perform context; the timeline provider builds one per
+//  load. CloudKit mirroring lives inside `DataStore.shared`'s `ModelContainer`,
+//  so no explicit `CloudKit` import is needed here.
+//
 
 import WidgetKit
 import SwiftUI
-import CoreData
-import CloudKit
+import SwiftData
 import AppIntents
 
 // MARK: - Widget Entry
@@ -62,36 +68,26 @@ struct CompleteHabitIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        let context = CoreDataManager.shared.container.viewContext
-
-        await context.perform {
-            do {
-                try self.toggleHabitCompletion(habitID: self.habitID, context: context)
-            } catch {
-                // Silent fail
-            }
-        }
-
+        let context = ModelContext(DataStore.shared)
+        toggleHabitCompletion(habitID: habitID, in: context)
         return .result()
     }
 
-    private func toggleHabitCompletion(habitID: String, context: NSManagedObjectContext) throws {
+    private func toggleHabitCompletion(habitID: String, in context: ModelContext) {
         guard let habitUUID = UUID(uuidString: habitID) else { return }
 
-        let habitRequest: NSFetchRequest<Habit> = Habit.fetchRequest()
-        habitRequest.predicate = NSPredicate(format: "id == %@", habitUUID as CVarArg)
-
-        guard let habit = try context.fetch(habitRequest).first else { return }
+        // Fetch all habits, find the one we want in Swift (Wave 3a pattern;
+        // small N, dodges `#Predicate`-on-optional-UUID).
+        let allHabits = (try? context.fetch(FetchDescriptor<Habit>())) ?? []
+        guard let habit = allHabits.first(where: { $0.id == habitUUID }) else { return }
 
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: today) else { return }
 
-        let entryRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        entryRequest.predicate = NSPredicate(format: "habit == %@ AND date >= %@ AND date < %@",
-                                             habit, today as CVarArg, endOfDay as CVarArg)
-
-        let existingEntry = try context.fetch(entryRequest).first
+        let existingEntry = habit.entries?.first { entry in
+            guard let entryDate = entry.date else { return false }
+            return calendar.isDate(entryDate, inSameDayAs: today)
+        }
 
         if let entry = existingEntry {
             let nextState = getNextCompletionState(current: Int(entry.completionState), habit: habit)
@@ -101,15 +97,11 @@ struct CompleteHabitIntent: AppIntent {
                 entry.completionState = Int16(nextState)
             }
         } else {
-            let newEntry = HabitEntry(context: context)
-            newEntry.id = UUID()
-            newEntry.habit = habit
-            newEntry.date = today
-            newEntry.completionState = 1
-            newEntry.details = nil
+            let newEntry = HabitEntry(date: today, completed: true, completionState: 1, habit: habit)
+            context.insert(newEntry)
         }
 
-        try context.save()
+        try? context.save()
 
         let appGroupDefaults = UserDefaults(suiteName: "group.db23.Bullet-Tracker")
         appGroupDefaults?.set(Date().timeIntervalSince1970, forKey: "lastWidgetUpdate")
@@ -185,70 +177,63 @@ struct HabitWidgetProvider: TimelineProvider {
     }
 
     private func loadHabitsEntry(completion: @escaping (HabitWidgetEntry) -> Void) {
-        let context = CoreDataManager.shared.container.viewContext
+        // Per-load context tied to this thread — SwiftData doesn't need the old
+        // `context.perform { ... }` queue confinement Core Data required.
+        let context = ModelContext(DataStore.shared)
+        let habits = fetchTodaysHabits(in: context)
 
-        context.perform {
-            do {
-                let habits = try self.fetchTodaysHabits(context: context)
-
-                let widgetHabits = habits.map { habit in
-                    let state = self.getCompletionState(for: habit)
-                    return WidgetHabit(
-                        id: habit.id ?? UUID(),
-                        name: habit.name ?? "Unnamed",
-                        icon: habit.icon ?? "checkmark.circle",
-                        color: habit.color ?? "#007AFF",
-                        isCompleted: state > 0,
-                        completionState: state,
-                        needsDetails: habit.useMultipleStates || habit.trackDetails,
-                        isNegativeHabit: habit.isNegativeHabit
-                    )
-                }
-
-                let completed = widgetHabits.filter(\.isCompleted).count
-                let entry = HabitWidgetEntry(
-                    date: Date(),
-                    habits: widgetHabits,
-                    completedCount: completed,
-                    totalCount: widgetHabits.count,
-                    isEmpty: widgetHabits.isEmpty
-                )
-
-                DispatchQueue.main.async { completion(entry) }
-            } catch {
-                let emptyEntry = HabitWidgetEntry(date: Date(), habits: [], completedCount: 0, totalCount: 0, isEmpty: true)
-                DispatchQueue.main.async { completion(emptyEntry) }
-            }
+        let widgetHabits = habits.map { habit in
+            let state = getCompletionState(for: habit)
+            return WidgetHabit(
+                id: habit.id ?? UUID(),
+                name: habit.name ?? "Unnamed",
+                icon: habit.icon ?? "checkmark.circle",
+                color: habit.color ?? "#007AFF",
+                isCompleted: state > 0,
+                completionState: state,
+                needsDetails: habit.useMultipleStates || habit.trackDetails,
+                isNegativeHabit: habit.isNegativeHabit
+            )
         }
+
+        let completed = widgetHabits.filter(\.isCompleted).count
+        let entry = HabitWidgetEntry(
+            date: Date(),
+            habits: widgetHabits,
+            completedCount: completed,
+            totalCount: widgetHabits.count,
+            isEmpty: widgetHabits.isEmpty
+        )
+
+        completion(entry)
     }
 
-    private func fetchTodaysHabits(context: NSManagedObjectContext) throws -> [Habit] {
-        let request: NSFetchRequest<Habit> = Habit.fetchRequest()
-        request.sortDescriptors = [
-            NSSortDescriptor(key: "order", ascending: true),
-            NSSortDescriptor(key: "name", ascending: true)
-        ]
-        request.relationshipKeyPathsForPrefetching = ["entries"]
-        request.returnsObjectsAsFaults = false
-
-        let allHabits = try context.fetch(request)
+    private func fetchTodaysHabits(in context: ModelContext) -> [Habit] {
+        let descriptor = FetchDescriptor<Habit>(
+            sortBy: [SortDescriptor(\.order), SortDescriptor(\.name)]
+        )
+        let allHabits = (try? context.fetch(descriptor)) ?? []
         let today = Date()
-        return allHabits.filter { HabitFrequency.shouldTrack(frequency: $0.frequency, on: today, customDays: $0.customDays, startDate: $0.startDate) }
+        return allHabits.filter {
+            HabitFrequency.shouldTrack(
+                frequency: $0.frequency,
+                on: today,
+                customDays: $0.customDays,
+                startDate: $0.startDate
+            )
+        }
     }
 
     private func getCompletionState(for habit: Habit) -> Int {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 
-        if let entries = habit.entries as? Set<HabitEntry> {
-            if let todayEntry = entries.first(where: { entry in
-                guard let entryDate = entry.date else { return false }
-                return calendar.isDate(entryDate, inSameDayAs: today)
-            }) {
-                return Int(todayEntry.completionState)
-            }
-        }
-        return 0
+        // SwiftData makes `habit.entries` a plain `[HabitEntry]?` — no `Set` cast.
+        guard let todayEntry = habit.entries?.first(where: { entry in
+            guard let entryDate = entry.date else { return false }
+            return calendar.isDate(entryDate, inSameDayAs: today)
+        }) else { return 0 }
+        return Int(todayEntry.completionState)
     }
 }
 

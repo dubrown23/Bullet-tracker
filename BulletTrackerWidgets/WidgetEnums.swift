@@ -17,8 +17,10 @@ func debugLog(_ message: @autoclosure () -> String) {
 }
 
 // MARK: - Stub Enums for Widget
-// These are simplified versions of the main app enums
-// that satisfy CoreDataManager dependencies
+// Widget-side copies of enums whose main-app versions live in `Utilities/Constants.swift`.
+// They duplicate (don't share) because the widget target doesn't pull in the full app file.
+// `HabitFrequency.shouldTrack(...)` is the one piece of behavior the widget actually uses —
+// keeps the timeline provider's "should this habit show today?" filter inside the extension.
 
 enum HabitFrequency: String, CaseIterable {
     case daily
