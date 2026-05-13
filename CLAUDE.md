@@ -14,9 +14,9 @@ Four tabs:
 - **Journal** — view any past day's habit completions + captured details + free-text notes; PDF export of a date range
 - **Settings** — JSON backup/restore, help
 
-Habit styles: **simple** (done / not), **multi-state** (success / partial / failure), **avoidance** (negative habit — checking it means you slipped). Habits can capture structured details (workout types & duration / intensity, reading log, mood). Storage is **Core Data + CloudKit sync**; an **App Group** lets a home-screen **widget** (small / medium / large, tappable habit circles via AppIntents) read the same store.
+Habit styles: **simple** (done / not), **multi-state** (success / partial / failure), **avoidance** (negative habit — checking it means you slipped). Habits can capture structured details (workout types & duration / intensity, reading log, mood). Storage is **Core Data + CloudKit sync** — **migrating to SwiftData** (decided 2026-05-12, `bt-0001`; migration in progress under `bt-0002` on the `swiftdata-migration` branch). An **App Group** lets a home-screen **widget** (small / medium / large, tappable habit circles via AppIntents) read the same store.
 
-_History note:_ built incrementally (largely AI-assisted), rewritten several times — started as a different app. An earlier "full digital bullet journal" layer (Collections, Future Log, monthly/daily logs, @mention scheduling, task migration) was scaled back, leaving vestigial model fields. Data foundation (custom Core Data vs. a SwiftData rewrite) under review — see `bt-0001`.
+_History note:_ built incrementally (largely AI-assisted), rewritten several times — started as a different app. An earlier "full digital bullet journal" layer (Collections, Future Log, monthly/daily logs, @mention scheduling, task migration) was scaled back, leaving vestigial model fields (those get removed in Phase 2 — the future `bt-0003` — pending the "what was the future-log feature meant to do?" question). The data-foundation decision (custom Core Data vs. SwiftData rewrite) is settled — see `bt-0001` → migrate to SwiftData, two-phase (P1 = engine swap, model unchanged; P2 = model cleanup).
 
 ---
 

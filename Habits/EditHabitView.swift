@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import CoreData
+import SwiftData
 
 // MARK: - Shared Habit Form View Model
 
@@ -78,7 +78,7 @@ class HabitFormViewModel {
 
     // MARK: - Save Methods
 
-    func saveHabit() async throws {
+    func saveHabit(in context: ModelContext) {
         guard isValid, !isSaving else { return }
 
         isSaving = true
@@ -87,50 +87,41 @@ class HabitFormViewModel {
         let customDaysString = customDays.sorted().map(String.init).joined(separator: ",")
         let bools = completionStyle.asBools
 
-        await MainActor.run {
-            if let existingHabit = habit {
-                CoreDataManager.shared.updateHabit(
-                    existingHabit,
-                    name: name,
-                    color: selectedColor,
-                    icon: selectedIcon,
-                    frequency: selectedFrequency,
-                    customDays: customDaysString,
-                    notes: notes,
-                    collection: nil
-                )
-
-                existingHabit.trackDetails = trackDetails
-                existingHabit.detailType = detailType
-                existingHabit.useMultipleStates = bools.useMultipleStates
-                existingHabit.isNegativeHabit = bools.isNegativeHabit
-            } else {
-                let newHabit = CoreDataManager.shared.createHabit(
-                    name: name,
-                    color: selectedColor,
-                    icon: selectedIcon,
-                    frequency: selectedFrequency,
-                    customDays: customDaysString,
-                    startDate: Date(),
-                    notes: notes,
-                    collection: nil
-                )
-
-                newHabit.trackDetails = trackDetails
-                newHabit.detailType = detailType
-                newHabit.useMultipleStates = bools.useMultipleStates
-                newHabit.isNegativeHabit = bools.isNegativeHabit
-            }
-
-            CoreDataManager.shared.saveContext()
+        let target: Habit
+        if let existingHabit = habit {
+            target = existingHabit
+        } else {
+            let order = Int32((try? context.fetchCount(FetchDescriptor<Habit>())) ?? 0)
+            let newHabit = Habit(startDate: Date(), order: order)
+            context.insert(newHabit)
+            habit = newHabit
+            target = newHabit
         }
+
+        target.name = name
+        target.color = selectedColor
+        target.icon = selectedIcon
+        target.frequency = selectedFrequency
+        target.customDays = customDaysString
+        target.notes = notes
+        target.trackDetails = trackDetails
+        target.detailType = detailType
+        target.useMultipleStates = bools.useMultipleStates
+        target.isNegativeHabit = bools.isNegativeHabit
+
+        save(context)
     }
 
-    func deleteHabit() async throws {
+    func deleteHabit(in context: ModelContext) {
         guard let habit = habit else { return }
+        // Habit.entries has a .cascade delete rule, so the entries go with it.
+        context.delete(habit)
+        save(context)
+    }
 
-        await MainActor.run {
-            CoreDataManager.shared.deleteHabit(habit)
+    private func save(_ context: ModelContext) {
+        do { try context.save() } catch {
+            debugLog("HabitFormViewModel: save failed — \(error.localizedDescription)")
         }
     }
 }
@@ -139,6 +130,7 @@ class HabitFormViewModel {
 
 struct EditHabitView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     let habit: Habit
     @State private var viewModel: HabitFormViewModel
@@ -206,20 +198,12 @@ struct EditHabitView: View {
     }
 
     private func saveHabit() {
-        Task {
-            do {
-                try await viewModel.saveHabit()
-                dismiss()
-            } catch { }
-        }
+        viewModel.saveHabit(in: modelContext)
+        dismiss()
     }
 
     private func deleteHabit() {
-        Task {
-            do {
-                try await viewModel.deleteHabit()
-                dismiss()
-            } catch { }
-        }
+        viewModel.deleteHabit(in: modelContext)
+        dismiss()
     }
 }

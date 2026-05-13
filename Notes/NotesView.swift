@@ -2,16 +2,30 @@
 //  NotesView.swift
 //  Bullet Tracker
 //
-//  Simple dated notes - write notes, browse by month, search
+//  Simple dated notes - write notes, browse by month, search.
+//
+//  SwiftData migration (bt-0002): notes come from `@Query`; the view filters to the
+//  selected month. The view model just holds which month/note is selected.
 //
 
 import SwiftUI
-import CoreData
+import SwiftData
 
 struct NotesView: View {
+    @Query(sort: \Note.date, order: .reverse) private var allNotes: [Note]
+    @Environment(\.modelContext) private var modelContext
+
     @State private var viewModel = NotesViewModel()
     @State private var showingAddNote = false
     @State private var searchText = ""
+
+    private var notesInSelectedMonth: [Note] {
+        let calendar = Calendar.current
+        return allNotes.filter { note in
+            guard let date = note.date else { return false }
+            return calendar.isDate(date, equalTo: viewModel.selectedDate, toGranularity: .month)
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -20,7 +34,7 @@ struct NotesView: View {
                 monthSelector
 
                 // Notes list
-                if viewModel.notes.isEmpty && searchText.isEmpty {
+                if notesInSelectedMonth.isEmpty && searchText.isEmpty {
                     emptyState
                 } else if filteredNotes.isEmpty {
                     noResultsState
@@ -38,18 +52,11 @@ struct NotesView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingAddNote, onDismiss: {
-                viewModel.loadNotes()
-            }) {
+            .sheet(isPresented: $showingAddNote) {
                 AddNoteView()
             }
-            .sheet(item: $viewModel.selectedNote, onDismiss: {
-                viewModel.loadNotes()
-            }) { note in
+            .sheet(item: $viewModel.selectedNote) { note in
                 EditNoteView(note: note)
-            }
-            .onAppear {
-                viewModel.loadNotes()
             }
         }
     }
@@ -177,9 +184,9 @@ struct NotesView: View {
 
     private var filteredNotes: [Note] {
         if searchText.isEmpty {
-            return viewModel.notes
+            return notesInSelectedMonth
         }
-        return viewModel.notes.filter {
+        return notesInSelectedMonth.filter {
             $0.content?.localizedCaseInsensitiveContains(searchText) ?? false
         }
     }
@@ -213,9 +220,9 @@ struct NotesView: View {
     private func deleteNotes(at indexSet: IndexSet, for date: Date) {
         guard let notes = groupedNotes[date] else { return }
         for index in indexSet {
-            let note = notes[index]
-            viewModel.deleteNote(note)
+            modelContext.delete(notes[index])
         }
+        try? modelContext.save()
     }
 }
 
@@ -252,6 +259,7 @@ struct NoteRowView: View {
 
 struct AddNoteView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @State private var content = ""
     @FocusState private var isFocused: Bool
 
@@ -266,22 +274,16 @@ struct AddNoteView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
+                    Button("Cancel") { dismiss() }
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveNote()
-                    }
-                    .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .fontWeight(.semibold)
+                    Button("Save") { saveNote() }
+                        .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .fontWeight(.semibold)
                 }
             }
-            .onAppear {
-                isFocused = true
-            }
+            .onAppear { isFocused = true }
         }
     }
 
@@ -289,14 +291,9 @@ struct AddNoteView: View {
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else { return }
 
-        let context = CoreDataManager.shared.container.viewContext
-        let note = Note(context: context)
-        note.id = UUID()
-        note.content = trimmedContent
-        note.date = Date()
-
+        modelContext.insert(Note(date: Date(), content: trimmedContent))
         do {
-            try context.save()
+            try modelContext.save()
         } catch {
             debugLog("Failed to save note: \(error.localizedDescription)")
         }
@@ -309,6 +306,7 @@ struct AddNoteView: View {
 
 struct EditNoteView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     let note: Note
     @State private var content: String = ""
     @FocusState private var isFocused: Bool
@@ -324,17 +322,13 @@ struct EditNoteView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
+                    Button("Cancel") { dismiss() }
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveChanges()
-                    }
-                    .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .fontWeight(.semibold)
+                    Button("Save") { saveChanges() }
+                        .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .fontWeight(.semibold)
                 }
             }
             .onAppear {
@@ -349,9 +343,8 @@ struct EditNoteView: View {
         guard !trimmedContent.isEmpty else { return }
 
         note.content = trimmedContent
-
         do {
-            try note.managedObjectContext?.save()
+            try modelContext.save()
         } catch {
             debugLog("Failed to save note: \(error.localizedDescription)")
         }
@@ -365,7 +358,6 @@ struct EditNoteView: View {
 @MainActor
 @Observable
 class NotesViewModel {
-    var notes: [Note] = []
     var selectedDate = Date()
     var selectedNote: Note?
 
@@ -385,58 +377,20 @@ class NotesViewModel {
         calendar.isDate(selectedDate, equalTo: Date(), toGranularity: .month)
     }
 
-    func loadNotes() {
-        let context = CoreDataManager.shared.container.viewContext
-
-        // Get start and end of selected month
-        guard let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDate)),
-              let endOfMonth = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth) else {
-            return
-        }
-
-        let request: NSFetchRequest<Note> = Note.fetchRequest()
-        request.predicate = NSPredicate(format: "date >= %@ AND date <= %@",
-                                         startOfMonth as NSDate,
-                                         (calendar.date(byAdding: .day, value: 1, to: endOfMonth) ?? endOfMonth) as NSDate)
-        request.sortDescriptors = [NSSortDescriptor(key: "date", ascending: false)]
-
-        do {
-            notes = try context.fetch(request)
-        } catch {
-            notes = []
-        }
-    }
-
     func goToPreviousMonth() {
         if let newDate = calendar.date(byAdding: .month, value: -1, to: selectedDate) {
             selectedDate = newDate
-            loadNotes()
         }
     }
 
     func goToNextMonth() {
-        if let newDate = calendar.date(byAdding: .month, value: 1, to: selectedDate),
-           newDate <= Date() {
+        if let newDate = calendar.date(byAdding: .month, value: 1, to: selectedDate), newDate <= Date() {
             selectedDate = newDate
-            loadNotes()
         }
     }
 
     func goToToday() {
         selectedDate = Date()
-        loadNotes()
-    }
-
-    func deleteNote(_ note: Note) {
-        let context = CoreDataManager.shared.container.viewContext
-        context.delete(note)
-
-        do {
-            try context.save()
-            loadNotes()
-        } catch {
-            debugLog("Failed to delete note: \(error.localizedDescription)")
-        }
     }
 }
 

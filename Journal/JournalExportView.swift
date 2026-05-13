@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import CoreData
+import SwiftData
 import PDFKit
 import UniformTypeIdentifiers
 
@@ -14,6 +14,7 @@ import UniformTypeIdentifiers
 
 struct JournalExportView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @State private var viewModel = JournalExportViewModel()
 
     var body: some View {
@@ -26,6 +27,10 @@ struct JournalExportView: View {
             }
             .navigationTitle("Export Journal")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                viewModel.modelContext = modelContext
+                viewModel.updatePreview()
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -293,6 +298,9 @@ class JournalExportViewModel {
     var errorMessage = ""
     var exportedFileURL: URL?
 
+    /// Set by the view in `.onAppear`; SwiftData contexts can't be created in the VM's init.
+    var modelContext: ModelContext?
+
     private let calendar = Calendar.current
 
     var canExport: Bool {
@@ -342,22 +350,24 @@ class JournalExportViewModel {
         let dayCount = calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 0
         previewDayCount = dayCount + 1
 
-        let context = CoreDataManager.shared.container.viewContext
-        guard let endOfRange = calendar.date(byAdding: .day, value: 1, to: endDate) else { return }
+        guard let context = modelContext,
+              let endOfRange = calendar.date(byAdding: .day, value: 1, to: endDate) else {
+            previewHabitCount = 0
+            previewNoteCount = 0
+            return
+        }
 
-        let habitRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        habitRequest.predicate = NSPredicate(
-            format: "date >= %@ AND date < %@ AND completionState > 0",
-            startDate as NSDate, endOfRange as NSDate
-        )
-        previewHabitCount = (try? context.count(for: habitRequest)) ?? 0
+        let allEntries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
+        previewHabitCount = allEntries.filter { entry in
+            guard let date = entry.date else { return false }
+            return date >= startDate && date < endOfRange && entry.completionState > 0
+        }.count
 
-        let noteRequest: NSFetchRequest<Note> = Note.fetchRequest()
-        noteRequest.predicate = NSPredicate(
-            format: "date >= %@ AND date < %@",
-            startDate as NSDate, endOfRange as NSDate
-        )
-        previewNoteCount = (try? context.count(for: noteRequest)) ?? 0
+        let allNotes = (try? context.fetch(FetchDescriptor<Note>())) ?? []
+        previewNoteCount = allNotes.filter { note in
+            guard let date = note.date else { return false }
+            return date >= startDate && date < endOfRange
+        }.count
     }
 
     func performExport() {
@@ -382,10 +392,17 @@ class JournalExportViewModel {
     // MARK: - PDF Export
 
     private func exportToPDF(startDate: Date, endDate: Date, includeSummary: Bool) async {
+        guard let context = modelContext else {
+            errorMessage = "Failed to create PDF"
+            showingError = true
+            return
+        }
+
         let pdfData = JournalPDFGenerator.generatePDF(
             startDate: startDate,
             endDate: endDate,
-            includeSummary: includeSummary
+            includeSummary: includeSummary,
+            in: context
         )
 
         let fmt = Self.fileNameDateFormatter
@@ -416,7 +433,8 @@ class JournalExportViewModel {
     // MARK: - JSON Export
 
     private func exportToJSON(startDate: Date, endDate: Date) async {
-        guard let jsonData = JournalJSONExporter.exportJournalData(startDate: startDate, endDate: endDate) else {
+        guard let context = modelContext,
+              let jsonData = JournalJSONExporter.exportJournalData(startDate: startDate, endDate: endDate, in: context) else {
             await MainActor.run {
                 errorMessage = "Failed to create JSON export"
                 showingError = true

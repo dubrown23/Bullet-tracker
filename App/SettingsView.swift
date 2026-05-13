@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import CoreData
+import SwiftData
 
 // MARK: - View Model
 
@@ -39,6 +39,9 @@ class SettingsViewModel {
 
     // Sheet state
     var showingExportJournal = false
+
+    /// Set by the view in `.onAppear`; SwiftData contexts can't be created in the VM's init.
+    var modelContext: ModelContext?
 
     // MARK: - Types
 
@@ -74,7 +77,6 @@ class SettingsViewModel {
         static let syncDisabledMessage = "Data will only be stored locally on this device."
 
         static let defaultCollectionNames = ["Daily Log", "Monthly Log", "Future Log", "Habit Tracker"]
-        static let entityNames = ["JournalEntry", "Collection", "Tag", "Habit", "HabitEntry", "Note"]
     }
 
     // MARK: - Initialization
@@ -144,25 +146,24 @@ class SettingsViewModel {
     }
 
     private func clearAllData() {
-        let context = CoreDataManager.shared.container.viewContext
+        guard let context = modelContext else { return }
 
-        for entityName in Constants.entityNames {
-            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: entityName)
-            let batchDeleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
-            _ = try? context.execute(batchDeleteRequest)
-        }
-
+        try? context.delete(model: HabitEntry.self)
+        try? context.delete(model: JournalEntry.self)
+        try? context.delete(model: Note.self)
+        try? context.delete(model: Tag.self)
+        try? context.delete(model: Habit.self)
+        try? context.delete(model: Collection.self)
         try? context.save()
+
         createDefaultCollections(in: context)
 
         showAlert(title: "Data Cleared", message: "All data has been cleared successfully.")
     }
 
-    private func createDefaultCollections(in context: NSManagedObjectContext) {
+    private func createDefaultCollections(in context: ModelContext) {
         for name in Constants.defaultCollectionNames {
-            let collection = Collection(context: context)
-            collection.id = UUID()
-            collection.name = name
+            context.insert(Collection(name: name))
         }
         try? context.save()
     }
@@ -177,6 +178,7 @@ extension Notification.Name {
 // MARK: - Main View
 
 struct SettingsView: View {
+    @Environment(\.modelContext) private var modelContext
     @State private var viewModel = SettingsViewModel()
 
     var body: some View {
@@ -188,6 +190,7 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Settings")
+            .onAppear { viewModel.modelContext = modelContext }
             .sheet(isPresented: $viewModel.showingExportJournal) {
                 JournalExportView()
             }

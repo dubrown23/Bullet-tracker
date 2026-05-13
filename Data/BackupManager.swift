@@ -4,53 +4,54 @@
 //
 //  Created by Dustin Brown on 5/15/25.
 //
+//  SwiftData migration (bt-0002): the JSON backup *file format* is unchanged — the
+//  `Codable` mirror structs below are byte-for-byte the same, so old backups still
+//  restore and new backups still open in any tool that read the old ones. Only the
+//  fetch/insert plumbing moved from Core Data to a passed-in `ModelContext`.
+//
 
 import Foundation
-import CoreData
+import SwiftData
 import SwiftUI
 
 // MARK: - Backup Manager
 
 class BackupManager {
     // MARK: - Singleton
-    
+
     static let shared = BackupManager()
     private init() {}
-    
+
     // MARK: - Properties
-    
+
     /// Error message for the last operation
     var errorMessage: String?
-    
+
     /// Current backup file version - increment when changing format
     let backupVersion = 1
-    
-    // MARK: - Constants
-    
-    private let entityNames = ["Habit", "HabitEntry", "Collection", "JournalEntry", "Tag", "Note"]
-    
+
     // MARK: - Backup Creation
-    
-    /// Creates a backup of all app data and returns the file URL
-    func createBackup() -> URL? {
+
+    /// Creates a backup of all app data and returns the file URL.
+    func createBackup(in context: ModelContext) -> URL? {
         errorMessage = nil
-        
+
         updateBackupProgress(0.1)
-        
-        let backupData = prepareBackupData()
+
+        let backupData = prepareBackupData(in: context)
         updateBackupProgress(0.7)
-        
+
         guard let jsonData = try? JSONEncoder().encode(backupData) else {
             errorMessage = "Failed to encode backup data"
             return nil
         }
-        
+
         updateBackupProgress(0.8)
-        
+
         let temporaryDirectory = FileManager.default.temporaryDirectory
         let fileName = "BulletTracker_Backup_\(formattedDate()).json"
         let fileURL = temporaryDirectory.appendingPathComponent(fileName)
-        
+
         do {
             try jsonData.write(to: fileURL)
             updateBackupProgress(1.0)
@@ -60,37 +61,37 @@ class BackupManager {
             return nil
         }
     }
-    
+
     // MARK: - Restore Functions
-    
-    /// Restores app data from a backup file at the given URL
-    func restoreFromURL(_ url: URL) -> Bool {
+
+    /// Restores app data from a backup file at the given URL.
+    func restoreFromURL(_ url: URL, in context: ModelContext) -> Bool {
         errorMessage = nil
         updateRestoreProgress(0.1)
-        
+
         let tempDirectory = FileManager.default.temporaryDirectory
         let localURL = tempDirectory.appendingPathComponent("backup_for_restore.json")
-        
+
         do {
             try prepareLocalCopy(from: url, to: localURL)
-            
+
             let jsonData = try Data(contentsOf: localURL)
             let backupData = try JSONDecoder().decode(BackupData.self, from: jsonData)
-            
+
             updateRestoreProgress(0.3)
-            
+
             guard validateBackupVersion(backupData.version) else { return false }
-            
+
             updateRestoreProgress(0.4)
-            
-            clearExistingData()
+
+            clearExistingData(in: context)
             updateRestoreProgress(0.5)
-            
-            let success = importBackupData(backupData)
+
+            let success = importBackupData(backupData, in: context)
             updateRestoreProgress(1.0)
-            
+
             return success
-            
+
         } catch is DecodingError {
             errorMessage = "The backup file is not in the correct format"
             return false
@@ -99,30 +100,30 @@ class BackupManager {
             return false
         }
     }
-    
+
     // MARK: - Private Methods - Backup Preparation
-    
-    private func prepareBackupData() -> BackupData {
+
+    private func prepareBackupData(in context: ModelContext) -> BackupData {
         updateBackupProgress(0.2)
-        
-        let habits = fetchHabits()
+
+        let habits = fetchHabits(in: context)
         updateBackupProgress(0.3)
-        
-        let habitEntries = fetchHabitEntries()
+
+        let habitEntries = fetchHabitEntries(in: context)
         updateBackupProgress(0.4)
-        
-        let collections = fetchCollections()
+
+        let collections = fetchCollections(in: context)
         updateBackupProgress(0.5)
-        
-        let journalEntries = fetchJournalEntries()
+
+        let journalEntries = fetchJournalEntries(in: context)
         updateBackupProgress(0.6)
-        
-        let tags = fetchTags()
+
+        let tags = fetchTags(in: context)
         updateBackupProgress(0.65)
-        
-        let notes = fetchNotes()
+
+        let notes = fetchNotes(in: context)
         updateBackupProgress(0.7)
-        
+
         return BackupData(
             version: backupVersion,
             createdAt: Date(),
@@ -134,11 +135,11 @@ class BackupManager {
             notes: notes
         )
     }
-    
+
     // MARK: - Private Methods - Data Fetching
-    
-    private func fetchHabits() -> [HabitData] {
-        let habits = CoreDataManager.shared.fetchAllHabits()
+
+    private func fetchHabits(in context: ModelContext) -> [HabitData] {
+        let habits = (try? context.fetch(FetchDescriptor<Habit>())) ?? []
 
         return habits.map { habit in
             HabitData(
@@ -159,31 +160,25 @@ class BackupManager {
             )
         }
     }
-    
-    private func fetchHabitEntries() -> [HabitEntryData] {
-        let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        
-        do {
-            let entries = try CoreDataManager.shared.container.viewContext.fetch(fetchRequest)
-            
-            return entries.map { entry in
-                HabitEntryData(
-                    id: entry.id?.uuidString ?? UUID().uuidString,
-                    date: entry.date ?? Date(),
-                    completed: entry.completed,
-                    details: entry.details ?? "",
-                    habitID: entry.habit?.id?.uuidString ?? "",
-                    completionState: Int(entry.completionState)
-                )
-            }
-        } catch {
-            return []
+
+    private func fetchHabitEntries(in context: ModelContext) -> [HabitEntryData] {
+        let entries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
+
+        return entries.map { entry in
+            HabitEntryData(
+                id: entry.id?.uuidString ?? UUID().uuidString,
+                date: entry.date ?? Date(),
+                completed: entry.completed,
+                details: entry.details ?? "",
+                habitID: entry.habit?.id?.uuidString ?? "",
+                completionState: Int(entry.completionState)
+            )
         }
     }
-    
-    private func fetchCollections() -> [CollectionData] {
-        let collections = CoreDataManager.shared.fetchAllCollections()
-        
+
+    private func fetchCollections(in context: ModelContext) -> [CollectionData] {
+        let collections = (try? context.fetch(FetchDescriptor<Collection>())) ?? []
+
         return collections.map { collection in
             CollectionData(
                 id: collection.id?.uuidString ?? UUID().uuidString,
@@ -191,77 +186,59 @@ class BackupManager {
             )
         }
     }
-    
-    private func fetchJournalEntries() -> [JournalEntryData] {
-        let fetchRequest: NSFetchRequest<JournalEntry> = JournalEntry.fetchRequest()
-        
-        do {
-            let entries = try CoreDataManager.shared.container.viewContext.fetch(fetchRequest)
-            
-            return entries.map { entry in
-                let tagIDs = (entry.tags?.allObjects as? [Tag])?.compactMap { $0.id?.uuidString } ?? []
-                
-                return JournalEntryData(
-                    id: entry.id?.uuidString ?? UUID().uuidString,
-                    content: entry.content ?? "",
-                    date: entry.date ?? Date(),
-                    entryType: entry.entryType ?? "note",
-                    taskStatus: entry.taskStatus,
-                    priority: entry.priority,
-                    collectionID: entry.collection?.id?.uuidString,
-                    tagIDs: tagIDs
-                )
-            }
-        } catch {
-            return []
+
+    private func fetchJournalEntries(in context: ModelContext) -> [JournalEntryData] {
+        let entries = (try? context.fetch(FetchDescriptor<JournalEntry>())) ?? []
+
+        return entries.map { entry in
+            let tagIDs = (entry.tags ?? []).compactMap { $0.id?.uuidString }
+
+            return JournalEntryData(
+                id: entry.id?.uuidString ?? UUID().uuidString,
+                content: entry.content ?? "",
+                date: entry.date ?? Date(),
+                entryType: entry.entryType ?? "note",
+                taskStatus: entry.taskStatus,
+                priority: entry.priority,
+                collectionID: entry.collection?.id?.uuidString,
+                tagIDs: tagIDs
+            )
         }
     }
-    
-    private func fetchTags() -> [TagData] {
-        let fetchRequest: NSFetchRequest<Tag> = Tag.fetchRequest()
-        
-        do {
-            let tags = try CoreDataManager.shared.container.viewContext.fetch(fetchRequest)
-            
-            return tags.map { tag in
-                TagData(
-                    id: tag.id?.uuidString ?? UUID().uuidString,
-                    name: tag.name ?? ""
-                )
-            }
-        } catch {
-            return []
+
+    private func fetchTags(in context: ModelContext) -> [TagData] {
+        let tags = (try? context.fetch(FetchDescriptor<Tag>())) ?? []
+
+        return tags.map { tag in
+            TagData(
+                id: tag.id?.uuidString ?? UUID().uuidString,
+                name: tag.name ?? ""
+            )
         }
     }
-    
-    private func fetchNotes() -> [NoteData] {
-        let fetchRequest: NSFetchRequest<Note> = Note.fetchRequest()
-        
-        do {
-            let notes = try CoreDataManager.shared.container.viewContext.fetch(fetchRequest)
-            
-            return notes.map { note in
-                NoteData(
-                    id: note.id?.uuidString ?? UUID().uuidString,
-                    content: note.content ?? "",
-                    date: note.date ?? Date()
-                )
-            }
-        } catch {
-            return []
+
+    private func fetchNotes(in context: ModelContext) -> [NoteData] {
+        let notes = (try? context.fetch(FetchDescriptor<Note>())) ?? []
+
+        return notes.map { note in
+            NoteData(
+                id: note.id?.uuidString ?? UUID().uuidString,
+                content: note.content ?? "",
+                date: note.date ?? Date()
+            )
         }
     }
-    
+
     // MARK: - Private Methods - Restore Operations
-    
+
     private func prepareLocalCopy(from sourceURL: URL, to destinationURL: URL) throws {
         if FileManager.default.fileExists(atPath: destinationURL.path) {
             try FileManager.default.removeItem(at: destinationURL)
         }
-        
+
         try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
     }
-    
+
     private func validateBackupVersion(_ version: Int) -> Bool {
         if version > backupVersion {
             errorMessage = "This backup was created with a newer version of the app"
@@ -269,231 +246,152 @@ class BackupManager {
         }
         return true
     }
-    
-    private func clearExistingData() {
-        let context = CoreDataManager.shared.container.viewContext
-        
-        for entityName in entityNames {
-            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: entityName)
-            let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
-            
-            do {
-                try CoreDataManager.shared.container.persistentStoreCoordinator.execute(
-                    deleteRequest,
-                    with: context
-                )
-            } catch {
-                // Continue with other entities
-            }
-        }
-        
-        context.reset()
+
+    private func clearExistingData(in context: ModelContext) {
+        try? context.delete(model: HabitEntry.self)
+        try? context.delete(model: JournalEntry.self)
+        try? context.delete(model: Note.self)
+        try? context.delete(model: Tag.self)
+        try? context.delete(model: Habit.self)
+        try? context.delete(model: Collection.self)
+        try? context.save()
     }
-    
-    private func importBackupData(_ backupData: BackupData) -> Bool {
-        let context = CoreDataManager.shared.container.newBackgroundContext()
-        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
-        
-        var success = true
-        
-        context.performAndWait {
-            do {
-                updateRestoreProgress(0.6)
-                let collectionMap = importCollections(from: backupData.collections, in: context)
-                
-                updateRestoreProgress(0.7)
-                let tagMap = importTags(from: backupData.tags, in: context)
-                
-                updateRestoreProgress(0.8)
-                let habitMap = importHabits(
-                    from: backupData.habits,
-                    collectionMap: collectionMap,
-                    in: context
-                )
-                
-                updateRestoreProgress(0.85)
-                importHabitEntries(
-                    from: backupData.habitEntries,
-                    habitMap: habitMap,
-                    in: context
-                )
-                
-                updateRestoreProgress(0.9)
-                importJournalEntries(
-                    from: backupData.journalEntries,
-                    collectionMap: collectionMap,
-                    tagMap: tagMap,
-                    in: context
-                )
-                
-                updateRestoreProgress(0.92)
-                if let notes = backupData.notes {
-                    importNotes(from: notes, in: context)
-                }
-                
-                try context.save()
-                updateRestoreProgress(0.95)
-                
-            } catch {
-                success = false
-                errorMessage = "Failed to restore backup: \(error.localizedDescription)"
-                context.rollback()
-            }
+
+    private func importBackupData(_ backupData: BackupData, in context: ModelContext) -> Bool {
+        updateRestoreProgress(0.6)
+        let collectionMap = importCollections(from: backupData.collections, in: context)
+
+        updateRestoreProgress(0.7)
+        let tagMap = importTags(from: backupData.tags, in: context)
+
+        updateRestoreProgress(0.8)
+        let habitMap = importHabits(from: backupData.habits, collectionMap: collectionMap, in: context)
+
+        updateRestoreProgress(0.85)
+        importHabitEntries(from: backupData.habitEntries, habitMap: habitMap, in: context)
+
+        updateRestoreProgress(0.9)
+        importJournalEntries(from: backupData.journalEntries, collectionMap: collectionMap, tagMap: tagMap, in: context)
+
+        updateRestoreProgress(0.92)
+        if let notes = backupData.notes {
+            importNotes(from: notes, in: context)
         }
-        
-        return success
+
+        do {
+            try context.save()
+            updateRestoreProgress(0.95)
+            return true
+        } catch {
+            errorMessage = "Failed to restore backup: \(error.localizedDescription)"
+            return false
+        }
     }
-    
+
     // MARK: - Private Methods - Entity Import
-    
-    private func importCollections(
-        from backupCollections: [CollectionData],
-        in context: NSManagedObjectContext
-    ) -> [String: Collection] {
+
+    private func importCollections(from backupCollections: [CollectionData], in context: ModelContext) -> [String: Collection] {
         var collectionMap: [String: Collection] = [:]
-        
+
         for collectionData in backupCollections {
-            let collection = Collection(context: context)
-            collection.id = UUID(uuidString: collectionData.id)
-            collection.name = collectionData.name
-            
+            let collection = Collection(id: UUID(uuidString: collectionData.id), name: collectionData.name)
+            context.insert(collection)
             collectionMap[collectionData.id] = collection
         }
-        
+
         return collectionMap
     }
-    
-    private func importTags(
-        from backupTags: [TagData],
-        in context: NSManagedObjectContext
-    ) -> [String: Tag] {
+
+    private func importTags(from backupTags: [TagData], in context: ModelContext) -> [String: Tag] {
         var tagMap: [String: Tag] = [:]
-        
+
         for tagData in backupTags {
-            let tag = Tag(context: context)
-            tag.id = UUID(uuidString: tagData.id)
-            tag.name = tagData.name
-            
+            let tag = Tag(id: UUID(uuidString: tagData.id), name: tagData.name)
+            context.insert(tag)
             tagMap[tagData.id] = tag
         }
-        
+
         return tagMap
     }
-    
-    private func importHabits(
-        from backupHabits: [HabitData],
-        collectionMap: [String: Collection],
-        in context: NSManagedObjectContext
-    ) -> [String: Habit] {
-        var habitMap: [String: Habit] = [:]
-        
-        for habitData in backupHabits {
-            let habit = Habit(context: context)
-            habit.id = UUID(uuidString: habitData.id)
-            habit.name = habitData.name
-            habit.icon = habitData.icon
-            habit.color = habitData.color
-            habit.frequency = habitData.frequency
-            habit.customDays = habitData.customDays
-            habit.startDate = habitData.startDate
-            habit.notes = habitData.notes
-            habit.order = Int32(habitData.order)
-            
-            if let collectionID = habitData.collectionID,
-               let collection = collectionMap[collectionID] {
-                habit.collection = collection
-            }
-            
-            habit.trackDetails = habitData.trackDetails
-            habit.detailType = habitData.detailType
-            habit.useMultipleStates = habitData.useMultipleStates
-            habit.isNegativeHabit = habitData.isNegativeHabit
 
+    private func importHabits(from backupHabits: [HabitData], collectionMap: [String: Collection], in context: ModelContext) -> [String: Habit] {
+        var habitMap: [String: Habit] = [:]
+
+        for habitData in backupHabits {
+            let habit = Habit(
+                id: UUID(uuidString: habitData.id),
+                name: habitData.name,
+                color: habitData.color,
+                icon: habitData.icon,
+                frequency: habitData.frequency,
+                customDays: habitData.customDays,
+                notes: habitData.notes,
+                startDate: habitData.startDate,
+                order: Int32(habitData.order),
+                detailType: habitData.detailType,
+                trackDetails: habitData.trackDetails,
+                useMultipleStates: habitData.useMultipleStates,
+                isNegativeHabit: habitData.isNegativeHabit,
+                collection: habitData.collectionID.flatMap { collectionMap[$0] }
+            )
+            context.insert(habit)
             habitMap[habitData.id] = habit
         }
-        
+
         return habitMap
     }
-    
-    private func importHabitEntries(
-        from backupEntries: [HabitEntryData],
-        habitMap: [String: Habit],
-        in context: NSManagedObjectContext
-    ) {
+
+    private func importHabitEntries(from backupEntries: [HabitEntryData], habitMap: [String: Habit], in context: ModelContext) {
         for entryData in backupEntries {
             guard let habit = habitMap[entryData.habitID] else { continue }
-            
-            let entry = HabitEntry(context: context)
-            entry.id = UUID(uuidString: entryData.id)
-            entry.date = entryData.date
-            entry.completed = entryData.completed
-            entry.details = entryData.details
-            entry.habit = habit
-            
-            entry.completionState = Int16(entryData.completionState)
+
+            let entry = HabitEntry(
+                id: UUID(uuidString: entryData.id),
+                date: entryData.date,
+                completed: entryData.completed,
+                completionState: Int16(entryData.completionState),
+                details: entryData.details,
+                habit: habit
+            )
+            context.insert(entry)
         }
     }
-    
-    private func importJournalEntries(
-        from backupEntries: [JournalEntryData],
-        collectionMap: [String: Collection],
-        tagMap: [String: Tag],
-        in context: NSManagedObjectContext
-    ) {
+
+    private func importJournalEntries(from backupEntries: [JournalEntryData], collectionMap: [String: Collection], tagMap: [String: Tag], in context: ModelContext) {
         for entryData in backupEntries {
-            let entry = JournalEntry(context: context)
-            entry.id = UUID(uuidString: entryData.id)
-            entry.content = entryData.content
-            entry.date = entryData.date
-            entry.entryType = entryData.entryType
-            entry.taskStatus = entryData.taskStatus
-            entry.priority = entryData.priority
-            
-            if let collectionID = entryData.collectionID,
-               let collection = collectionMap[collectionID] {
-                entry.collection = collection
-            }
-            
-            for tagID in entryData.tagIDs {
-                if let tag = tagMap[tagID] {
-                    entry.addToTags(tag)
-                }
-            }
+            let entry = JournalEntry(
+                id: UUID(uuidString: entryData.id),
+                date: entryData.date,
+                content: entryData.content,
+                entryType: entryData.entryType,
+                priority: entryData.priority,
+                taskStatus: entryData.taskStatus,
+                collection: entryData.collectionID.flatMap { collectionMap[$0] }
+            )
+            entry.tags = entryData.tagIDs.compactMap { tagMap[$0] }
+            context.insert(entry)
         }
     }
-    
-    private func importNotes(
-        from backupNotes: [NoteData],
-        in context: NSManagedObjectContext
-    ) {
+
+    private func importNotes(from backupNotes: [NoteData], in context: ModelContext) {
         for noteData in backupNotes {
-            let note = Note(context: context)
-            note.id = UUID(uuidString: noteData.id)
-            note.content = noteData.content
-            note.date = noteData.date
+            let note = Note(id: UUID(uuidString: noteData.id), date: noteData.date, content: noteData.content)
+            context.insert(note)
         }
     }
-    
+
     // MARK: - Progress Updates
-    
+
     private func updateBackupProgress(_ progress: Float) {
-        NotificationCenter.default.post(
-            name: .backupProgressUpdated,
-            object: nil,
-            userInfo: ["progress": progress]
-        )
+        NotificationCenter.default.post(name: .backupProgressUpdated, object: nil, userInfo: ["progress": progress])
     }
-    
+
     private func updateRestoreProgress(_ progress: Float) {
-        NotificationCenter.default.post(
-            name: .restoreProgressUpdated,
-            object: nil,
-            userInfo: ["progress": progress]
-        )
+        NotificationCenter.default.post(name: .restoreProgressUpdated, object: nil, userInfo: ["progress": progress])
     }
-    
+
     // MARK: - Helper Methods
-    
+
     private static let backupDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd_HHmmss"

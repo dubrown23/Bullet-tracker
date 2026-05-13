@@ -2,7 +2,12 @@
 //  TodayViewModel.swift
 //  Bullet Tracker
 //
-//  ViewModel for the Today daily habit checklist view
+//  ViewModel for the Today daily habit checklist view.
+//
+//  SwiftData migration (bt-0002): the habit list now comes from `@Query` in
+//  `TodayView`, so this no longer owns a data repository or a cache. It keeps the
+//  view's own state (which day is selected, which sheets are open) and offers
+//  small helpers over a passed-in `[Habit]`.
 //
 
 import SwiftUI
@@ -10,7 +15,7 @@ import SwiftUI
 @MainActor
 @Observable
 class TodayViewModel {
-    // MARK: - Properties
+    // MARK: - View State
 
     var selectedDate: Date = Calendar.current.startOfDay(for: Date())
     var showingAddHabitSheet = false
@@ -18,26 +23,18 @@ class TodayViewModel {
 
     // MARK: - Dependencies
 
-    let dataRepository = HabitDataRepository.shared
     private let calculationService = HabitCalculationService.shared
     private let calendar = Calendar.current
 
-    // MARK: - Computed Properties
-
-    /// Habits from the shared repository
-    var habits: [Habit] { dataRepository.habits }
+    // MARK: - Date Display
 
     var isToday: Bool {
         calendar.isDateInToday(selectedDate)
     }
 
     var dateDisplayString: String {
-        if isToday {
-            return "Today"
-        }
-        if calendar.isDateInYesterday(selectedDate) {
-            return "Yesterday"
-        }
+        if isToday { return "Today" }
+        if calendar.isDateInYesterday(selectedDate) { return "Yesterday" }
         return DateFormatters.weekdayMonthDay.string(from: selectedDate)
     }
 
@@ -45,53 +42,50 @@ class TodayViewModel {
         DateFormatters.fullDate.string(from: selectedDate)
     }
 
-    /// Habits that should be tracked on the selected date
-    var trackableHabits: [Habit] {
+    // MARK: - Habit-Derived Helpers (over a passed-in list)
+
+    /// Habits that should be tracked on the selected date, in display order.
+    func trackableHabits(from habits: [Habit]) -> [Habit] {
         habits.filter { HabitFrequencyHelper.shouldTrack($0, on: selectedDate) }
     }
 
-    var completedCount: Int {
-        trackableHabits.filter { habit in
-            dataRepository.getCompletionState(for: habit, on: selectedDate).isCompleted
+    func completedCount(from habits: [Habit]) -> Int {
+        trackableHabits(from: habits).filter {
+            HabitStore.completionState(for: $0, on: selectedDate).isCompleted
         }.count
     }
 
-    var totalCount: Int {
-        trackableHabits.count
+    func totalCount(from habits: [Habit]) -> Int {
+        trackableHabits(from: habits).count
     }
 
-    var completionProgress: Double {
-        guard totalCount > 0 else { return 0 }
-        return Double(completedCount) / Double(totalCount)
+    func completionProgress(from habits: [Habit]) -> Double {
+        let total = totalCount(from: habits)
+        guard total > 0 else { return 0 }
+        return Double(completedCount(from: habits)) / Double(total)
     }
 
-    var progressMessage: String {
-        if totalCount == 0 { return "No habits scheduled" }
-        if completedCount == totalCount { return "All done! Great job!" }
-        let remaining = totalCount - completedCount
+    func progressMessage(from habits: [Habit]) -> String {
+        let total = totalCount(from: habits)
+        if total == 0 { return "No habits scheduled" }
+        let completed = completedCount(from: habits)
+        if completed == total { return "All done! Great job!" }
+        let remaining = total - completed
         return "\(remaining) habit\(remaining == 1 ? "" : "s") remaining"
     }
 
-    // MARK: - Public Methods
-
-    func loadHabits() {
-        dataRepository.loadHabits()
-        Task { await loadEntries() }
+    func currentStreak(for habit: Habit) -> Int {
+        let today = calendar.startOfDay(for: Date())
+        guard let yearAgo = calendar.date(byAdding: .day, value: -365, to: today) else { return 0 }
+        let entries = HabitStore.entriesByDay(for: habit, from: yearAgo, to: today)
+        return calculationService.calculateCurrentStreak(for: habit, using: entries)
     }
 
-    func loadEntries() async {
-        guard !habits.isEmpty else { return }
-        // Load 7 days back from selectedDate so the mini streak dots have data
-        let sevenDaysAgo = calendar.date(byAdding: .day, value: -6, to: selectedDate) ?? selectedDate
-        let dateRange = sevenDaysAgo...selectedDate
-        await dataRepository.loadEntries(for: habits, dateRange: dateRange)
-    }
+    // MARK: - Day Navigation
 
     func goToPreviousDay() {
         guard let newDate = calendar.date(byAdding: .day, value: -1, to: selectedDate) else { return }
         selectedDate = newDate
-        dataRepository.clearCache()
-        Task { await loadEntries() }
     }
 
     func goToNextDay() {
@@ -99,14 +93,10 @@ class TodayViewModel {
         guard selectedDate < today,
               let newDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) else { return }
         selectedDate = newDate
-        dataRepository.clearCache()
-        Task { await loadEntries() }
     }
 
     func goToToday() {
         selectedDate = calendar.startOfDay(for: Date())
-        dataRepository.clearCache()
-        Task { await loadEntries() }
     }
 
     func selectDate(_ date: Date) {
@@ -114,29 +104,5 @@ class TodayViewModel {
         let today = calendar.startOfDay(for: Date())
         guard day <= today else { return }
         selectedDate = day
-        dataRepository.clearCache()
-        Task { await loadEntries() }
-    }
-
-    /// The 7-day window centered around selectedDate's week (Mon–Sun containing selectedDate)
-    var weekDates: [Date] {
-        let today = calendar.startOfDay(for: Date())
-        // Show the week ending on today, going back 6 days
-        return (0..<7).compactMap { offset in
-            calendar.date(byAdding: .day, value: offset - 6, to: today)
-        }
-    }
-
-    func currentStreak(for habit: Habit) -> Int {
-        calculationService.calculateCurrentStreak(for: habit)
-    }
-
-    /// Returns completion states for the last 7 days
-    func last7Days(for habit: Habit) -> [Bool] {
-        let today = calendar.startOfDay(for: Date())
-        return (0..<7).reversed().map { daysAgo in
-            guard let date = calendar.date(byAdding: .day, value: -daysAgo, to: today) else { return false }
-            return dataRepository.getCompletionState(for: habit, on: date).isCompleted
-        }
     }
 }

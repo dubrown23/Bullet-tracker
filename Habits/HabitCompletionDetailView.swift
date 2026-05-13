@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct HabitCompletionDetailView: View {
     // MARK: - Properties
@@ -14,7 +15,7 @@ struct HabitCompletionDetailView: View {
     let date: Date
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(HabitDataRepository.self) private var dataRepository
+    @Environment(\.modelContext) private var modelContext
 
     // MARK: - State
 
@@ -232,7 +233,7 @@ struct HabitCompletionDetailView: View {
     // MARK: - Data
 
     private func loadExistingDetails() {
-        if let entry = dataRepository.getEntry(for: habit, on: date) {
+        if let entry = HabitStore.entry(for: habit, on: date) {
             entryExists = true
             loadEntryData(from: entry)
         } else {
@@ -273,7 +274,7 @@ struct HabitCompletionDetailView: View {
 
     private func saveAndDismiss() {
         let detailsJSON = buildDetailsJSON()
-        dataRepository.updateEntryDetails(for: habit, on: date, state: completionState, details: detailsJSON)
+        HabitStore.updateEntryDetails(for: habit, on: date, state: completionState, details: detailsJSON, in: modelContext)
         dismiss()
     }
 
@@ -303,7 +304,7 @@ struct HabitCompletionDetailView: View {
     }
 
     private func clearEntry() {
-        dataRepository.removeEntry(for: habit, on: date)
+        HabitStore.removeEntry(for: habit, on: date, in: modelContext)
         dismiss()
     }
 }

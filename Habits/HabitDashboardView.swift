@@ -6,12 +6,13 @@
 //
 
 import SwiftUI
-import CoreData
+import SwiftData
 
 struct HabitDashboardView: View {
+    @Query(sort: [SortDescriptor(\Habit.order), SortDescriptor(\Habit.name)])
+    private var habits: [Habit]
+
     @State private var viewModel = HabitDashboardViewModel()
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var hasLoadedOnce = false
 
     var body: some View {
         NavigationStack {
@@ -27,7 +28,7 @@ struct HabitDashboardView: View {
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 }
 
-                if viewModel.habits.isEmpty {
+                if habits.isEmpty {
                     Section {
                         ContentUnavailableView {
                             Label("No Habits Yet", systemImage: "chart.bar")
@@ -66,7 +67,7 @@ struct HabitDashboardView: View {
                     Section("By Habit") {
                         ForEach(viewModel.habitStats) { stat in
                             NavigationLink(destination: HabitDetailDashboardView(
-                                habit: viewModel.habits.first { $0.id == stat.id }
+                                habit: habits.first { $0.id == stat.id }
                             )) {
                                 habitStatRow(stat)
                             }
@@ -76,19 +77,9 @@ struct HabitDashboardView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Dashboard")
-            .onAppear {
-                if !hasLoadedOnce {
-                    viewModel.loadData()
-                    hasLoadedOnce = true
-                }
-            }
+            .onAppear { viewModel.loadData(habits: habits) }
             .onChange(of: viewModel.selectedPeriod) { _, _ in
-                viewModel.loadData()
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active {
-                    viewModel.loadData()
-                }
+                viewModel.loadData(habits: habits)
             }
         }
     }

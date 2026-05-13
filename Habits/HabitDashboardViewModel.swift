@@ -2,11 +2,17 @@
 //  HabitDashboardViewModel.swift
 //  Bullet Tracker
 //
-//  ViewModel for habit dashboard analytics
+//  ViewModel for habit dashboard analytics.
+//
+//  SwiftData migration (bt-0002): habits now arrive from `@Query` in the view;
+//  entries come from the relationship via `HabitStore`. The old background
+//  Core-Data context dance is gone — for a personal-scale dataset the aggregation
+//  runs on the main actor each time the Dashboard tab appears. If it ever janks,
+//  add `#Index<HabitEntry>([\.date])` (see bt-0002 watch-items) or move to a
+//  `ModelActor`.
 //
 
 import SwiftUI
-import CoreData
 
 // MARK: - Time Period Enum
 
@@ -56,23 +62,11 @@ class HabitDashboardViewModel {
     var overallCompletionRate: Int = 0
     var bestStreak: Int = 0
     var currentStreak: Int = 0
-    var heatmapDates: [Date] = []
-    var dailyCompletionRates: [Date: Double] = [:]
-    var isLoading: Bool = false
 
-    private let dataRepository = HabitDataRepository.shared
     private let calendar = Calendar.current
     private let calculationService = HabitCalculationService.shared
 
-    /// Habits from the shared repository
-    var habits: [Habit] { dataRepository.habits }
-
-    func loadData() {
-        dataRepository.loadHabits()
-        calculateStatsInBackground()
-    }
-
-    private func calculateStatsInBackground() {
+    func loadData(habits: [Habit]) {
         guard !habits.isEmpty else {
             habitStats = []
             overallCompletionRate = 0
@@ -81,85 +75,39 @@ class HabitDashboardViewModel {
             return
         }
 
-        isLoading = true
+        let endDate = Date()
+        let periodStart = calendar.startOfDay(for: selectedPeriod.startDate(from: endDate))
 
-        // Capture values for background work
-        let habitObjectIDs = habits.map { $0.objectID }
-        let period = selectedPeriod
+        // Expand the fetch window to cover the 365-day streak lookback.
+        let today = calendar.startOfDay(for: Date())
+        let streakStart = calendar.date(byAdding: .day, value: -365, to: today) ?? periodStart
+        let fetchStart = min(streakStart, periodStart)
 
-        Task {
-            let bgContext = CoreDataManager.shared.container.newBackgroundContext()
-            let service = HabitCalculationService.shared
+        let allEntries = HabitStore.allEntriesByDay(for: habits, from: fetchStart, to: endDate)
 
-            // All results computed on background
-            let results: (stats: [HabitStatData], overallRate: Int, best: Int, current: Int, dates: [Date], rates: [Date: Double]) = await bgContext.perform {
-                // Re-fetch habits on background context
-                let bgHabits = habitObjectIDs.compactMap { try? bgContext.existingObject(with: $0) as? Habit }
-                guard !bgHabits.isEmpty else {
-                    return ([], 0, 0, 0, [], [:])
-                }
+        let batch = calculationService.calculateBatchStats(
+            for: habits, allEntries: allEntries, from: periodStart, to: endDate
+        )
 
-                let endDate = Date()
-                let startDate = period.startDate(from: endDate)
-                let calendar = Calendar.current
-
-                // Batch stats on background
-                let result = service.calculateBatchStats(
-                    for: bgHabits,
-                    from: startDate,
-                    to: endDate,
-                    using: bgContext
+        habitStats = batch.habitStats
+            .map { stat in
+                HabitStatData(
+                    id: stat.habitId,
+                    name: stat.name,
+                    icon: stat.icon,
+                    color: stat.color,
+                    completionRate: stat.completionRate,
+                    completedCount: stat.completedCount,
+                    totalDays: stat.expectedDays,
+                    currentStreak: stat.currentStreak
                 )
-
-                let stats = result.habitStats.map { stat in
-                    HabitStatData(
-                        id: stat.habitId,
-                        name: stat.name,
-                        icon: stat.icon,
-                        color: stat.color,
-                        completionRate: stat.completionRate,
-                        completedCount: stat.completedCount,
-                        totalDays: stat.expectedDays,
-                        currentStreak: stat.currentStreak
-                    )
-                }.sorted { $0.completionRate > $1.completionRate }
-
-                let overallRate = result.totalExpected > 0
-                    ? Int((Double(result.totalCompleted) / Double(result.totalExpected)) * 100)
-                    : 0
-                let best = result.maxStreak
-                let current = service.calculateOverallCurrentStreak(for: bgHabits, using: result.allEntries)
-
-                // Heatmap on background
-                let heatmapEnd = calendar.startOfDay(for: Date())
-                let heatmapStart = period.startDate(from: heatmapEnd)
-
-                var dates: [Date] = []
-                var currentDate = heatmapStart
-                while currentDate <= heatmapEnd {
-                    dates.append(currentDate)
-                    guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
-                    currentDate = nextDate
-                }
-
-                let rates = service.buildHeatmapData(
-                    for: bgHabits,
-                    from: heatmapStart,
-                    to: heatmapEnd,
-                    using: bgContext
-                )
-
-                return (stats, overallRate, best, current, dates, rates)
             }
+            .sorted { $0.completionRate > $1.completionRate }
 
-            // Update UI (already on @MainActor via Task inheritance)
-            self.habitStats = results.stats
-            self.overallCompletionRate = results.overallRate
-            self.bestStreak = results.best
-            self.currentStreak = results.current
-            self.heatmapDates = results.dates
-            self.dailyCompletionRates = results.rates
-            self.isLoading = false
-        }
+        overallCompletionRate = batch.totalExpected > 0
+            ? Int((Double(batch.totalCompleted) / Double(batch.totalExpected)) * 100)
+            : 0
+        bestStreak = batch.maxStreak
+        currentStreak = calculationService.calculateOverallCurrentStreak(for: habits, using: allEntries)
     }
 }
