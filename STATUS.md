@@ -1,6 +1,6 @@
 # Project Status
 
-**Last updated:** 2026-05-13 (`bt-0003` **in build, Wave 1 done, plan revised** — pre-flight + Wave 0 (`@MainActor` fix) + Wave 1 (drop dormant machinery) all shipped on `swiftdata-phase2` branch. Wave 1's schema shrink + CloudKit `HistoryExpired` produced invalidated-instance crashes on device; **recovery via Path 3 (wipe + restore via `BackupManager`) validated the migration vehicle end-to-end**. Plan pivoted mid-build: Path 1 (SwiftData `VersionedSchema`) dropped entirely; Path 3 is the only migration vehicle. 6 waves collapsed to 5. CloudKit temporarily disabled (`cloudKitDatabase: .none` in `DataStore.swift`) for build duration; re-enabled at Wave 5 ship. Wave 2 (combined schema changes — date lift + flag collapse + typed details) is next.)
+**Last updated:** 2026-05-13 (`bt-0003` **in build through Wave 3.5; verified end-to-end on device** — Waves 0 / 1 / 2 / 3 / 3.5 all shipped to `swiftdata-phase2` branch with commits; Path 3 (wipe + restore via `BackupManager`) absorbed **two** SwiftData rejection failures (Wave 1 schema-shrink crash + Wave 3.5 Codable-enum-as-attribute crash) and recovered cleanly each time. Wave 3.5 was a bt-0004-class hotfix: `HabitEntry.details` is now a computed property over a stored `String?` column (`detailsJSON`) — same legacy JSON wire shape `BackupManager` already speaks; consumer API unchanged. Today / Dashboard / Journal / detail-capture all working against real data. CloudKit remains disabled (`cloudKitDatabase: .none`) for build duration; re-enabled at Wave 5 ship. Wave 4 (hot-path predicate rewrites) is next. Punted: `Bullet TrackerTests/Bullet_TrackerTests.swift` cleanup before Wave 5.)
 
 Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 
@@ -13,7 +13,7 @@ Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 
 ## In progress
 
-- `bt-0003` — SwiftData Phase 2. **Activated + in build on `swiftdata-phase2` branch.** Pre-flight + Wave 0 + Wave 1 done; recovery validated Path 3 as the migration vehicle. Plan pivoted mid-build (see bead body). 5-wave revised Plan; CloudKit temporarily disabled in code for build duration. Wave 2 (combined schema changes) is the next code wave.
+- `bt-0003` — SwiftData Phase 2. **In build on `swiftdata-phase2` branch through Wave 3.5; device-verified.** Waves 0 (backup-restore `@MainActor`), 1 (drop dormant machinery + Path 3 recovery validated), 2 (combined schema changes), 3 (consumer rewrites — 15 files), 3.5 (`HabitEntry.details` storage hotfix — computed property over stored `String?` after bt-0004-class SwiftData rejection) all shipped to branch with commits. CloudKit temporarily disabled (`cloudKitDatabase: .none`) for build duration; re-enabled at Wave 5 ship. Wave 4 (hot-path predicate rewrites) is the next code wave.
 
 ### Queued (backlog)
 
@@ -21,8 +21,8 @@ Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 
 ## Next (1–3 items)
 
-1. **bt-0003 Wave 2 — combined schema changes.** Lift `HabitEntry.date: Date? → Date`. Move `CompletionStyle` to `Data/Models.swift`. Add `DetailKind` + `HabitEntryDetails` enums. Drop the 4 legacy Habit flags; add `completionStyle` + `detailKind`. Replace `HabitEntry.details: String?` → `HabitEntryDetails?`. Update constructor call sites. Code will not compile cleanly until Wave 3 catches up consumers.
-2. **bt-0003 Wave 3 — consumer rewrites.** Every file that read the dropped fields gets rewritten against the new enums + typed details. UI + Journal/export + Calc + Widget + Backup transform. Smoke build clean at end.
+1. **bt-0003 Wave 4 — hot-path predicate rewrites.** `HabitDataRepository`'s 3 in-Swift-filter reads (`entry(for:on:)`, `entriesByDay`, `allEntriesByDay`) + 2 widget per-habit reads → `FetchDescriptor<HabitEntry>` + `#Predicate` on `habit.id` + date range + fetch limit. `bt-0004`'s `#Index<HabitEntry>([\.date])` already carries the read-cost win; the non-optional `date` from Wave 2 unblocks the predicate (was the reason `bt-0004` deferred). Smoke build clean at end of wave; another wipe-and-restore cycle if device test needs it. ~50 lines, mechanical.
+2. **bt-0003 Wave 5 — ship.** Re-enable CloudKit (`cloudKitDatabase: .automatic` in `DataStore.swift`). Take a fresh backup; wipe iCloud's side via Settings → name → iCloud → Manage Account Storage (if Bullet Tracker appears there); reinstall + restore; cross-device sync verification if available. Merge `swiftdata-phase2` → `main`. **Pre-ship cleanup:** `Bullet TrackerTests/Bullet_TrackerTests.swift` (punted in Wave 3 — references legacy `entry.completionState > 0` patterns that won't compile against the new model).
 3. (Independent, anytime) Repo-layout cleanup — finish the folder refactor, delete `WidgetEnums.txt` / committed `.DS_Store`s, archive the old `Documentation/` files.
 
 ## Open questions / blockers

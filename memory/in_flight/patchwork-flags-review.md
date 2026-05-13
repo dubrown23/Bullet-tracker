@@ -1,7 +1,18 @@
 ---
 topic: Bullet Tracker fresh-eyes architecture review — 9 patchwork flags
 started: 2026-05-12
-status: open — #6 beaded as bt-0001; #4/#5 queued in STATUS Next; #9 awaiting Dustin's intent; rest downstream of bt-0001
+closed: 2026-05-13
+status: closed — all 9 flags addressed; file kept as historical snapshot of the pre-bt-0001 architecture audit
+resolution_map: |
+  #1 three doors into the database — resolved by bt-0002 (Phase 1 SwiftData engine swap, dropped CoreDataManager + HabitDataRepository + HabitCalculationService trio)
+  #2 details JSON blob — resolved by bt-0003 Wave 2 (typed HabitEntryDetails) + 3.5 (computed property over String column, bt-0004-class SwiftData rejection)
+  #3 completion state modeled 3 ways — resolved by bt-0003 Wave 2 (CompletionState enum entry-side, CompletionStyle/DetailKind habit-side)
+  #4 workout name-keyword guessing — resolved by bt-0003 Wave 3 (HabitStore.checkForMeaningfulDetails now reads habit.detailKind directly)
+  #5 repo-layout half-refactor — still STATUS Next #3 (independent hygiene, not gated on bt-0003)
+  #6 hand-rolled Core Data — resolved by bt-0001 decision → bt-0002 ship
+  #7 cache nuked on every tap — resolved by bt-0002 (SwiftData @Query keeps views live; no cache to nuke)
+  #8 calc service lies about thread-safety — resolved by bt-0002 Wave 2 (HabitCalculationService stateless; main-thread aggregation on small-N today, ModelActor watch-item if it hitches)
+  #9 backup-mirror twin + vestigial Journal fields — resolved 2026-05-13 in bt-0003 Wave 1 (dropped JournalEntry/Collection/Tag entirely; backup-mirror twin kept as the wire format on purpose for forward/backward compat per Wave 3 decision)
 ---
 
 # What this is
