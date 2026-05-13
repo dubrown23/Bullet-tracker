@@ -23,8 +23,9 @@ class HabitFormViewModel {
     var selectedFrequency = HabitFrequency.daily.rawValue
     var customDays: [Int] = []
     var notes = ""
-    var trackDetails = false
-    var detailType = "general"
+    /// `nil` = no detail capture; otherwise specifies which kind. Replaces the
+    /// pre-Wave-2 `trackDetails: Bool` + `detailType: String` pair.
+    var detailKind: DetailKind?
     var completionStyle: CompletionStyle = .simple
     var showingIconSheet = false
     var isValid = false
@@ -68,12 +69,8 @@ class HabitFormViewModel {
                 .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
         }
 
-        trackDetails = habit.trackDetails
-        detailType = habit.detailType ?? "general"
-
-        let useMultipleStates = habit.useMultipleStates
-        let isNegativeHabit = habit.isNegativeHabit
-        completionStyle = CompletionStyle.from(useMultipleStates: useMultipleStates, isNegativeHabit: isNegativeHabit)
+        detailKind = habit.detailKind
+        completionStyle = habit.completionStyle
     }
 
     // MARK: - Save Methods
@@ -85,7 +82,6 @@ class HabitFormViewModel {
         defer { isSaving = false }
 
         let customDaysString = customDays.sorted().map(String.init).joined(separator: ",")
-        let bools = completionStyle.asBools
 
         let target: Habit
         if let existingHabit = habit {
@@ -104,10 +100,8 @@ class HabitFormViewModel {
         target.frequency = selectedFrequency
         target.customDays = customDaysString
         target.notes = notes
-        target.trackDetails = trackDetails
-        target.detailType = detailType
-        target.useMultipleStates = bools.useMultipleStates
-        target.isNegativeHabit = bools.isNegativeHabit
+        target.completionStyle = completionStyle
+        target.detailKind = detailKind
 
         save(context)
     }
@@ -151,8 +145,7 @@ struct EditHabitView: View {
                     selectedFrequency: $viewModel.selectedFrequency,
                     customDays: $viewModel.customDays,
                     notes: $viewModel.notes,
-                    trackDetails: $viewModel.trackDetails,
-                    detailType: $viewModel.detailType,
+                    detailKind: $viewModel.detailKind,
                     completionStyle: $viewModel.completionStyle,
                     showingIconSheet: $viewModel.showingIconSheet
                 )

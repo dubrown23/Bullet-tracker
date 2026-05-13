@@ -353,8 +353,7 @@ struct JournalPDFGenerator {
 
         let allEntriesEver = (try? modelContext.fetch(FetchDescriptor<HabitEntry>())) ?? []
         let entriesInRange = allEntriesEver.filter { entry in
-            guard let date = entry.date else { return false }
-            return date >= startDate && date < endOfRange && entry.completionState > 0
+            entry.date >= startDate && entry.date < endOfRange && entry.completionState != .notDone
         }
         let totalCompletions = entriesInRange.count
 
@@ -389,7 +388,7 @@ struct JournalPDFGenerator {
                     completed: completed,
                     expected: expected,
                     completionRate: completionRate,
-                    isNegativeHabit: habit.isNegativeHabit
+                    isNegativeHabit: habit.completionStyle == .avoidance
                 ))
 
                 totalExpected += expected
@@ -433,6 +432,34 @@ struct JournalPDFGenerator {
         )
     }
 
+    /// Convert typed `HabitEntryDetails` back to the legacy JSON-string shape
+    /// the PDF rendering downstream still parses (same wire format `BackupManager`
+    /// emits). Lets the PDF code path stay unchanged while the model goes typed.
+    private static func detailsAsLegacyString(_ details: HabitEntryDetails?) -> String? {
+        guard let details else { return nil }
+        var dict: [String: Any] = [:]
+        switch details {
+        case .notes(let notes):
+            dict["notes"] = notes
+        case .workout(let types, let duration, let intensity, let notes):
+            dict["types"] = types
+            dict["type"] = types.first ?? ""
+            dict["duration"] = duration
+            dict["intensity"] = intensity
+            dict["notes"] = notes
+        case .reading(let bookTitle, let pagesRead, let notes):
+            dict["bookTitle"] = bookTitle
+            dict["pagesRead"] = pagesRead
+            dict["notes"] = notes
+        case .mood(let mood, let notes):
+            dict["mood"] = mood
+            dict["notes"] = notes
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let str = String(data: data, encoding: .utf8) else { return nil }
+        return str
+    }
+
     // MARK: - Day Data
 
     /// One pass over the store: completed habit entries (sorted by habit order) and notes,
@@ -448,19 +475,18 @@ struct JournalPDFGenerator {
         let allEntries = (try? modelContext.fetch(FetchDescriptor<HabitEntry>())) ?? []
         let rangeEntries = allEntries
             .filter { entry in
-                guard let date = entry.date else { return false }
-                return date >= startOfRange && date < endOfRange && entry.completionState > 0
+                entry.date >= startOfRange && entry.date < endOfRange && entry.completionState != .notDone
             }
             .sorted { ($0.habit?.order ?? 0) < ($1.habit?.order ?? 0) }
         for entry in rangeEntries {
-            guard let habit = entry.habit, let date = entry.date else { continue }
-            habitsByDay[calendar.startOfDay(for: date), default: []].append(PDFHabitEntry(
+            guard let habit = entry.habit else { continue }
+            habitsByDay[calendar.startOfDay(for: entry.date), default: []].append(PDFHabitEntry(
                 name: habit.name ?? "Unknown",
                 icon: habit.icon ?? "circle",
                 color: habit.color ?? "#007AFF",
-                details: entry.details,
-                completionState: Int(entry.completionState),
-                isNegativeHabit: habit.isNegativeHabit
+                details: detailsAsLegacyString(entry.details),
+                completionState: Int(entry.completionState.rawValue),
+                isNegativeHabit: habit.completionStyle == .avoidance
             ))
         }
 

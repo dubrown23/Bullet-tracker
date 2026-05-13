@@ -359,8 +359,7 @@ class JournalExportViewModel {
 
         let allEntries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
         previewHabitCount = allEntries.filter { entry in
-            guard let date = entry.date else { return false }
-            return date >= startDate && date < endOfRange && entry.completionState > 0
+            entry.date >= startDate && entry.date < endOfRange && entry.completionState != .notDone
         }.count
 
         let allNotes = (try? context.fetch(FetchDescriptor<Note>())) ?? []

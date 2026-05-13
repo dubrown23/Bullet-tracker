@@ -113,8 +113,9 @@ final class Habit {
     var order: Int32 = 0
 
     /// Completion style — replaces `useMultipleStates: Bool` + `isNegativeHabit: Bool`
-    /// pair (Call B (c) collapse, Wave 2).
-    var completionStyle: CompletionStyle = .simple
+    /// pair (Call B (c) collapse, Wave 2). The `@Model` macro requires the
+    /// default value to be fully qualified (`.simple` shorthand rejected).
+    var completionStyle: CompletionStyle = CompletionStyle.simple
 
     /// Detail-capture kind — replaces `trackDetails: Bool` + `detailType: String?`
     /// pair (Call B (c) collapse, Wave 2). `nil` = no detail capture.
@@ -165,14 +166,16 @@ final class HabitEntry {
     /// field non-optional is the structural fix and unblocks the Wave 4 hot-path
     /// predicate rewrites. `Date.distantPast` is the syntactic-required default
     /// — every call site must pass an explicit date, so it should never appear
-    /// in real data; flag-up sentinel if it ever does.
-    var date: Date = .distantPast
+    /// in real data; flag-up sentinel if it ever does. (Fully qualified per the
+    /// `@Model` macro's requirement.)
+    var date: Date = Date.distantPast
 
     /// Completion state — replaces `completed: Bool` + `completionState: Int16`
     /// pair (Call B (c) entry-side collapse, Wave 2). Backed by `Int16` so the
     /// persisted shape matches the old raw column; backup-restore transform
     /// reads the old `completionState: Int` → `CompletionState(rawValue:)`.
-    var completionState: CompletionState = .notDone
+    /// (Fully qualified per the `@Model` macro's requirement.)
+    var completionState: CompletionState = CompletionState.notDone
 
     /// Structured details — typed shape replaces the old `details: String` JSON
     /// blob (Call A (a) typed-shape decision, Wave 2). Nil = no details captured

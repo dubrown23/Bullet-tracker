@@ -45,11 +45,12 @@ struct HabitCompletionDetailView: View {
     private var habitColor: Color { Color(hex: habit.color ?? "#FF8C42") }
 
     private var useMultipleStates: Bool {
-        habit.useMultipleStates
+        habit.completionStyle == .multiState
     }
 
-    private var detailType: String {
-        habit.detailType ?? "general"
+    /// `nil` is treated as `.notes` for UI purposes (the "general notes" surface).
+    private var detailKind: DetailKind {
+        habit.detailKind ?? .notes
     }
 
     // MARK: - Body
@@ -94,14 +95,14 @@ struct HabitCompletionDetailView: View {
                 }
 
                 // Type-specific sections
-                switch detailType {
-                case "workout":
+                switch detailKind {
+                case .workout:
                     workoutSection
-                case "reading":
+                case .reading:
                     readingSection
-                case "mood":
+                case .mood:
                     moodSection
-                default:
+                case .notes:
                     EmptyView()
                 }
 
@@ -242,65 +243,53 @@ struct HabitCompletionDetailView: View {
     }
 
     private func loadEntryData(from entry: HabitEntry) {
-        completionState = Int(entry.completionState)
+        completionState = Int(entry.completionState.rawValue)
 
-        guard let existingDetails = entry.details,
-              let data = existingDetails.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            notes = entry.details ?? ""
-            return
-        }
+        guard let details = entry.details else { return }
 
-        if let existingNotes = json["notes"] as? String { notes = existingNotes }
-
-        switch detailType {
-        case "workout":
-            if let types = json["types"] as? [String] {
-                selectedWorkoutTypes = Set(types)
-            } else if let type = json["type"] as? String, !type.isEmpty {
-                selectedWorkoutTypes = [type]
-            }
-            if let d = json["duration"] as? String { duration = d }
-            if let i = json["intensity"] as? Int { intensity = i }
-        case "reading":
-            if let title = json["bookTitle"] as? String { bookTitle = title }
-            if let pages = json["pagesRead"] as? String { pagesRead = pages }
-        case "mood":
-            if let mood = json["mood"] as? Int { selectedMood = mood }
-        default:
-            break
+        // Pattern-match the typed payload directly — no more hand-parsed JSON.
+        // Each case lifts its own fields into local @State; the `notes` field is
+        // shared across all four cases.
+        switch details {
+        case .notes(let n):
+            notes = n
+        case .workout(let types, let dur, let intens, let n):
+            selectedWorkoutTypes = Set(types)
+            duration = dur
+            intensity = intens
+            notes = n
+        case .reading(let title, let pages, let n):
+            bookTitle = title
+            pagesRead = pages
+            notes = n
+        case .mood(let mood, let n):
+            selectedMood = mood
+            notes = n
         }
     }
 
     private func saveAndDismiss() {
-        let detailsJSON = buildDetailsJSON()
-        HabitStore.updateEntryDetails(for: habit, on: date, state: completionState, details: detailsJSON, in: modelContext)
+        let details = buildDetails()
+        HabitStore.updateEntryDetails(for: habit, on: date, state: completionState, details: details, in: modelContext)
         dismiss()
     }
 
-    private func buildDetailsJSON() -> String {
-        var data: [String: Any] = ["notes": notes]
-
-        switch detailType {
-        case "workout":
-            data["types"] = Array(selectedWorkoutTypes)
-            data["type"] = selectedWorkoutTypes.first ?? ""
-            data["duration"] = duration
-            data["intensity"] = intensity
-        case "reading":
-            data["bookTitle"] = bookTitle
-            data["pagesRead"] = pagesRead
-        case "mood":
-            data["mood"] = selectedMood
-        default:
-            break
+    private func buildDetails() -> HabitEntryDetails {
+        switch detailKind {
+        case .workout:
+            return .workout(
+                types: Array(selectedWorkoutTypes),
+                duration: duration,
+                intensity: intensity,
+                notes: notes
+            )
+        case .reading:
+            return .reading(bookTitle: bookTitle, pagesRead: pagesRead, notes: notes)
+        case .mood:
+            return .mood(mood: selectedMood, notes: notes)
+        case .notes:
+            return .notes(notes: notes)
         }
-
-        if let jsonData = try? JSONSerialization.data(withJSONObject: data),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            return jsonString
-        }
-        return notes
     }
 
     private func clearEntry() {

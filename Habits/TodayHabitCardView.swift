@@ -27,9 +27,9 @@ struct TodayHabitRowView: View {
 
     private var habitColor: Color { Color(hex: habit.color ?? "#FF8C42") }
 
-    private var shouldTrackDetails: Bool { habit.trackDetails }
-    private var useMultipleStates: Bool { habit.useMultipleStates }
-    private var isNegativeHabit: Bool { habit.isNegativeHabit }
+    private var shouldTrackDetails: Bool { habit.detailKind != nil }
+    private var useMultipleStates: Bool { habit.completionStyle == .multiState }
+    private var isNegativeHabit: Bool { habit.completionStyle == .avoidance }
 
     private var isFutureDate: Bool {
         Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: Date())

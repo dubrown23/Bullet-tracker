@@ -27,13 +27,10 @@ struct JournalJSONExporter {
         let allEntries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
         let entries = allEntries
             .filter { entry in
-                guard let date = entry.date else { return false }
-                return date >= startDate && date < endOfRange && entry.completionState > 0
+                entry.date >= startDate && entry.date < endOfRange && entry.completionState != .notDone
             }
             .sorted { lhs, rhs in
-                let lDate = lhs.date ?? .distantPast
-                let rDate = rhs.date ?? .distantPast
-                if lDate != rDate { return lDate < rDate }
+                if lhs.date != rhs.date { return lhs.date < rhs.date }
                 return (lhs.habit?.order ?? 0) < (rhs.habit?.order ?? 0)
             }
 
@@ -42,16 +39,19 @@ struct JournalJSONExporter {
             guard let habit = entry.habit else { continue }
 
             var entryDict: [String: Any] = [
-                "date": iso8601Formatter.string(from: entry.date ?? Date()),
+                "date": iso8601Formatter.string(from: entry.date),
                 "habitName": habit.name ?? "",
                 "habitIcon": habit.icon ?? "",
                 "habitColor": habit.color ?? "",
-                "completionState": entry.completionState,
-                "isNegativeHabit": habit.isNegativeHabit
+                "completionState": entry.completionState.rawValue,
+                "completionStyle": habit.completionStyle.rawValue
             ]
 
-            if let details = entry.details {
-                entryDict["details"] = details
+            // Encode the typed details payload back to a JSON-friendly dictionary
+            // so the exported file stays a plain `[String: Any]` JSON object.
+            if let details = entry.details,
+               let payload = jsonifyDetails(details) {
+                entryDict["details"] = payload
             }
 
             habitsArray.append(entryDict)
@@ -77,5 +77,34 @@ struct JournalJSONExporter {
         exportData["notes"] = notesArray
 
         return try? JSONSerialization.data(withJSONObject: exportData, options: .prettyPrinted)
+    }
+
+    /// Convert a typed `HabitEntryDetails` payload to a JSON-serialisable dictionary
+    /// (mirrors the shape the old `details: String` JSON blob carried, so any
+    /// downstream tool that parsed those exports still reads the new ones).
+    private static func jsonifyDetails(_ details: HabitEntryDetails) -> [String: Any]? {
+        switch details {
+        case .notes(let notes):
+            return ["notes": notes]
+        case .workout(let types, let duration, let intensity, let notes):
+            return [
+                "types": types,
+                "type": types.first ?? "",
+                "duration": duration,
+                "intensity": intensity,
+                "notes": notes
+            ]
+        case .reading(let bookTitle, let pagesRead, let notes):
+            return [
+                "bookTitle": bookTitle,
+                "pagesRead": pagesRead,
+                "notes": notes
+            ]
+        case .mood(let mood, let notes):
+            return [
+                "mood": mood,
+                "notes": notes
+            ]
+        }
     }
 }

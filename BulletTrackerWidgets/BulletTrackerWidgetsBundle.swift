@@ -85,19 +85,18 @@ struct CompleteHabitIntent: AppIntent {
         let today = calendar.startOfDay(for: Date())
 
         let existingEntry = habit.entries?.first { entry in
-            guard let entryDate = entry.date else { return false }
-            return calendar.isDate(entryDate, inSameDayAs: today)
+            calendar.isDate(entry.date, inSameDayAs: today)
         }
 
         if let entry = existingEntry {
-            let nextState = getNextCompletionState(current: Int(entry.completionState), habit: habit)
+            let nextState = getNextCompletionState(current: Int(entry.completionState.rawValue), habit: habit)
             if nextState == 0 {
                 context.delete(entry)
             } else {
-                entry.completionState = Int16(nextState)
+                entry.completionState = CompletionState(rawValue: Int16(nextState)) ?? .success
             }
         } else {
-            let newEntry = HabitEntry(date: today, completed: true, completionState: 1, habit: habit)
+            let newEntry = HabitEntry(date: today, completionState: .success, habit: habit)
             context.insert(newEntry)
         }
 
@@ -109,8 +108,8 @@ struct CompleteHabitIntent: AppIntent {
     }
 
     private func getNextCompletionState(current: Int, habit: Habit) -> Int {
-        if habit.isNegativeHabit { return current == 0 ? 3 : 0 }
-        if !habit.useMultipleStates { return current == 0 ? 1 : 0 }
+        if habit.completionStyle == .avoidance { return current == 0 ? 3 : 0 }
+        if habit.completionStyle != .multiState { return current == 0 ? 1 : 0 }
         switch current {
         case 0: return 1
         case 1: return 2
@@ -191,8 +190,8 @@ struct HabitWidgetProvider: TimelineProvider {
                 color: habit.color ?? "#007AFF",
                 isCompleted: state > 0,
                 completionState: state,
-                needsDetails: habit.useMultipleStates || habit.trackDetails,
-                isNegativeHabit: habit.isNegativeHabit
+                needsDetails: habit.completionStyle == .multiState || habit.detailKind != nil,
+                isNegativeHabit: habit.completionStyle == .avoidance
             )
         }
 
@@ -230,10 +229,9 @@ struct HabitWidgetProvider: TimelineProvider {
 
         // SwiftData makes `habit.entries` a plain `[HabitEntry]?` — no `Set` cast.
         guard let todayEntry = habit.entries?.first(where: { entry in
-            guard let entryDate = entry.date else { return false }
-            return calendar.isDate(entryDate, inSameDayAs: today)
+            calendar.isDate(entry.date, inSameDayAs: today)
         }) else { return 0 }
-        return Int(todayEntry.completionState)
+        return Int(todayEntry.completionState.rawValue)
     }
 }
 
