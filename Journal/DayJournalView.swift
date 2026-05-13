@@ -2,13 +2,20 @@
 //  DayJournalView.swift
 //  Bullet Tracker
 //
-//  View a complete picture of any day - habits data and notes
+//  View a complete picture of any day - habits data and notes.
+//
+//  SwiftData migration (bt-0002 Wave 3b): fetches go through the VM's stored
+//  `ModelContext` (set in `.onAppear`, matching `JournalExportView` / `SettingsView`).
+//  Full-table `FetchDescriptor` + in-memory date filter mirrors Wave 3a
+//  (`BackupManager` / `JournalPDFGenerator`) — sidesteps the `#Predicate`-over-
+//  optional-relationships fiddle named in bt-0002 watch-item (e).
 //
 
 import SwiftUI
-import CoreData
+import SwiftData
 
 struct DayJournalView: View {
+    @Environment(\.modelContext) private var modelContext
     @State private var viewModel = DayJournalViewModel()
     @State private var showingAddNote = false
     @State private var showingExportView = false
@@ -111,6 +118,7 @@ struct DayJournalView: View {
                 EditNoteView(note: note)
             }
             .onAppear {
+                viewModel.modelContext = modelContext
                 if !hasLoadedOnce {
                     viewModel.loadData()
                     hasLoadedOnce = true
@@ -511,6 +519,9 @@ class DayJournalViewModel {
     var selectedNote: Note?
     var visibleDays: [Date] = []
 
+    /// Set by the view in `.onAppear`; SwiftData contexts can't be created in the VM's init.
+    var modelContext: ModelContext?
+
     private let calendar = Calendar.current
     private let daysToShow = 60
 
@@ -607,50 +618,46 @@ class DayJournalViewModel {
     }
 
     private func loadHabitEntries() {
-        let context = CoreDataManager.shared.container.viewContext
+        guard let context = modelContext else { return }
         let startOfDay = calendar.startOfDay(for: selectedDate)
         guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return }
 
-        let request: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        request.predicate = NSPredicate(
-            format: "date >= %@ AND date < %@ AND completionState > 0",
-            startOfDay as NSDate, endOfDay as NSDate
-        )
-        request.sortDescriptors = [NSSortDescriptor(key: "habit.order", ascending: true)]
-
-        do {
-            let entries = try context.fetch(request)
-            var withData: [JournalHabitEntry] = []
-            var binary: [JournalHabitEntry] = []
-
-            for entry in entries {
-                guard let habit = entry.habit else { continue }
-
-                let parsed = parseDetails(entry.details)
-                let journalEntry = JournalHabitEntry(
-                    id: entry.id ?? UUID(),
-                    habitName: habit.name ?? "Unknown",
-                    icon: habit.icon ?? "circle",
-                    color: habit.color ?? "#007AFF",
-                    completionState: Int(entry.completionState),
-                    isNegativeHabit: habit.isNegativeHabit,
-                    rawDetails: entry.details,
-                    parsedDetails: parsed
-                )
-
-                if journalEntry.hasData {
-                    withData.append(journalEntry)
-                } else {
-                    binary.append(journalEntry)
-                }
+        // Full fetch + in-Swift filter (Wave 3a pattern; see file header).
+        let allEntries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
+        let entries = allEntries
+            .filter { entry in
+                guard let date = entry.date else { return false }
+                return date >= startOfDay && date < endOfDay && entry.completionState > 0
             }
+            .sorted { ($0.habit?.order ?? 0) < ($1.habit?.order ?? 0) }
 
-            habitsWithData = withData
-            binaryHabits = binary
-        } catch {
-            habitsWithData = []
-            binaryHabits = []
+        var withData: [JournalHabitEntry] = []
+        var binary: [JournalHabitEntry] = []
+
+        for entry in entries {
+            guard let habit = entry.habit else { continue }
+
+            let parsed = parseDetails(entry.details)
+            let journalEntry = JournalHabitEntry(
+                id: entry.id ?? UUID(),
+                habitName: habit.name ?? "Unknown",
+                icon: habit.icon ?? "circle",
+                color: habit.color ?? "#007AFF",
+                completionState: Int(entry.completionState),
+                isNegativeHabit: habit.isNegativeHabit,
+                rawDetails: entry.details,
+                parsedDetails: parsed
+            )
+
+            if journalEntry.hasData {
+                withData.append(journalEntry)
+            } else {
+                binary.append(journalEntry)
+            }
         }
+
+        habitsWithData = withData
+        binaryHabits = binary
     }
 
     private func parseDetails(_ details: String?) -> JournalHabitEntry.ParsedDetails? {
@@ -678,27 +685,21 @@ class DayJournalViewModel {
     }
 
     private func loadNotes() {
-        let context = CoreDataManager.shared.container.viewContext
+        guard let context = modelContext else { return }
         let startOfDay = calendar.startOfDay(for: selectedDate)
         guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return }
 
-        let request: NSFetchRequest<Note> = Note.fetchRequest()
-        request.predicate = NSPredicate(format: "date >= %@ AND date < %@",
-                                        startOfDay as NSDate, endOfDay as NSDate)
-        request.sortDescriptors = [NSSortDescriptor(key: "date", ascending: true)]
-
-        do {
-            notes = try context.fetch(request)
-        } catch {
-            notes = []
-        }
+        let allNotes = (try? context.fetch(FetchDescriptor<Note>())) ?? []
+        notes = allNotes
+            .filter { note in
+                guard let date = note.date else { return false }
+                return date >= startOfDay && date < endOfDay
+            }
+            .sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }
     }
 
     func addNote(_ content: String) {
-        let context = CoreDataManager.shared.container.viewContext
-        let note = Note(context: context)
-        note.id = UUID()
-        note.content = content
+        guard let context = modelContext else { return }
 
         let dateComponents = calendar.dateComponents([.year, .month, .day], from: selectedDate)
         let timeComponents = calendar.dateComponents([.hour, .minute], from: Date())
@@ -710,7 +711,9 @@ class DayJournalViewModel {
         combined.hour = timeComponents.hour
         combined.minute = timeComponents.minute
 
-        note.date = calendar.date(from: combined) ?? selectedDate
+        let noteDate = calendar.date(from: combined) ?? selectedDate
+        let note = Note(date: noteDate, content: content)
+        context.insert(note)
 
         do {
             try context.save()
@@ -721,7 +724,7 @@ class DayJournalViewModel {
     }
 
     func deleteNote(_ note: Note) {
-        let context = CoreDataManager.shared.container.viewContext
+        guard let context = modelContext else { return }
         context.delete(note)
 
         do {
@@ -758,26 +761,26 @@ class DayJournalViewModel {
 
     private func buildExportData(for dates: [Date]) -> String {
         var lines: [String] = []
-        let context = CoreDataManager.shared.container.viewContext
+        guard let context = modelContext else { return "" }
         let dateFormatter = DateFormatters.iso
+
+        // Fetch the full tables once, filter per-day in Swift (Wave 3a pattern).
+        let allHabitEntries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
+        let allNotes = (try? context.fetch(FetchDescriptor<Note>())) ?? []
 
         for date in dates {
             let startOfDay = calendar.startOfDay(for: date)
             guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { continue }
 
-            let habitRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-            habitRequest.predicate = NSPredicate(
-                format: "date >= %@ AND date < %@ AND completionState > 0",
-                startOfDay as NSDate, endOfDay as NSDate
-            )
+            let habitEntries = allHabitEntries.filter { entry in
+                guard let entryDate = entry.date else { return false }
+                return entryDate >= startOfDay && entryDate < endOfDay && entry.completionState > 0
+            }
 
-            let habitEntries = (try? context.fetch(habitRequest)) ?? []
-
-            let noteRequest: NSFetchRequest<Note> = Note.fetchRequest()
-            noteRequest.predicate = NSPredicate(format: "date >= %@ AND date < %@",
-                                                startOfDay as NSDate, endOfDay as NSDate)
-
-            let notes = (try? context.fetch(noteRequest)) ?? []
+            let notes = allNotes.filter { note in
+                guard let noteDate = note.date else { return false }
+                return noteDate >= startOfDay && noteDate < endOfDay
+            }
 
             if !habitEntries.isEmpty || !notes.isEmpty {
                 lines.append("=== \(dateFormatter.string(from: date)) ===")
