@@ -6,10 +6,11 @@
 //
 
 import SwiftUI
-import CoreData
+import SwiftData
 
 struct AddHabitView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @State private var viewModel = HabitFormViewModel()
 
     var body: some View {
@@ -55,11 +56,7 @@ struct AddHabitView: View {
     }
 
     private func saveHabit() {
-        Task {
-            do {
-                try await viewModel.saveHabit()
-                dismiss()
-            } catch { }
-        }
+        viewModel.saveHabit(in: modelContext)
+        dismiss()
     }
 }
