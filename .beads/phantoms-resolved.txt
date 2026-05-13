@@ -1,0 +1,5 @@
+# Phantom IDs the `/start` step-2d check should treat as intentional historical / future-narrative references.
+# One ID per line; `#` comments allowed.
+# Format: bead-id — one-line reason
+
+bt-0003 — planned Phase 2 model-restructure bead. Intentionally not yet created — blocked on the #9 Journal-intent question (see STATUS Open questions / blockers). Referenced as a forward-narrative pointer in STATUS, CLAUDE.md, bt-0002, bt-0004, and `Data/Models.swift:10` so future-Dustin (and bt-0004's deferred predicate work) knows where the model-correctness fixes will land. Bead gets created when #9 resolves.

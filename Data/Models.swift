@@ -112,6 +112,10 @@ final class Habit {
 
 @Model
 final class HabitEntry {
+    // Re-creates the `byDateIndex` fetch index the original `.xcdatamodeld` had.
+    // Cheap to write, big read-time win for date-bounded queries (bt-0004).
+    #Index<HabitEntry>([\.date])
+
     var id: UUID?
     var date: Date?
 
@@ -145,6 +149,9 @@ final class HabitEntry {
 
 @Model
 final class JournalEntry {
+    // Re-creates the `byDateIndex` fetch index the original `.xcdatamodeld` had (bt-0004).
+    #Index<JournalEntry>([\.date])
+
     var id: UUID?
     var date: Date?
     var content: String?
