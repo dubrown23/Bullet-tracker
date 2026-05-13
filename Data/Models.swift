@@ -177,10 +177,36 @@ final class HabitEntry {
     /// (Fully qualified per the `@Model` macro's requirement.)
     var completionState: CompletionState = CompletionState.notDone
 
-    /// Structured details — typed shape replaces the old `details: String` JSON
-    /// blob (Call A (a) typed-shape decision, Wave 2). Nil = no details captured
-    /// (e.g., `habit.detailKind == nil` OR no payload for this entry yet).
-    var details: HabitEntryDetails?
+    /// Stored JSON-string representation of the details payload. The typed
+    /// `details: HabitEntryDetails?` accessor below reads/writes this column.
+    ///
+    /// **Why a `String` and not the typed enum directly?** bt-0004-class
+    /// SwiftData failure: storing a `Codable` enum with associated values as a
+    /// SwiftData attribute persists *something* on write but on read the
+    /// decoder fails with `Could not cast value of type Optional<Any> to
+    /// Array<String>` (verified at Wave 3 device test, 2026-05-13). The legacy
+    /// JSON-string shape is what every pre-Phase-2 entry on the live store
+    /// already used, and `BackupManager`'s wire format also speaks it — so
+    /// storing the JSON string here keeps the storage path battle-tested and
+    /// lets the typed access live in the computed accessor.
+    ///
+    /// Private to the class; nothing outside should read/write this directly.
+    var detailsJSON: String?
+
+    /// Typed access to the details payload. Reads decode the stored JSON
+    /// string lazily on each access (negligible cost — a few µs per entry,
+    /// invoked only on the small surfaces that actually render details).
+    /// Writes encode the typed value to the legacy JSON shape and store it
+    /// via `detailsJSON`. `nil` = no details captured.
+    var details: HabitEntryDetails? {
+        get {
+            guard let raw = detailsJSON, !raw.isEmpty else { return nil }
+            return Self.decodeDetails(raw)
+        }
+        set {
+            detailsJSON = newValue.flatMap { Self.encodeDetails($0) }
+        }
+    }
 
     var habit: Habit?
 
@@ -194,8 +220,62 @@ final class HabitEntry {
         self.id = id
         self.date = date
         self.completionState = completionState
-        self.details = details
+        self.detailsJSON = details.flatMap { Self.encodeDetails($0) }
         self.habit = habit
+    }
+
+    // MARK: - HabitEntryDetails ⇄ JSON-string conversion
+    //
+    // Same wire shape `BackupManager` (and the pre-Phase-2 `details: String`
+    // column) used — workout/reading/mood have their own field names; `notes`
+    // is the universal shared field. Discriminate on read by which JSON keys
+    // are present (the four kinds don't share keys, so it's unambiguous).
+
+    private static func encodeDetails(_ d: HabitEntryDetails) -> String? {
+        var dict: [String: Any] = [:]
+        switch d {
+        case .notes(let n):
+            dict["notes"] = n
+        case .workout(let types, let duration, let intensity, let n):
+            dict["types"] = types
+            dict["type"] = types.first ?? ""
+            dict["duration"] = duration
+            dict["intensity"] = intensity
+            dict["notes"] = n
+        case .reading(let bookTitle, let pagesRead, let n):
+            dict["bookTitle"] = bookTitle
+            dict["pagesRead"] = pagesRead
+            dict["notes"] = n
+        case .mood(let mood, let n):
+            dict["mood"] = mood
+            dict["notes"] = n
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let str = String(data: data, encoding: .utf8) else { return nil }
+        return str
+    }
+
+    private static func decodeDetails(_ str: String) -> HabitEntryDetails? {
+        guard let data = str.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            // Non-JSON legacy plaintext — treat the whole string as notes.
+            return .notes(notes: str)
+        }
+        let notes = dict["notes"] as? String ?? ""
+        if let types = dict["types"] as? [String] {
+            let duration = dict["duration"] as? String ?? ""
+            let intensity = dict["intensity"] as? Int ?? 3
+            return .workout(types: types, duration: duration, intensity: intensity, notes: notes)
+        }
+        if dict["bookTitle"] != nil || dict["pagesRead"] != nil {
+            let bookTitle = dict["bookTitle"] as? String ?? ""
+            let pagesRead = dict["pagesRead"] as? String ?? ""
+            return .reading(bookTitle: bookTitle, pagesRead: pagesRead, notes: notes)
+        }
+        if let mood = dict["mood"] as? Int {
+            return .mood(mood: mood, notes: notes)
+        }
+        return .notes(notes: notes)
     }
 }
 
