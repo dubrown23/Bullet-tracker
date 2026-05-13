@@ -7,15 +7,16 @@
 
 import SwiftUI
 
-// MARK: - Completion Style
+// MARK: - CompletionStyle — UI extension
+//
+// The enum's data definition lives in `Data/Models.swift` (Wave 2 — moved
+// there so storage can reference it). UI affordances (label / description /
+// icon / icon color) stay here in the SwiftUI-importing module so
+// `Data/Models.swift` doesn't need to depend on SwiftUI. The `.from(useMultipleStates:isNegativeHabit:)`
+// + `.asBools` bool-conversion helpers from the pre-Wave-2 enum are deleted —
+// the storage layer now speaks `CompletionStyle` directly.
 
-enum CompletionStyle: String, CaseIterable, Identifiable {
-    case simple = "simple"
-    case multiState = "multiState"
-    case avoidance = "avoidance"
-
-    var id: String { rawValue }
-
+extension CompletionStyle {
     var title: String {
         switch self {
         case .simple: return "Simple"
@@ -48,22 +49,6 @@ enum CompletionStyle: String, CaseIterable, Identifiable {
         case .simple: return .green
         case .multiState: return .orange
         case .avoidance: return .red
-        }
-    }
-
-    /// Convert from stored Core Data bools
-    static func from(useMultipleStates: Bool, isNegativeHabit: Bool) -> CompletionStyle {
-        if isNegativeHabit { return .avoidance }
-        if useMultipleStates { return .multiState }
-        return .simple
-    }
-
-    /// Convert to stored Core Data bools
-    var asBools: (useMultipleStates: Bool, isNegativeHabit: Bool) {
-        switch self {
-        case .simple: return (false, false)
-        case .multiState: return (true, false)
-        case .avoidance: return (false, true)
         }
     }
 }
