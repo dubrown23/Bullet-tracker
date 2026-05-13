@@ -1,6 +1,6 @@
 # Project Status
 
-**Last updated:** 2026-05-13 (`bt-0003` **shaped queued** — STATUS Open Question #9 resolved this session: drop the dormant `JournalEntry`/`Collection`/`Tag` machinery entirely (leftover from the bullet-journal vision that didn't fit Dustin's actual use; live Journal tab is on `Note`, untouched). Phase 2 scope locked in the bead body (5 items: drop dormant models, lift `HabitEntry.date` to non-optional, collapse 3-way completion state, type the `details` blob, rewrite the deferred `bt-0004` hot-path predicates); `## Plan TBD` until activation per queued-bead discipline. Active in_progress beads: none.)
+**Last updated:** 2026-05-13 (`bt-0003` **in build, Wave 1 done, plan revised** — pre-flight + Wave 0 (`@MainActor` fix) + Wave 1 (drop dormant machinery) all shipped on `swiftdata-phase2` branch. Wave 1's schema shrink + CloudKit `HistoryExpired` produced invalidated-instance crashes on device; **recovery via Path 3 (wipe + restore via `BackupManager`) validated the migration vehicle end-to-end**. Plan pivoted mid-build: Path 1 (SwiftData `VersionedSchema`) dropped entirely; Path 3 is the only migration vehicle. 6 waves collapsed to 5. CloudKit temporarily disabled (`cloudKitDatabase: .none` in `DataStore.swift`) for build duration; re-enabled at Wave 5 ship. Wave 2 (combined schema changes — date lift + flag collapse + typed details) is next.)
 
 Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 
@@ -13,16 +13,17 @@ Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 
 ## In progress
 
-- _(none — `bt-0004` shipped 2026-05-13; see Recent build for the ship summary and bt-0004's Decision log for the full design-pass + scope-pivot story.)_
+- `bt-0003` — SwiftData Phase 2. **Activated + in build on `swiftdata-phase2` branch.** Pre-flight + Wave 0 + Wave 1 done; recovery validated Path 3 as the migration vehicle. Plan pivoted mid-build (see bead body). 5-wave revised Plan; CloudKit temporarily disabled in code for build duration. Wave 2 (combined schema changes) is the next code wave.
 
 ### Queued (backlog)
 
-- `bt-0003` — SwiftData Phase 2: model restructure + drop dormant journal machinery. Shape locked 2026-05-13; design pass + build at activation.
+- _(none)_
 
 ## Next (1–3 items)
 
-1. **Activate `bt-0003`** — Phase 2 model restructure. Shape locked this session (see bead body); design pass + build at activation. Scope: drop dormant `JournalEntry`/`Collection`/`Tag` machinery, lift `HabitEntry.date` to non-optional, collapse 3-way completion state, type the `details` JSON blob, rewrite the deferred `bt-0004` hot-path predicates.
-2. (Independent, anytime) #5 — repo-layout cleanup: finish the folder refactor, delete `WidgetEnums.txt` / committed `.DS_Store`s, archive the old `Documentation/` files.
+1. **bt-0003 Wave 2 — combined schema changes.** Lift `HabitEntry.date: Date? → Date`. Move `CompletionStyle` to `Data/Models.swift`. Add `DetailKind` + `HabitEntryDetails` enums. Drop the 4 legacy Habit flags; add `completionStyle` + `detailKind`. Replace `HabitEntry.details: String?` → `HabitEntryDetails?`. Update constructor call sites. Code will not compile cleanly until Wave 3 catches up consumers.
+2. **bt-0003 Wave 3 — consumer rewrites.** Every file that read the dropped fields gets rewritten against the new enums + typed details. UI + Journal/export + Calc + Widget + Backup transform. Smoke build clean at end.
+3. (Independent, anytime) Repo-layout cleanup — finish the folder refactor, delete `WidgetEnums.txt` / committed `.DS_Store`s, archive the old `Documentation/` files.
 
 ## Open questions / blockers
 
