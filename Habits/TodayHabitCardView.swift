@@ -2,57 +2,45 @@
 //  TodayHabitCardView.swift
 //  Bullet Tracker
 //
-//  Native iOS list row for habit tracking in the Today view
+//  Native iOS list row for habit tracking in the Today view.
 //
 
 import SwiftUI
+import SwiftData
 
 struct TodayHabitRowView: View {
     let habit: Habit
     let date: Date
     let streak: Int
 
-    @Environment(HabitDataRepository.self) private var dataRepository
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.calendar) private var calendar
 
     @State private var showingDetailView = false
     @State private var checkScale: CGFloat = 1.0
 
     private var completionState: HabitCompletionState {
-        dataRepository.getCompletionState(for: habit, on: date)
+        HabitStore.completionState(for: habit, on: date)
     }
 
-    private var isChecked: Bool {
-        completionState.isCompleted
-    }
+    private var isChecked: Bool { completionState.isCompleted }
 
-    private var habitColor: Color {
-        Color(hex: habit.color ?? "#FF8C42")
-    }
+    private var habitColor: Color { Color(hex: habit.color ?? "#FF8C42") }
 
-    private var shouldTrackDetails: Bool {
-        habit.trackDetails
-    }
-
-    private var useMultipleStates: Bool {
-        habit.useMultipleStates
-    }
-
-    private var isNegativeHabit: Bool {
-        habit.isNegativeHabit
-    }
+    private var shouldTrackDetails: Bool { habit.trackDetails }
+    private var useMultipleStates: Bool { habit.useMultipleStates }
+    private var isNegativeHabit: Bool { habit.isNegativeHabit }
 
     private var isFutureDate: Bool {
         Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: Date())
     }
-
-    @Environment(\.calendar) private var calendar
 
     /// Last 7 days completion for mini dots
     private var last7Days: [Bool] {
         let today = calendar.startOfDay(for: Date())
         return (0..<7).reversed().map { daysAgo in
             guard let d = calendar.date(byAdding: .day, value: -daysAgo, to: today) else { return false }
-            return dataRepository.getCompletionState(for: habit, on: d).isCompleted
+            return HabitStore.completionState(for: habit, on: d).isCompleted
         }
     }
 
@@ -112,7 +100,6 @@ struct TodayHabitRowView: View {
         }
         .sheet(isPresented: $showingDetailView) {
             HabitCompletionDetailView(habit: habit, date: date)
-                .environment(dataRepository)
         }
         .animation(.default, value: isChecked)
     }
@@ -155,7 +142,7 @@ struct TodayHabitRowView: View {
 
     private func performCheck() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        dataRepository.updateEntry(for: habit, on: date, completed: true, state: 1)
+        HabitStore.setCompletion(for: habit, on: date, state: 1, in: modelContext)
 
         if shouldTrackDetails {
             Task { @MainActor in
@@ -167,7 +154,7 @@ struct TodayHabitRowView: View {
 
     private func performUncheck() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        dataRepository.removeEntry(for: habit, on: date)
+        HabitStore.removeEntry(for: habit, on: date, in: modelContext)
     }
 
     private func cycleToNextState() {
@@ -181,12 +168,7 @@ struct TodayHabitRowView: View {
         }
 
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-
-        if nextState == 0 {
-            dataRepository.removeEntry(for: habit, on: date)
-        } else {
-            dataRepository.updateEntry(for: habit, on: date, completed: true, state: nextState)
-        }
+        HabitStore.setCompletion(for: habit, on: date, state: nextState, in: modelContext)
     }
 
     // MARK: - Helpers

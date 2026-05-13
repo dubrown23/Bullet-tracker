@@ -2,492 +2,191 @@
 //  HabitDataRepository.swift
 //  Bullet Tracker
 //
-//  Created by AI Assistant on 10/29/25.
+//  SwiftData migration (bt-0002): this used to be an `@Observable` singleton
+//  holding a `[habit][date] → entry` cache, optimistic-update bookkeeping, and an
+//  `NSManagedObjectContextDidSave` listener. All of that is gone — SwiftData's
+//  `@Query` keeps views live, and the relationship (`habit.entries`) is the cache.
+//  What remains: `HabitStore`, a thin namespace of read helpers (over the in-memory
+//  relationship) and write helpers (over a `ModelContext`), plus the
+//  `HabitCompletionState` value type the Today UI renders.
 //
 
 import SwiftUI
-import CoreData
+import SwiftData
 import WidgetKit
 
-/// Centralized repository for habit data that efficiently manages Core Data operations
-/// and provides optimized data access for habit tracking views
-@MainActor
-@Observable
-class HabitDataRepository {
-    // MARK: - Singleton
+// MARK: - HabitStore
 
-    static let shared = HabitDataRepository()
+enum HabitStore {
 
-    // MARK: - Properties
+    private static let calendar = Calendar.current
+    private static let widgetKind = "HabitTrackerWidget"
 
-    /// Single source of truth for all habits, sorted by order
-    private(set) var habits: [Habit] = []
+    // MARK: - Reads (over the in-memory relationship)
 
-    /// Dictionary mapping habit IDs to their entries organized by date
-    private(set) var habitEntries: [UUID: [Date: HabitEntry]] = [:]
-
-    /// Currently loaded date range to avoid unnecessary reloads
-    private(set) var loadedDateRange: ClosedRange<Date>?
-
-    /// Loading state for UI feedback
-    private(set) var isLoading = false
-
-    // MARK: - Private Properties
-
-    private var loadingTask: Task<Void, Never>?
-    private let calendar = Calendar.current
-    private let context = CoreDataManager.shared.container.viewContext
-    private let notificationCenter = NotificationCenter.default
-
-    // MARK: - Lifecycle
-
-    init() {
-        // Listen for Core Data remote changes (from CloudKit sync or widget)
-        notificationCenter.addObserver(
-            forName: .NSManagedObjectContextDidSave,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            MainActor.assumeIsolated {
-                self?.contextDidSave(notification)
-            }
-        }
-    }
-
-    // MARK: - Notification Handlers
-
-    private func contextDidSave(_ notification: Notification) {
-        // Check if this is a save from a different context (like the widget)
-        guard let savedContext = notification.object as? NSManagedObjectContext,
-              savedContext != context else {
-            return // Ignore saves from our own context
-        }
-
-        // Merge the changes into our context
-        context.mergeChanges(fromContextDidSave: notification)
-        
-        // Check if any HabitEntry objects were changed
-        let insertedObjects = notification.userInfo?[NSInsertedObjectsKey] as? Set<NSManagedObject> ?? Set()
-        let updatedObjects = notification.userInfo?[NSUpdatedObjectsKey] as? Set<NSManagedObject> ?? Set()
-        let deletedObjects = notification.userInfo?[NSDeletedObjectsKey] as? Set<NSManagedObject> ?? Set()
-        
-        let allChangedObjects = insertedObjects.union(updatedObjects).union(deletedObjects)
-        let hasHabitEntryChanges = allChangedObjects.contains { $0 is HabitEntry }
-        
-        if hasHabitEntryChanges {
-            Task { @MainActor in
-                // Clear cache to force reload on next access
-                self.loadedDateRange = nil
-            }
-        }
-    }
-    
-    // MARK: - Habit List Management
-
-    /// Fetches all habits from Core Data, sorted by order then name
-    func loadHabits() {
-        let request: NSFetchRequest<Habit> = Habit.fetchRequest()
-        request.sortDescriptors = [
-            NSSortDescriptor(key: "order", ascending: true),
-            NSSortDescriptor(key: "name", ascending: true)
-        ]
-
-        do {
-            let fetched = try context.fetch(request)
-
-            // Ensure all habits have an order value
-            var needsSave = false
-            for (index, habit) in fetched.enumerated() where habit.order == 0 && index > 0 {
-                habit.order = Int32(index)
-                needsSave = true
-            }
-            if needsSave {
-                try? context.save()
-            }
-
-            habits = fetched
-        } catch {
-            habits = []
-        }
-    }
-
-    /// Reorders habits and persists the new order
-    func reorderHabits(from source: IndexSet, to destination: Int) {
-        habits.move(fromOffsets: source, toOffset: destination)
-        for (index, habit) in habits.enumerated() {
-            habit.order = Int32(index)
-        }
-        try? context.save()
-    }
-
-    // MARK: - Public Methods
-
-    /// Loads habit entries for the specified habits and date range
-    /// Uses efficient batch loading to minimize Core Data queries
-    func loadEntries(for habits: [Habit], dateRange: ClosedRange<Date>) async {
-        // Cancel any existing loading task
-        loadingTask?.cancel()
-        
-        // Check if we already have this data loaded
-        // Always load if cache is empty (app launch scenario)
-        let shouldSkipLoad: Bool
-        if habitEntries.isEmpty {
-            shouldSkipLoad = false // Always load on first run
-        } else if let currentRange = loadedDateRange {
-            // Only skip if the new range is completely contained within the loaded range
-            shouldSkipLoad = currentRange.contains(dateRange.lowerBound) && currentRange.contains(dateRange.upperBound)
-        } else {
-            shouldSkipLoad = false
-        }
-        
-        if shouldSkipLoad {
-            return // Already loaded
-        }
-        
-        // Extract habit ObjectIDs to pass safely to background context
-        let habitObjectIDs = habits.compactMap { $0.objectID }
-        
-        loadingTask = Task {
-            await performBatchLoad(habitObjectIDs: habitObjectIDs, dateRange: dateRange)
-        }
-        
-        await loadingTask?.value
-    }
-    
-    /// Gets a habit entry for a specific habit and date
-    func getEntry(for habit: Habit, on date: Date) -> HabitEntry? {
-        guard let habitId = habit.id else { return nil }
+    /// The `HabitEntry` for a habit on a given day, if one exists.
+    static func entry(for habit: Habit, on date: Date) -> HabitEntry? {
         let dayStart = calendar.startOfDay(for: date)
-        return habitEntries[habitId]?[dayStart]
+        return habit.entries?.first { entry in
+            guard let entryDate = entry.date else { return false }
+            return calendar.startOfDay(for: entryDate) == dayStart
+        }
     }
-    
-    /// Gets the completion state for a habit on a specific date
-    func getCompletionState(for habit: Habit, on date: Date) -> HabitCompletionState {
-        guard let entry = getEntry(for: habit, on: date) else {
+
+    /// The completion state for a habit on a specific date.
+    static func completionState(for habit: Habit, on date: Date) -> HabitCompletionState {
+        guard let entry = entry(for: habit, on: date) else {
             return HabitCompletionState(isCompleted: false, state: 0, hasDetails: false)
         }
-        
         let state = Int(entry.completionState)
         let hasDetails = checkForMeaningfulDetails(in: entry, habit: habit, state: state)
-        
-        // Fix: isCompleted should be true when state > 0, regardless of entry.completed
-        let isCompleted = state > 0
-        
-        return HabitCompletionState(
-            isCompleted: isCompleted,
-            state: state,
-            hasDetails: hasDetails
-        )
-    }
-    
-    /// Updates or creates a habit entry with optimistic UI updates
-    func updateEntry(for habit: Habit, on date: Date, completed: Bool, state: Int) {
-        guard let habitId = habit.id else { return }
-        let dayStart = calendar.startOfDay(for: date)
-        
-        // Optimistic update for immediate UI feedback
-        if habitEntries[habitId] == nil {
-            habitEntries[habitId] = [:]
-        }
-        
-        // Update local cache immediately
-        if let existingEntry = habitEntries[habitId]?[dayStart] {
-            existingEntry.completed = completed
-            existingEntry.completionState = Int16(state)
-        } else if completed {
-            // Create temporary entry for optimistic update
-            let tempEntry = HabitEntry(context: context)
-            tempEntry.id = UUID()
-            tempEntry.date = dayStart
-            tempEntry.completed = completed
-            tempEntry.completionState = Int16(state)
-            tempEntry.habit = habit
-            
-            habitEntries[habitId]?[dayStart] = tempEntry
-        }
-        
-        // Perform actual Core Data update
-        let habitObjectID = habit.objectID
-        Task {
-            await performCoreDataUpdate(habitObjectID: habitObjectID, on: dayStart, completed: completed, state: state)
-            
-            // Only refresh widget for today's date to avoid excessive refreshes
-            if Calendar.current.isDate(dayStart, inSameDayAs: Date()) {
-                WidgetCenter.shared.reloadTimelines(ofKind: "HabitTrackerWidget")
-            }
-        }
+        // isCompleted tracks state > 0 (the legacy `completed` Bool is unreliable; Phase 2 collapses these).
+        return HabitCompletionState(isCompleted: state > 0, state: state, hasDetails: hasDetails)
     }
 
-    /// Removes a habit entry
-    func removeEntry(for habit: Habit, on date: Date) {
-        guard let habitId = habit.id else { return }
-        let dayStart = calendar.startOfDay(for: date)
-
-        // Optimistic update
-        habitEntries[habitId]?[dayStart] = nil
-
-        // Perform actual Core Data deletion
-        let habitObjectID = habit.objectID
-        Task {
-            await performCoreDataDeletion(habitObjectID: habitObjectID, on: dayStart)
-
-            // Only refresh widget for today's date to avoid excessive refreshes
-            if Calendar.current.isDate(dayStart, inSameDayAs: Date()) {
-                WidgetCenter.shared.reloadTimelines(ofKind: "HabitTrackerWidget")
-            }
+    /// All of a habit's entries in `[startDate, endDate]`, keyed by start-of-day.
+    static func entriesByDay(for habit: Habit, from startDate: Date, to endDate: Date) -> [Date: HabitEntry] {
+        let lo = calendar.startOfDay(for: startDate)
+        let hi = calendar.startOfDay(for: endDate)
+        var result: [Date: HabitEntry] = [:]
+        for entry in habit.entries ?? [] {
+            guard let entryDate = entry.date else { continue }
+            let day = calendar.startOfDay(for: entryDate)
+            if day >= lo && day <= hi { result[day] = entry }
         }
-    }
-    
-    /// Updates or creates a habit entry with details (for detail logging views)
-    func updateEntryDetails(for habit: Habit, on date: Date, state: Int, details: String) {
-        guard let habitId = habit.id else { return }
-        let dayStart = calendar.startOfDay(for: date)
-
-        let entry = CoreDataManager.shared.updateHabitEntryDetails(
-            habit: habit,
-            date: dayStart,
-            details: details
-        )
-
-        if let entry = entry {
-            entry.completionState = Int16(state)
-            CoreDataManager.shared.saveContext()
-
-            // Update cache
-            if habitEntries[habitId] == nil {
-                habitEntries[habitId] = [:]
-            }
-            habitEntries[habitId]?[dayStart] = entry
-        }
+        return result
     }
 
-    /// Refreshes cached data for a specific habit and date by re-fetching from Core Data
-    func invalidateCache(for habit: Habit, on date: Date) {
-        guard let habitId = habit.id else { return }
+    /// `entriesByDay` for many habits at once, keyed by habit id.
+    static func allEntriesByDay(for habits: [Habit], from startDate: Date, to endDate: Date) -> [UUID: [Date: HabitEntry]] {
+        var result: [UUID: [Date: HabitEntry]] = [:]
+        for habit in habits {
+            guard let id = habit.id else { continue }
+            result[id] = entriesByDay(for: habit, from: startDate, to: endDate)
+        }
+        return result
+    }
+
+    // MARK: - Writes (over a ModelContext)
+
+    /// Sets a habit's completion for a date. `state == 0` removes the entry; otherwise creates/updates it.
+    static func setCompletion(for habit: Habit, on date: Date, state: Int, in context: ModelContext) {
         let dayStart = calendar.startOfDay(for: date)
-        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: dayStart) else { return }
 
-        let context = CoreDataManager.shared.container.viewContext
-        let request: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        request.predicate = NSPredicate(
-            format: "habit == %@ AND date >= %@ AND date < %@",
-            habit, dayStart as NSDate, endOfDay as NSDate
-        )
-        request.fetchLimit = 1
+        if state == 0 {
+            removeEntry(for: habit, on: dayStart, in: context)
+            return
+        }
 
-        if let entry = try? context.fetch(request).first {
-            if habitEntries[habitId] == nil {
-                habitEntries[habitId] = [:]
-            }
-            habitEntries[habitId]?[dayStart] = entry
+        if let existing = entry(for: habit, on: dayStart) {
+            existing.completed = true
+            existing.completionState = Int16(state)
         } else {
-            habitEntries[habitId]?[dayStart] = nil
+            let entry = HabitEntry(date: dayStart, completed: true, completionState: Int16(state), habit: habit)
+            context.insert(entry)
+        }
+        save(context)
+        reloadWidgetIfToday(dayStart)
+    }
+
+    /// Removes a habit's entry for a date, if any.
+    static func removeEntry(for habit: Habit, on date: Date, in context: ModelContext) {
+        let dayStart = calendar.startOfDay(for: date)
+        guard let entry = entry(for: habit, on: dayStart) else { return }
+        context.delete(entry)
+        save(context)
+        reloadWidgetIfToday(dayStart)
+    }
+
+    /// Creates or updates a habit's entry for a date, setting its state and details JSON blob.
+    static func updateEntryDetails(for habit: Habit, on date: Date, state: Int, details: String, in context: ModelContext) {
+        let dayStart = calendar.startOfDay(for: date)
+        if let existing = entry(for: habit, on: dayStart) {
+            existing.completed = true
+            existing.completionState = Int16(state)
+            existing.details = details
+        } else {
+            let entry = HabitEntry(date: dayStart, completed: true, completionState: Int16(state), details: details, habit: habit)
+            context.insert(entry)
+        }
+        save(context)
+        reloadWidgetIfToday(dayStart)
+    }
+
+    /// Persists a new ordering for the habit list (called from `onMove`).
+    static func reorderHabits(_ habits: [Habit], from source: IndexSet, to destination: Int, in context: ModelContext) {
+        var reordered = habits
+        reordered.move(fromOffsets: source, toOffset: destination)
+        for (index, habit) in reordered.enumerated() {
+            habit.order = Int32(index)
+        }
+        save(context)
+    }
+
+    // MARK: - Private
+
+    private static func save(_ context: ModelContext) {
+        do { try context.save() } catch {
+            debugLog("HabitStore: save failed — \(error.localizedDescription)")
         }
     }
-    
-    /// Clears all cached data
-    func clearCache() {
-        habitEntries.removeAll()
-        loadedDateRange = nil
-    }
-    
-    /// Forces a refresh of data for the currently loaded habits and date range
-    func forceRefresh(for habits: [Habit], dateRange: ClosedRange<Date>) async {
-        loadedDateRange = nil // Clear the loaded range to force reload
-        await loadEntries(for: habits, dateRange: dateRange)
-    }
-    
-    // MARK: - Private Methods
-    
-    private func performBatchLoad(habitObjectIDs: [NSManagedObjectID], dateRange: ClosedRange<Date>) async {
-        isLoading = true
-        defer { isLoading = false }
-        
-        await context.perform {
-            // Convert ObjectIDs back to Habit objects in this context
-            let habits = habitObjectIDs.compactMap { objectID in
-                try? self.context.existingObject(with: objectID) as? Habit
-            }
-            
-            guard !habits.isEmpty else { return }
-            
-            let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-            
-            // Use robust date handling for the query
-            // Ensure we're using start of day for both bounds
-            let startDate = self.calendar.startOfDay(for: dateRange.lowerBound)
-            guard let nextDay = self.calendar.date(byAdding: .day, value: 1, to: dateRange.upperBound) else { return }
-            let endDate = self.calendar.startOfDay(for: nextDay)
-            
-            fetchRequest.predicate = NSPredicate(
-                format: "date >= %@ AND date < %@ AND habit IN %@",
-                startDate as NSDate,
-                endDate as NSDate,
-                habits
-            )
-            
-            // Optimize fetch request
-            fetchRequest.relationshipKeyPathsForPrefetching = ["habit"]
-            fetchRequest.returnsObjectsAsFaults = false
-            
-            do {
-                let entries = try self.context.fetch(fetchRequest)
-                
-                // Update main thread
-                Task { @MainActor in
-                    self.processLoadedEntries(entries)
-                    self.loadedDateRange = dateRange
-                }
-            } catch {
-                debugLog("Failed to load habit entries: \(error.localizedDescription)")
-            }
+
+    private static func reloadWidgetIfToday(_ dayStart: Date) {
+        if calendar.isDateInToday(dayStart) {
+            WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
         }
     }
-    
-    private func processLoadedEntries(_ entries: [HabitEntry]) {
-        // Merge new entries with existing cache instead of clearing everything
-        var updatedEntries = habitEntries
-        
-        for entry in entries {
-            guard let habit = entry.habit,
-                  let habitId = habit.id,
-                  let date = entry.date else { continue }
-            
-            let dayStart = calendar.startOfDay(for: date)
-            
-            if updatedEntries[habitId] == nil {
-                updatedEntries[habitId] = [:]
-            }
-            updatedEntries[habitId]?[dayStart] = entry
-        }
-        
-        habitEntries = updatedEntries
-    }
-    
-    private func performCoreDataUpdate(habitObjectID: NSManagedObjectID, on date: Date, completed: Bool, state: Int) async {
-        await context.perform {
-            do {
-                guard let habit = try? self.context.existingObject(with: habitObjectID) as? Habit else { return }
-                
-                let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-                fetchRequest.predicate = NSPredicate(
-                    format: "habit == %@ AND date >= %@ AND date < %@",
-                    habit,
-                    date as NSDate,
-                    (self.calendar.date(byAdding: .day, value: 1, to: date) ?? date) as NSDate
-                )
-                fetchRequest.fetchLimit = 1
-                
-                let results = try self.context.fetch(fetchRequest)
-                
-                if completed {
-                    let entry = results.first ?? HabitEntry(context: self.context)
-                    if results.isEmpty {
-                        entry.id = UUID()
-                        entry.date = date
-                        entry.habit = habit
-                    }
-                    entry.completed = true
-                    entry.completionState = Int16(state)
-                } else {
-                    // Remove entry if uncompleted
-                    if let entry = results.first {
-                        self.context.delete(entry)
-                    }
-                }
-                
-                try self.context.save()
-            } catch {
-                debugLog("Failed to update habit entry: \(error.localizedDescription)")
-            }
-        }
-    }
-    
-    private func performCoreDataDeletion(habitObjectID: NSManagedObjectID, on date: Date) async {
-        await context.perform {
-            do {
-                guard let habit = try? self.context.existingObject(with: habitObjectID) as? Habit else { return }
-                
-                let fetchRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-                fetchRequest.predicate = NSPredicate(
-                    format: "habit == %@ AND date >= %@ AND date < %@",
-                    habit,
-                    date as NSDate,
-                    (self.calendar.date(byAdding: .day, value: 1, to: date) ?? date) as NSDate
-                )
-                fetchRequest.fetchLimit = 1
-                
-                if let entry = try self.context.fetch(fetchRequest).first {
-                    self.context.delete(entry)
-                    try self.context.save()
-                }
-            } catch {
-                debugLog("Failed to delete habit entry: \(error.localizedDescription)")
-            }
-        }
-    }
-    
-    private func checkForMeaningfulDetails(in entry: HabitEntry, habit: Habit, state: Int) -> Bool {
-        guard let detailsString = entry.details, !detailsString.isEmpty else {
-            return false
-        }
-        
-        // Try to parse as JSON
+
+    /// Whether an entry carries details worth surfacing an indicator for.
+    private static func checkForMeaningfulDetails(in entry: HabitEntry, habit: Habit, state: Int) -> Bool {
+        guard let detailsString = entry.details, !detailsString.isEmpty else { return false }
+
+        // Plain-text (non-JSON) details count as meaningful.
         guard let data = detailsString.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            // Plain text details
             return !detailsString.isEmpty
         }
-        
-        let isWorkoutHabit = checkIsWorkoutHabit(habit)
-        let useMultipleStates = habit.useMultipleStates
-        
-        // For workout habits with multiple states
-        if isWorkoutHabit && useMultipleStates {
-            // Only show indicator for success state with actual data
+
+        if isWorkoutHabit(habit) && habit.useMultipleStates {
+            // Only the "success" state with actual workout data gets an indicator.
             return state == 1 &&
-                   (!((json["types"] as? [String])?.isEmpty ?? true) ||
-                    !((json["duration"] as? String)?.isEmpty ?? true))
+                (!((json["types"] as? [String])?.isEmpty ?? true) ||
+                 !((json["duration"] as? String)?.isEmpty ?? true))
         }
-        
-        // For other habits, check if notes exist
+
         return !((json["notes"] as? String)?.isEmpty ?? true)
     }
-    
-    private func checkIsWorkoutHabit(_ habit: Habit) -> Bool {
-        let workoutKeywords = ["workout", "exercise", "gym", "fitness", "training", "movement"]
-        let habitName = (habit.name ?? "").lowercased()
-        let detailType = habit.detailType ?? ""
-        
-        return workoutKeywords.contains { habitName.contains($0) } || detailType == "workout"
+
+    /// Flag #4: a habit logs workouts iff its `detailType` says so — no more name-keyword guessing.
+    private static func isWorkoutHabit(_ habit: Habit) -> Bool {
+        habit.detailType == "workout"
     }
 }
 
-// MARK: - Supporting Types
+// MARK: - HabitCompletionState
 
-/// Represents the completion state of a habit on a specific date
+/// Represents the completion state of a habit on a specific date.
 struct HabitCompletionState {
     let isCompleted: Bool
     let state: Int // 0: none, 1: success, 2: partial, 3: failure
     let hasDetails: Bool
-    
+
     var stateColor: Color {
         guard isCompleted else { return .clear }
-
         switch state {
-        case 1: return Color(hex: "#4CAF50")   // Success - warm green
-        case 2: return Color(hex: "#FFB300")   // Partial - warm yellow
-        case 3: return Color(hex: "#EF5350")   // Attempted - soft red
-        default: return Color(hex: "#4CAF50")  // Default
+        case 1: return Color(hex: "#4CAF50")   // Success — warm green
+        case 2: return Color(hex: "#FFB300")   // Partial — warm yellow
+        case 3: return Color(hex: "#EF5350")   // Attempted — soft red
+        default: return Color(hex: "#4CAF50")
         }
     }
-    
+
     var stateIcon: String {
         switch state {
-        case 1: return "checkmark"              // Success
-        case 2: return "circle.lefthalf.filled" // Partial
-        case 3: return "xmark"                  // Failed
-        default: return "checkmark"             // Default
+        case 1: return "checkmark"
+        case 2: return "circle.lefthalf.filled"
+        case 3: return "xmark"
+        default: return "checkmark"
         }
     }
 }

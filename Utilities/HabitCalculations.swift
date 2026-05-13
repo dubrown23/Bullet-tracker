@@ -2,11 +2,16 @@
 //  HabitCalculations.swift
 //  Bullet Tracker
 //
-//  Shared utilities for habit streak and completion calculations
+//  Shared utilities for habit streak and completion calculations.
+//
+//  SwiftData migration (bt-0002): this used to hold an NSManagedObjectContext and
+//  fetch entries itself. Now it's PURE — every method operates on entry
+//  collections passed in by the caller. The caller fetches via SwiftData
+//  (`HabitStore.entriesByDay(...)` / `HabitStore.allEntriesByDay(...)`).
+//  Resolves flag #8 (the `@unchecked Sendable` hack + shared-context concurrency).
 //
 
 import Foundation
-import CoreData
 
 // MARK: - Shared Calendar
 
@@ -104,17 +109,14 @@ enum HabitFrequencyHelper {
     }
 }
 
-// MARK: - Habit Calculation Service
+// MARK: - Habit Calculation Service (pure — no persistence)
 
-class HabitCalculationService: @unchecked Sendable {
+final class HabitCalculationService {
     static let shared = HabitCalculationService()
 
     private let calendar = Calendar.current
-    private let context: NSManagedObjectContext
 
-    private init() {
-        self.context = CoreDataManager.shared.container.viewContext
-    }
+    private init() {}
 
     // MARK: - Frequency Checking
 
@@ -152,34 +154,16 @@ class HabitCalculationService: @unchecked Sendable {
 
     // MARK: - Completion Checking (Entry-Aware)
 
-    /// Checks completion from pre-fetched entries dictionary — O(1) lookup
+    /// Checks completion from a pre-fetched entries dictionary — O(1) lookup
     func isCompleted(in entries: [Date: HabitEntry], on date: Date) -> Bool {
         let dayStart = calendar.startOfDay(for: date)
         guard let entry = entries[dayStart] else { return false }
         return entry.completionState > 0
     }
 
-    /// Checks if a habit was completed on a specific date (convenience — fetches from Core Data)
-    func isHabitCompleted(_ habit: Habit, on date: Date) -> Bool {
-        let startOfDay = calendar.startOfDay(for: date)
-        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
-            return false
-        }
-
-        let request: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        request.predicate = NSPredicate(
-            format: "habit == %@ AND date >= %@ AND date < %@ AND completionState > 0",
-            habit, startOfDay as NSDate, endOfDay as NSDate
-        )
-        request.fetchLimit = 1
-
-        let count = (try? context.count(for: request)) ?? 0
-        return count > 0
-    }
-
     // MARK: - Streak Calculations (Entry-Aware)
 
-    /// Calculates current streak using pre-fetched entries — no Core Data queries
+    /// Calculates current streak using pre-fetched entries — no persistence access
     func calculateCurrentStreak(for habit: Habit, using entries: [Date: HabitEntry]) -> Int {
         var streak = 0
         var currentDate = calendar.startOfDay(for: Date())
@@ -204,15 +188,7 @@ class HabitCalculationService: @unchecked Sendable {
         return streak
     }
 
-    /// Convenience: fetches entries then calculates current streak
-    func calculateCurrentStreak(for habit: Habit) -> Int {
-        let today = calendar.startOfDay(for: Date())
-        guard let yearAgo = calendar.date(byAdding: .day, value: -365, to: today) else { return 0 }
-        let entries = fetchEntries(for: habit, from: yearAgo, to: today)
-        return calculateCurrentStreak(for: habit, using: entries)
-    }
-
-    /// Calculates best streak using pre-fetched entries — no Core Data queries
+    /// Calculates best streak using pre-fetched entries — no persistence access
     func calculateBestStreak(for habit: Habit, using entries: [Date: HabitEntry], from startDate: Date, to endDate: Date) -> Int {
         var bestStreak = 0
         var currentStreak = 0
@@ -234,13 +210,7 @@ class HabitCalculationService: @unchecked Sendable {
         return bestStreak
     }
 
-    /// Convenience: fetches entries then calculates best streak
-    func calculateBestStreak(for habit: Habit, from startDate: Date, to endDate: Date) -> Int {
-        let entries = fetchEntries(for: habit, from: startDate, to: endDate)
-        return calculateBestStreak(for: habit, using: entries, from: startDate, to: endDate)
-    }
-
-    /// Calculates overall current streak using pre-fetched entries — no Core Data queries
+    /// Calculates overall current streak (all habits complete) using pre-fetched entries
     func calculateOverallCurrentStreak(for habits: [Habit], using allEntries: [UUID: [Date: HabitEntry]]) -> Int {
         guard !habits.isEmpty else { return 0 }
 
@@ -275,17 +245,9 @@ class HabitCalculationService: @unchecked Sendable {
         return streak
     }
 
-    /// Convenience: fetches all entries then calculates overall streak
-    func calculateOverallCurrentStreak(for habits: [Habit]) -> Int {
-        let today = calendar.startOfDay(for: Date())
-        guard let yearAgo = calendar.date(byAdding: .day, value: -365, to: today) else { return 0 }
-        let allEntries = fetchAllEntries(for: habits, from: yearAgo, to: today)
-        return calculateOverallCurrentStreak(for: habits, using: allEntries)
-    }
-
     // MARK: - Completion Rate (Entry-Aware)
 
-    /// Calculates completion rate using pre-fetched entries — no Core Data queries
+    /// Calculates completion rate using pre-fetched entries — no persistence access
     func calculateCompletionRate(for habit: Habit, using entries: [Date: HabitEntry], from startDate: Date, to endDate: Date) -> (completed: Int, expected: Int, rate: Double) {
         let expected = calculateExpectedDays(for: habit, from: startDate, to: endDate)
         guard expected > 0 else { return (0, 0, 0) }
@@ -305,84 +267,16 @@ class HabitCalculationService: @unchecked Sendable {
         return (completed, expected, rate)
     }
 
-    /// Convenience: fetches entries then calculates completion rate
-    func calculateCompletionRate(for habit: Habit, from startDate: Date, to endDate: Date) -> (completed: Int, expected: Int, rate: Double) {
-        let entries = fetchEntries(for: habit, from: startDate, to: endDate)
-        return calculateCompletionRate(for: habit, using: entries, from: startDate, to: endDate)
-    }
+    // MARK: - Batch Statistics (Entry-Aware)
 
-    // MARK: - Batch Fetching (Performance Optimization)
-
-    /// Fetches all entries for a habit in a date range (more efficient than individual queries)
-    func fetchEntries(for habit: Habit, from startDate: Date, to endDate: Date, using ctx: NSManagedObjectContext? = nil) -> [Date: HabitEntry] {
-        let fetchContext = ctx ?? context
-        let request: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        request.predicate = NSPredicate(
-            format: "habit == %@ AND date >= %@ AND date < %@",
-            habit, startDate as NSDate, endDate as NSDate
-        )
-
-        let entries = (try? fetchContext.fetch(request)) ?? []
-
-        var result: [Date: HabitEntry] = [:]
-        for entry in entries {
-            if let date = entry.date {
-                let dayStart = calendar.startOfDay(for: date)
-                result[dayStart] = entry
-            }
-        }
-
-        return result
-    }
-
-    /// Fetches all entries for multiple habits in a date range (single query - much more efficient)
-    func fetchAllEntries(for habits: [Habit], from startDate: Date, to endDate: Date, using ctx: NSManagedObjectContext? = nil) -> [UUID: [Date: HabitEntry]] {
-        guard !habits.isEmpty else { return [:] }
-
-        let fetchContext = ctx ?? context
-        let request: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        request.predicate = NSPredicate(
-            format: "habit IN %@ AND date >= %@ AND date <= %@",
-            habits, startDate as NSDate, endDate as NSDate
-        )
-
-        let entries = (try? fetchContext.fetch(request)) ?? []
-
-        var result: [UUID: [Date: HabitEntry]] = [:]
-        // Initialize empty dictionaries for each habit
-        for habit in habits {
-            if let id = habit.id {
-                result[id] = [:]
-            }
-        }
-
-        // Group entries by habit and date
-        for entry in entries {
-            guard let habitId = entry.habit?.id, let date = entry.date else { continue }
-            let dayStart = calendar.startOfDay(for: date)
-            result[habitId]?[dayStart] = entry
-        }
-
-        return result
-    }
-
-    // MARK: - Batch Statistics (Performance Optimization)
-
-    /// Calculate stats for multiple habits efficiently using batch-fetched entries
+    /// Calculate stats for multiple habits from pre-fetched entries.
+    /// `allEntries` must cover BOTH the requested period and the 365-day streak lookback.
     func calculateBatchStats(
         for habits: [Habit],
+        allEntries: [UUID: [Date: HabitEntry]],
         from startDate: Date,
-        to endDate: Date,
-        using ctx: NSManagedObjectContext? = nil
-    ) -> (habitStats: [HabitStatResult], totalCompleted: Int, totalExpected: Int, maxStreak: Int, allEntries: [UUID: [Date: HabitEntry]]) {
-
-        // Expand fetch range to cover streak lookback (365 days)
-        let today = calendar.startOfDay(for: Date())
-        let streakStart = calendar.date(byAdding: .day, value: -365, to: today) ?? startDate
-        let fetchStart = min(streakStart, startDate)
-
-        // Single batch fetch for all habits covering both stats and streak ranges
-        let allEntries = fetchAllEntries(for: habits, from: fetchStart, to: endDate, using: ctx)
+        to endDate: Date
+    ) -> (habitStats: [HabitStatResult], totalCompleted: Int, totalExpected: Int, maxStreak: Int) {
 
         var stats: [HabitStatResult] = []
         var totalCompleted = 0
@@ -393,7 +287,7 @@ class HabitCalculationService: @unchecked Sendable {
             guard let habitId = habit.id else { continue }
             let entriesForHabit = allEntries[habitId] ?? [:]
 
-            // Count completed days from pre-fetched entries (within the requested period only)
+            // Count completed days within the requested period only
             var completedDays = 0
             var currentDate = startDate
             while currentDate <= endDate {
@@ -406,8 +300,6 @@ class HabitCalculationService: @unchecked Sendable {
 
             let expectedDays = calculateExpectedDays(for: habit, from: startDate, to: endDate)
             let rate = expectedDays > 0 ? Int((Double(completedDays) / Double(expectedDays)) * 100) : 0
-
-            // Calculate streak using pre-fetched entries — no additional queries
             let streak = calculateCurrentStreak(for: habit, using: entriesForHabit)
             maxStreak = max(maxStreak, streak)
 
@@ -426,20 +318,18 @@ class HabitCalculationService: @unchecked Sendable {
             totalExpected += expectedDays
         }
 
-        return (stats, totalCompleted, totalExpected, maxStreak, allEntries)
+        return (stats, totalCompleted, totalExpected, maxStreak)
     }
 
-    /// Build heatmap data efficiently using batch fetch
-    func buildHeatmapData(for habits: [Habit], from startDate: Date, to endDate: Date, using ctx: NSManagedObjectContext? = nil) -> [Date: Double] {
+    /// Build heatmap data (fraction of scheduled habits completed per day) from pre-fetched entries.
+    func buildHeatmapData(for habits: [Habit], allEntries: [UUID: [Date: HabitEntry]], from startDate: Date, to endDate: Date) -> [Date: Double] {
         guard !habits.isEmpty else { return [:] }
 
-        // Single batch fetch
-        let allEntries = fetchAllEntries(for: habits, from: startDate, to: endDate, using: ctx)
-
         var rates: [Date: Double] = [:]
-        var currentDate = startDate
+        var currentDate = calendar.startOfDay(for: startDate)
+        let lastDate = calendar.startOfDay(for: endDate)
 
-        while currentDate <= endDate {
+        while currentDate <= lastDate {
             var completed = 0
             var total = 0
 
