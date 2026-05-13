@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import UniformTypeIdentifiers
 
 // MARK: - Document Picker Delegate
@@ -114,7 +115,8 @@ class BackupRestoreViewModel {
 
         Task {
             let backupURL = await Task.detached(priority: .userInitiated) {
-                BackupManager.shared.createBackup()
+                let context = ModelContext(DataStore.shared)
+                return BackupManager.shared.createBackup(in: context)
             }.value
 
             if let backupURL {
@@ -146,7 +148,8 @@ class BackupRestoreViewModel {
 
         Task {
             let success = await Task.detached(priority: .userInitiated) {
-                BackupManager.shared.restoreFromURL(backupURL)
+                let context = ModelContext(DataStore.shared)
+                return BackupManager.shared.restoreFromURL(backupURL, in: context)
             }.value
 
             handleRestoreCompletion(success: success)

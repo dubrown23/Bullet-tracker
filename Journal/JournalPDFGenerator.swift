@@ -6,7 +6,7 @@
 //
 
 import UIKit
-import CoreData
+import SwiftData
 
 // MARK: - Data Types
 
@@ -137,12 +137,15 @@ struct JournalPDFGenerator {
 
     // MARK: - PDF Generation
 
-    static func generatePDF(startDate: Date, endDate: Date, includeSummary: Bool = false) -> Data {
+    static func generatePDF(startDate: Date, endDate: Date, includeSummary: Bool = false, in modelContext: ModelContext) -> Data {
+        // One fetch up front; the per-day loop reads from these grouped dicts.
+        let (habitsByDay, notesByDay) = fetchRangeData(startDate: startDate, endDate: endDate, in: modelContext)
+
         let pdfRenderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight))
 
         let data = pdfRenderer.pdfData { context in
             if includeSummary {
-                drawSummaryDashboard(startDate: startDate, endDate: endDate, context: context)
+                drawSummaryDashboard(startDate: startDate, endDate: endDate, in: modelContext, context: context)
             }
 
             let calendar = Calendar.current
@@ -158,7 +161,7 @@ struct JournalPDFGenerator {
             var hasAnyData = false
 
             while currentDate <= endDate {
-                let dayData = fetchDayData(for: currentDate)
+                let dayData = dayData(for: currentDate, habitsByDay: habitsByDay, notesByDay: notesByDay)
 
                 if !dayData.habits.isEmpty || !dayData.notes.isEmpty {
                     hasAnyData = true
@@ -228,11 +231,11 @@ struct JournalPDFGenerator {
 
     // MARK: - Summary Dashboard
 
-    private static func drawSummaryDashboard(startDate: Date, endDate: Date, context: UIGraphicsPDFRendererContext) {
+    private static func drawSummaryDashboard(startDate: Date, endDate: Date, in modelContext: ModelContext, context: UIGraphicsPDFRendererContext) {
         context.beginPage()
         var yPos: CGFloat = margin
 
-        let stats = calculateStats(startDate: startDate, endDate: endDate)
+        let stats = calculateStats(startDate: startDate, endDate: endDate, in: modelContext)
 
         "Habit Report".draw(at: CGPoint(x: margin, y: yPos), withAttributes: TextStyle.pageTitle)
         yPos += 40
@@ -338,28 +341,28 @@ struct JournalPDFGenerator {
 
     // MARK: - Stats Calculation
 
-    private static func calculateStats(startDate: Date, endDate: Date) -> ReportStats {
-        let context = CoreDataManager.shared.container.viewContext
+    private static func calculateStats(startDate: Date, endDate: Date, in modelContext: ModelContext) -> ReportStats {
         let calendar = Calendar.current
         guard let endOfRange = calendar.date(byAdding: .day, value: 1, to: endDate) else {
             return ReportStats(totalDays: 0, totalHabits: 0, totalCompletions: 0, totalNotes: 0, overallCompletionRate: 0, habitStats: [], bestStreak: nil)
         }
 
         let totalDays = (calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 0) + 1
-        let allHabits = CoreDataManager.shared.fetchAllHabits()
+        let allHabits = ((try? modelContext.fetch(FetchDescriptor<Habit>(sortBy: [SortDescriptor(\.order), SortDescriptor(\.name)]))) ?? [])
         let totalHabits = allHabits.count
 
-        let entryRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        entryRequest.predicate = NSPredicate(
-            format: "date >= %@ AND date < %@ AND completionState > 0",
-            startDate as NSDate, endOfRange as NSDate
-        )
-        let entries = (try? context.fetch(entryRequest)) ?? []
-        let totalCompletions = entries.count
+        let allEntriesEver = (try? modelContext.fetch(FetchDescriptor<HabitEntry>())) ?? []
+        let entriesInRange = allEntriesEver.filter { entry in
+            guard let date = entry.date else { return false }
+            return date >= startDate && date < endOfRange && entry.completionState > 0
+        }
+        let totalCompletions = entriesInRange.count
 
-        let noteRequest: NSFetchRequest<Note> = Note.fetchRequest()
-        noteRequest.predicate = NSPredicate(format: "date >= %@ AND date < %@", startDate as NSDate, endOfRange as NSDate)
-        let totalNotes = (try? context.count(for: noteRequest)) ?? 0
+        let allNotes = (try? modelContext.fetch(FetchDescriptor<Note>())) ?? []
+        let totalNotes = allNotes.filter { note in
+            guard let date = note.date else { return false }
+            return date >= startDate && date < endOfRange
+        }.count
 
         var habitStats: [HabitStat] = []
         var totalExpected = 0
@@ -377,8 +380,7 @@ struct JournalPDFGenerator {
                 currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? endDate.addingTimeInterval(86400)
             }
 
-            let habitEntries = entries.filter { $0.habit?.id == habitId }
-            let completed = habitEntries.count
+            let completed = entriesInRange.filter { $0.habit?.id == habitId }.count
             let completionRate = expected > 0 ? Double(completed) / Double(expected) : 0
 
             if expected > 0 {
@@ -397,14 +399,14 @@ struct JournalPDFGenerator {
 
         let overallCompletionRate = totalExpected > 0 ? Double(totalActual) / Double(totalExpected) : 0
 
-        // Batch-fetch entries for streak calculation (avoids N+1 queries)
+        // Streak data: entries from the relationship, last 365 days.
         let today = calendar.startOfDay(for: Date())
         let streakStart = calendar.date(byAdding: .day, value: -365, to: today) ?? startDate
-        let allEntries = HabitCalculationService.shared.fetchAllEntries(for: allHabits, from: streakStart, to: today)
+        let streakEntries = HabitStore.allEntriesByDay(for: allHabits, from: streakStart, to: today)
 
         var bestStreak: (habitName: String, streak: Int)?
         for habit in allHabits {
-            let habitEntries = allEntries[habit.id ?? UUID()] ?? [:]
+            let habitEntries = streakEntries[habit.id ?? UUID()] ?? [:]
             let streak = HabitCalculationService.shared.calculateCurrentStreak(for: habit, using: habitEntries)
             if streak > 0 && (bestStreak.map { streak > $0.streak } ?? true) {
                 bestStreak = (habit.name ?? "Unknown", streak)
@@ -433,54 +435,57 @@ struct JournalPDFGenerator {
 
     // MARK: - Day Data
 
-    private static func fetchDayData(for date: Date) -> (habits: [PDFHabitEntry], notes: [PDFNoteEntry]) {
-        let context = CoreDataManager.shared.container.viewContext
+    /// One pass over the store: completed habit entries (sorted by habit order) and notes,
+    /// both within the range, grouped by start-of-day.
+    private static func fetchRangeData(startDate: Date, endDate: Date, in modelContext: ModelContext) -> (habitsByDay: [Date: [PDFHabitEntry]], notesByDay: [Date: [PDFNoteEntry]]) {
         let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
-        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
-            return ([], [])
+        let startOfRange = calendar.startOfDay(for: startDate)
+        guard let endOfRange = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: endDate)) else {
+            return ([:], [:])
         }
 
-        let habitRequest: NSFetchRequest<HabitEntry> = HabitEntry.fetchRequest()
-        habitRequest.predicate = NSPredicate(
-            format: "date >= %@ AND date < %@ AND completionState > 0",
-            startOfDay as NSDate, endOfDay as NSDate
-        )
-        habitRequest.sortDescriptors = [NSSortDescriptor(key: "habit.order", ascending: true)]
-
-        var habits: [PDFHabitEntry] = []
-        if let entries = try? context.fetch(habitRequest) {
-            for entry in entries {
-                guard let habit = entry.habit else { continue }
-                habits.append(PDFHabitEntry(
-                    name: habit.name ?? "Unknown",
-                    icon: habit.icon ?? "circle",
-                    color: habit.color ?? "#007AFF",
-                    details: entry.details,
-                    completionState: Int(entry.completionState),
-                    isNegativeHabit: habit.isNegativeHabit
-                ))
+        var habitsByDay: [Date: [PDFHabitEntry]] = [:]
+        let allEntries = (try? modelContext.fetch(FetchDescriptor<HabitEntry>())) ?? []
+        let rangeEntries = allEntries
+            .filter { entry in
+                guard let date = entry.date else { return false }
+                return date >= startOfRange && date < endOfRange && entry.completionState > 0
             }
+            .sorted { ($0.habit?.order ?? 0) < ($1.habit?.order ?? 0) }
+        for entry in rangeEntries {
+            guard let habit = entry.habit, let date = entry.date else { continue }
+            habitsByDay[calendar.startOfDay(for: date), default: []].append(PDFHabitEntry(
+                name: habit.name ?? "Unknown",
+                icon: habit.icon ?? "circle",
+                color: habit.color ?? "#007AFF",
+                details: entry.details,
+                completionState: Int(entry.completionState),
+                isNegativeHabit: habit.isNegativeHabit
+            ))
         }
 
-        let noteRequest: NSFetchRequest<Note> = Note.fetchRequest()
-        noteRequest.predicate = NSPredicate(
-            format: "date >= %@ AND date < %@",
-            startOfDay as NSDate, endOfDay as NSDate
-        )
-        noteRequest.sortDescriptors = [NSSortDescriptor(key: "date", ascending: true)]
-
-        var notes: [PDFNoteEntry] = []
-        if let fetchedNotes = try? context.fetch(noteRequest) {
-            for note in fetchedNotes {
-                notes.append(PDFNoteEntry(
-                    content: note.content ?? "",
-                    time: timeFormatter.string(from: note.date ?? Date())
-                ))
+        var notesByDay: [Date: [PDFNoteEntry]] = [:]
+        let allNotes = (try? modelContext.fetch(FetchDescriptor<Note>())) ?? []
+        let rangeNotes = allNotes
+            .filter { note in
+                guard let date = note.date else { return false }
+                return date >= startOfRange && date < endOfRange
             }
+            .sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }
+        for note in rangeNotes {
+            guard let date = note.date else { continue }
+            notesByDay[calendar.startOfDay(for: date), default: []].append(PDFNoteEntry(
+                content: note.content ?? "",
+                time: timeFormatter.string(from: date)
+            ))
         }
 
-        return (habits, notes)
+        return (habitsByDay, notesByDay)
+    }
+
+    private static func dayData(for date: Date, habitsByDay: [Date: [PDFHabitEntry]], notesByDay: [Date: [PDFNoteEntry]]) -> (habits: [PDFHabitEntry], notes: [PDFNoteEntry]) {
+        let day = Calendar.current.startOfDay(for: date)
+        return (habitsByDay[day] ?? [], notesByDay[day] ?? [])
     }
 
     // MARK: - Drawing Helpers
