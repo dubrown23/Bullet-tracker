@@ -1,6 +1,6 @@
 # Project Status
 
-**Last updated:** 2026-05-13 (`bt-0002` **SHIPPED** — merge `ba1edde` to `main`; SwiftData migration Phase 1 complete; +1387 / −2070 net = 683 fewer lines; device-tested 1-4 of 6 (cross-device CloudKit + backup round-trip deferred, low-risk). Active in_progress beads: none. Next = decide where `bt-0002` deferred-perf (d)+(e) lives — new `bt-0004` vs fold into `bt-0003` — then shape `bt-0003` Phase 2 when the #9 Journal-intent question lands.)
+**Last updated:** 2026-05-13 (`bt-0002` **SHIPPED** — merge `ba1edde` to `main`; SwiftData migration Phase 1 complete; +1387 / −2070 net = 683 fewer lines; device-tested 1-4 of 6 (cross-device CloudKit + backup round-trip deferred, low-risk). Active in_progress beads: none. `bt-0004` queued — SwiftData data-layer perf pass (watch-items (d)+(e) from bt-0002, own-bead route chosen over folding into bt-0003 to decouple from the #9 question). Next = pick up `bt-0004` or shape `bt-0003` Phase 2 when the #9 question lands.)
 
 Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 
@@ -17,11 +17,11 @@ Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 
 ### Queued (backlog)
 
-- _(none — `bt-0003` Phase 2 not yet created; see Next #1.)_
+- `bt-0004` — **SwiftData data-layer perf pass.** Wave 2 watch-items (d) + (e) from bt-0002 — full-table fetch + in-Swift filter is everywhere, dashboard aggregation runs on the main actor. Perf only, no behavior or model-shape changes. Plan TBD (design pass when picked up). Independent of `bt-0003` so it doesn't gate on the #9 Journal-intent question.
 
 ## Next (1–3 items)
 
-1. **Decide where `bt-0002` deferred-perf items (d)+(e) live** — own bead (`bt-0004` "SwiftData data-layer perf pass") OR fold into the future `bt-0003` Phase 2 (already touching the data layer). Architectural call; see bt-0002 ship Decision log entry for the full tradeoff. Once decided, create the bead (queued, Plan = `TBD — design pass needed when picked up.`).
+1. **Pick up `bt-0004`** — design pass on the SwiftData data-layer perf pass (watch-items (d)+(e) from bt-0002). Whenever convenient; not gated on anything.
 2. **Set up `bt-0003`** — Phase 2 model restructure (`details` JSON blob → typed; collapse 3-way completion state → one enum; drop vestigial `JournalEntry` fields). Blocked on the #9 Journal-intent question — until Dustin clarifies what the future-log feature was meant to do, those fields can't be safely dropped.
 3. **Device-test 5: cross-device CloudKit sync** — install the new build on a second device (iPad or another phone), wait a few minutes, verify changes flow. Watch-item (b) on bt-0002. Low-risk (config + container ID unchanged from Core Data), but the only real verification.
 4. (Independent, anytime) #5 — repo-layout cleanup: finish the folder refactor, delete `WidgetEnums.txt` / committed `.DS_Store`s, archive the old `Documentation/` files.
