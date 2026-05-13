@@ -2,53 +2,31 @@
 //  Models.swift
 //  Bullet Tracker
 //
-//  SwiftData @Model types. Phase 1 of the SwiftData migration (bt-0002):
-//  these MIRROR the existing `Bullet_Tracker.xcdatamodeld` field-for-field so
-//  SwiftData can coexist with the Core Data stack on the same App-Group store
-//  while consumers migrate over. The model SHAPE is not changed here — typing
-//  the `details` blob, collapsing the completion state, and dropping the
-//  vestigial JournalEntry fields are Phase 2 (bt-0003).
+//  SwiftData @Model types.
+//
+//  Phase 1 (bt-0002): swapped the Core Data engine for SwiftData; model SHAPE
+//  was unchanged so the existing App-Group store opens in place.
+//
+//  Phase 2 (bt-0003) — in progress:
+//    Wave 1 (done): dropped the dormant bullet-journal layer entirely —
+//      `@Model` types `Collection` / `JournalEntry` / `Tag` and the 7 vestigial
+//      "future log / migration" fields. Live Journal tab uses `Note`.
+//    Waves 2–5 (queued): lift `HabitEntry.date: Date? → Date`; collapse the
+//      4 Habit-level flags into `CompletionStyle` + `DetailKind` enums; type
+//      the `details` JSON blob into `HabitEntryDetails`; rewrite hot-path
+//      predicates.
+//    Wave 6 (queued): the `VersionedSchema` migration that lands all of the
+//      above against the live CloudKit-synced store.
 //
 //  Requirements that must hold for this to work:
 //   • The `.xcdatamodeld` entities' Codegen must be set to "Manual/None" so these
-//     are the only Habit/HabitEntry/Collection/JournalEntry/Note/Tag types.
+//     are the only Habit/HabitEntry/Note types.
 //   • This file must be a member of BOTH the app target and the widget target.
 //   • CloudKit-safe: every relationship is optional; no `@Attribute(.unique)`.
 //
 
 import Foundation
 import SwiftData
-
-// MARK: - Collection
-
-@Model
-final class Collection {
-    var id: UUID?
-    var name: String?
-    var collectionType: String?
-    var isAutomatic: Bool = false
-    var sortOrder: Int32 = 0
-
-    @Relationship(deleteRule: .nullify, inverse: \Habit.collection)
-    var habits: [Habit]?
-
-    @Relationship(deleteRule: .nullify, inverse: \JournalEntry.collection)
-    var entries: [JournalEntry]?
-
-    init(
-        id: UUID? = UUID(),
-        name: String? = nil,
-        collectionType: String? = nil,
-        isAutomatic: Bool = false,
-        sortOrder: Int32 = 0
-    ) {
-        self.id = id
-        self.name = name
-        self.collectionType = collectionType
-        self.isAutomatic = isAutomatic
-        self.sortOrder = sortOrder
-    }
-}
 
 // MARK: - Habit
 
@@ -64,13 +42,11 @@ final class Habit {
     var startDate: Date?
     var order: Int32 = 0
 
-    /// Detail-capture flags (still modeled the legacy way in Phase 1; collapsed in Phase 2).
+    /// Detail-capture flags (still modeled the legacy way in Phase 1; collapsed in Phase 2 Wave 3).
     var detailType: String?
     var trackDetails: Bool = false
     var useMultipleStates: Bool = false
     var isNegativeHabit: Bool = false
-
-    var collection: Collection?
 
     @Relationship(deleteRule: .cascade, inverse: \HabitEntry.habit)
     var entries: [HabitEntry]?
@@ -88,8 +64,7 @@ final class Habit {
         detailType: String? = nil,
         trackDetails: Bool = false,
         useMultipleStates: Bool = false,
-        isNegativeHabit: Bool = false,
-        collection: Collection? = nil
+        isNegativeHabit: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -104,7 +79,6 @@ final class Habit {
         self.trackDetails = trackDetails
         self.useMultipleStates = useMultipleStates
         self.isNegativeHabit = isNegativeHabit
-        self.collection = collection
     }
 }
 
@@ -145,70 +119,6 @@ final class HabitEntry {
     }
 }
 
-// MARK: - JournalEntry
-
-@Model
-final class JournalEntry {
-    // Re-creates the `byDateIndex` fetch index the original `.xcdatamodeld` had (bt-0004).
-    #Index<JournalEntry>([\.date])
-
-    var id: UUID?
-    var date: Date?
-    var content: String?
-    var entryType: String? = "note"
-    var isDraft: Bool = false
-    var priority: Bool = false
-    var originalDate: Date?
-
-    /// Vestigial "future log / migration" fields — no live UI; removed in Phase 2 (pending #9 intent).
-    var isFutureEntry: Bool = false
-    var isSpecialEntry: Bool = false
-    var hasMigrated: Bool = false
-    var targetMonth: Date?
-    var scheduledDate: Date?
-    var specialEntryType: String?
-    var taskStatus: String?
-
-    var collection: Collection?
-
-    @Relationship(deleteRule: .nullify, inverse: \Tag.entries)
-    var tags: [Tag]?
-
-    init(
-        id: UUID? = UUID(),
-        date: Date? = nil,
-        content: String? = nil,
-        entryType: String? = "note",
-        isDraft: Bool = false,
-        priority: Bool = false,
-        originalDate: Date? = nil,
-        isFutureEntry: Bool = false,
-        isSpecialEntry: Bool = false,
-        hasMigrated: Bool = false,
-        targetMonth: Date? = nil,
-        scheduledDate: Date? = nil,
-        specialEntryType: String? = nil,
-        taskStatus: String? = nil,
-        collection: Collection? = nil
-    ) {
-        self.id = id
-        self.date = date
-        self.content = content
-        self.entryType = entryType
-        self.isDraft = isDraft
-        self.priority = priority
-        self.originalDate = originalDate
-        self.isFutureEntry = isFutureEntry
-        self.isSpecialEntry = isSpecialEntry
-        self.hasMigrated = hasMigrated
-        self.targetMonth = targetMonth
-        self.scheduledDate = scheduledDate
-        self.specialEntryType = specialEntryType
-        self.taskStatus = taskStatus
-        self.collection = collection
-    }
-}
-
 // MARK: - Note
 
 @Model
@@ -224,18 +134,3 @@ final class Note {
     }
 }
 
-// MARK: - Tag
-
-@Model
-final class Tag {
-    var id: UUID?
-    var name: String?
-
-    /// Other side of the many-to-many; the inverse is declared on `JournalEntry.tags`.
-    var entries: [JournalEntry]?
-
-    init(id: UUID? = UUID(), name: String? = nil) {
-        self.id = id
-        self.name = name
-    }
-}

@@ -107,19 +107,10 @@ class BackupManager {
         updateBackupProgress(0.2)
 
         let habits = fetchHabits(in: context)
-        updateBackupProgress(0.3)
-
-        let habitEntries = fetchHabitEntries(in: context)
         updateBackupProgress(0.4)
 
-        let collections = fetchCollections(in: context)
-        updateBackupProgress(0.5)
-
-        let journalEntries = fetchJournalEntries(in: context)
+        let habitEntries = fetchHabitEntries(in: context)
         updateBackupProgress(0.6)
-
-        let tags = fetchTags(in: context)
-        updateBackupProgress(0.65)
 
         let notes = fetchNotes(in: context)
         updateBackupProgress(0.7)
@@ -129,9 +120,6 @@ class BackupManager {
             createdAt: Date(),
             habits: habits,
             habitEntries: habitEntries,
-            collections: collections,
-            journalEntries: journalEntries,
-            tags: tags,
             notes: notes
         )
     }
@@ -152,7 +140,6 @@ class BackupManager {
                 startDate: habit.startDate ?? Date(),
                 notes: habit.notes ?? "",
                 order: Int(habit.order),
-                collectionID: habit.collection?.id?.uuidString,
                 trackDetails: habit.trackDetails,
                 detailType: habit.detailType ?? "general",
                 useMultipleStates: habit.useMultipleStates,
@@ -172,47 +159,6 @@ class BackupManager {
                 details: entry.details ?? "",
                 habitID: entry.habit?.id?.uuidString ?? "",
                 completionState: Int(entry.completionState)
-            )
-        }
-    }
-
-    private func fetchCollections(in context: ModelContext) -> [CollectionData] {
-        let collections = (try? context.fetch(FetchDescriptor<Collection>())) ?? []
-
-        return collections.map { collection in
-            CollectionData(
-                id: collection.id?.uuidString ?? UUID().uuidString,
-                name: collection.name ?? ""
-            )
-        }
-    }
-
-    private func fetchJournalEntries(in context: ModelContext) -> [JournalEntryData] {
-        let entries = (try? context.fetch(FetchDescriptor<JournalEntry>())) ?? []
-
-        return entries.map { entry in
-            let tagIDs = (entry.tags ?? []).compactMap { $0.id?.uuidString }
-
-            return JournalEntryData(
-                id: entry.id?.uuidString ?? UUID().uuidString,
-                content: entry.content ?? "",
-                date: entry.date ?? Date(),
-                entryType: entry.entryType ?? "note",
-                taskStatus: entry.taskStatus,
-                priority: entry.priority,
-                collectionID: entry.collection?.id?.uuidString,
-                tagIDs: tagIDs
-            )
-        }
-    }
-
-    private func fetchTags(in context: ModelContext) -> [TagData] {
-        let tags = (try? context.fetch(FetchDescriptor<Tag>())) ?? []
-
-        return tags.map { tag in
-            TagData(
-                id: tag.id?.uuidString ?? UUID().uuidString,
-                name: tag.name ?? ""
             )
         }
     }
@@ -249,29 +195,17 @@ class BackupManager {
 
     private func clearExistingData(in context: ModelContext) {
         try? context.delete(model: HabitEntry.self)
-        try? context.delete(model: JournalEntry.self)
         try? context.delete(model: Note.self)
-        try? context.delete(model: Tag.self)
         try? context.delete(model: Habit.self)
-        try? context.delete(model: Collection.self)
         try? context.save()
     }
 
     private func importBackupData(_ backupData: BackupData, in context: ModelContext) -> Bool {
-        updateRestoreProgress(0.6)
-        let collectionMap = importCollections(from: backupData.collections, in: context)
-
         updateRestoreProgress(0.7)
-        let tagMap = importTags(from: backupData.tags, in: context)
-
-        updateRestoreProgress(0.8)
-        let habitMap = importHabits(from: backupData.habits, collectionMap: collectionMap, in: context)
+        let habitMap = importHabits(from: backupData.habits, in: context)
 
         updateRestoreProgress(0.85)
         importHabitEntries(from: backupData.habitEntries, habitMap: habitMap, in: context)
-
-        updateRestoreProgress(0.9)
-        importJournalEntries(from: backupData.journalEntries, collectionMap: collectionMap, tagMap: tagMap, in: context)
 
         updateRestoreProgress(0.92)
         if let notes = backupData.notes {
@@ -290,31 +224,7 @@ class BackupManager {
 
     // MARK: - Private Methods - Entity Import
 
-    private func importCollections(from backupCollections: [CollectionData], in context: ModelContext) -> [String: Collection] {
-        var collectionMap: [String: Collection] = [:]
-
-        for collectionData in backupCollections {
-            let collection = Collection(id: UUID(uuidString: collectionData.id), name: collectionData.name)
-            context.insert(collection)
-            collectionMap[collectionData.id] = collection
-        }
-
-        return collectionMap
-    }
-
-    private func importTags(from backupTags: [TagData], in context: ModelContext) -> [String: Tag] {
-        var tagMap: [String: Tag] = [:]
-
-        for tagData in backupTags {
-            let tag = Tag(id: UUID(uuidString: tagData.id), name: tagData.name)
-            context.insert(tag)
-            tagMap[tagData.id] = tag
-        }
-
-        return tagMap
-    }
-
-    private func importHabits(from backupHabits: [HabitData], collectionMap: [String: Collection], in context: ModelContext) -> [String: Habit] {
+    private func importHabits(from backupHabits: [HabitData], in context: ModelContext) -> [String: Habit] {
         var habitMap: [String: Habit] = [:]
 
         for habitData in backupHabits {
@@ -331,8 +241,7 @@ class BackupManager {
                 detailType: habitData.detailType,
                 trackDetails: habitData.trackDetails,
                 useMultipleStates: habitData.useMultipleStates,
-                isNegativeHabit: habitData.isNegativeHabit,
-                collection: habitData.collectionID.flatMap { collectionMap[$0] }
+                isNegativeHabit: habitData.isNegativeHabit
             )
             context.insert(habit)
             habitMap[habitData.id] = habit
@@ -353,22 +262,6 @@ class BackupManager {
                 details: entryData.details,
                 habit: habit
             )
-            context.insert(entry)
-        }
-    }
-
-    private func importJournalEntries(from backupEntries: [JournalEntryData], collectionMap: [String: Collection], tagMap: [String: Tag], in context: ModelContext) {
-        for entryData in backupEntries {
-            let entry = JournalEntry(
-                id: UUID(uuidString: entryData.id),
-                date: entryData.date,
-                content: entryData.content,
-                entryType: entryData.entryType,
-                priority: entryData.priority,
-                taskStatus: entryData.taskStatus,
-                collection: entryData.collectionID.flatMap { collectionMap[$0] }
-            )
-            entry.tags = entryData.tagIDs.compactMap { tagMap[$0] }
             context.insert(entry)
         }
     }
@@ -404,15 +297,18 @@ class BackupManager {
 }
 
 // MARK: - Data Models for Backup
+//
+// Wire-format note: `BackupData` lost `collections` / `journalEntries` / `tags`
+// fields and `HabitData` lost `collectionID` in bt-0003 Wave 1. Old backup files
+// that carry those keys still decode cleanly — `JSONDecoder` ignores unknown
+// keys by default, so the dormant data is silently dropped on restore. New
+// backups simply don't emit them.
 
 struct BackupData: Codable {
     let version: Int
     let createdAt: Date
     let habits: [HabitData]
     let habitEntries: [HabitEntryData]
-    let collections: [CollectionData]
-    let journalEntries: [JournalEntryData]
-    let tags: [TagData]
     let notes: [NoteData]?
 }
 
@@ -426,7 +322,6 @@ struct HabitData: Codable {
     let startDate: Date
     let notes: String
     let order: Int
-    let collectionID: String?
     let trackDetails: Bool
     let detailType: String
     let useMultipleStates: Bool
@@ -444,7 +339,6 @@ struct HabitData: Codable {
         startDate = try container.decode(Date.self, forKey: .startDate)
         notes = try container.decode(String.self, forKey: .notes)
         order = try container.decode(Int.self, forKey: .order)
-        collectionID = try container.decodeIfPresent(String.self, forKey: .collectionID)
         trackDetails = try container.decodeIfPresent(Bool.self, forKey: .trackDetails) ?? false
         detailType = try container.decodeIfPresent(String.self, forKey: .detailType) ?? "general"
         useMultipleStates = try container.decodeIfPresent(Bool.self, forKey: .useMultipleStates) ?? false
@@ -452,7 +346,7 @@ struct HabitData: Codable {
     }
 
     // Standard initializer for creating backups
-    init(id: String, name: String, icon: String, color: String, frequency: String, customDays: String, startDate: Date, notes: String, order: Int, collectionID: String?, trackDetails: Bool, detailType: String, useMultipleStates: Bool, isNegativeHabit: Bool) {
+    init(id: String, name: String, icon: String, color: String, frequency: String, customDays: String, startDate: Date, notes: String, order: Int, trackDetails: Bool, detailType: String, useMultipleStates: Bool, isNegativeHabit: Bool) {
         self.id = id
         self.name = name
         self.icon = icon
@@ -462,7 +356,6 @@ struct HabitData: Codable {
         self.startDate = startDate
         self.notes = notes
         self.order = order
-        self.collectionID = collectionID
         self.trackDetails = trackDetails
         self.detailType = detailType
         self.useMultipleStates = useMultipleStates
@@ -477,27 +370,6 @@ struct HabitEntryData: Codable {
     let details: String
     let habitID: String
     let completionState: Int
-}
-
-struct CollectionData: Codable {
-    let id: String
-    let name: String
-}
-
-struct JournalEntryData: Codable {
-    let id: String
-    let content: String
-    let date: Date
-    let entryType: String
-    let taskStatus: String?
-    let priority: Bool
-    let collectionID: String?
-    let tagIDs: [String]
-}
-
-struct TagData: Codable {
-    let id: String
-    let name: String
 }
 
 struct NoteData: Codable {
