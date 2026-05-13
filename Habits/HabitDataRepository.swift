@@ -22,14 +22,34 @@ enum HabitStore {
     private static let calendar = Calendar.current
     private static let widgetKind = "HabitTrackerWidget"
 
-    // MARK: - Reads (over the in-memory relationship)
+    // MARK: - Reads (FetchDescriptor + #Predicate, Wave 4)
+    //
+    // Phase-2 Wave 4 rewrite: every read here used to walk `habit.entries` in
+    // memory — `habit.entries?.first { ... }` faults the entire relationship
+    // (~entries-per-habit, can be thousands for a habit tracked daily for
+    // years) and filters in Swift. Wave 2's non-optional `HabitEntry.date` +
+    // bt-0004's `#Index<HabitEntry>([\.date])` make `FetchDescriptor` +
+    // `#Predicate` on `habit.id` + a date range the right shape — index-backed,
+    // SQL-level narrowing, no full faulting.
+    //
+    // Signature kept unchanged on purpose: `habit.modelContext` gives us the
+    // context the habit is attached to, so no `ModelContext` parameter needs
+    // to ripple through the 7 view/viewmodel callers. Reads that arrive with
+    // a habit that isn't yet attached to a context (placeholder / preview)
+    // fall back to nil-or-empty cleanly.
 
     /// The `HabitEntry` for a habit on a given day, if one exists.
     static func entry(for habit: Habit, on date: Date) -> HabitEntry? {
+        guard let context = habit.modelContext, let habitID = habit.id else { return nil }
         let dayStart = calendar.startOfDay(for: date)
-        return habit.entries?.first { entry in
-            calendar.startOfDay(for: entry.date) == dayStart
-        }
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        var descriptor = FetchDescriptor<HabitEntry>(
+            predicate: #Predicate { entry in
+                entry.habit?.id == habitID && entry.date >= dayStart && entry.date < dayEnd
+            }
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
     }
 
     /// The completion state for a habit on a specific date.
@@ -44,22 +64,53 @@ enum HabitStore {
 
     /// All of a habit's entries in `[startDate, endDate]`, keyed by start-of-day.
     static func entriesByDay(for habit: Habit, from startDate: Date, to endDate: Date) -> [Date: HabitEntry] {
+        guard let context = habit.modelContext, let habitID = habit.id else { return [:] }
         let lo = calendar.startOfDay(for: startDate)
-        let hi = calendar.startOfDay(for: endDate)
+        let hiDay = calendar.startOfDay(for: endDate)
+        // Inclusive end: extend to the start of the day AFTER `endDate` so the
+        // half-open `< hiExclusive` predicate captures `endDate`'s own entries.
+        let hiExclusive = calendar.date(byAdding: .day, value: 1, to: hiDay) ?? hiDay
+        let descriptor = FetchDescriptor<HabitEntry>(
+            predicate: #Predicate { entry in
+                entry.habit?.id == habitID && entry.date >= lo && entry.date < hiExclusive
+            }
+        )
+        let entries = (try? context.fetch(descriptor)) ?? []
         var result: [Date: HabitEntry] = [:]
-        for entry in habit.entries ?? [] {
-            let day = calendar.startOfDay(for: entry.date)
-            if day >= lo && day <= hi { result[day] = entry }
+        result.reserveCapacity(entries.count)
+        for entry in entries {
+            result[calendar.startOfDay(for: entry.date)] = entry
         }
         return result
     }
 
     /// `entriesByDay` for many habits at once, keyed by habit id.
+    ///
+    /// One indexed fetch over the date range, then partition by habit in Swift
+    /// — avoids an IN-predicate on optional UUID through an optional
+    /// relationship (the fragile shape bt-0004 documented), and avoids
+    /// N round-trips one per habit. The `#Index<HabitEntry>([\.date])` from
+    /// bt-0004 carries the cost.
     static func allEntriesByDay(for habits: [Habit], from startDate: Date, to endDate: Date) -> [UUID: [Date: HabitEntry]] {
+        guard let context = habits.first?.modelContext else { return [:] }
+        let lo = calendar.startOfDay(for: startDate)
+        let hiDay = calendar.startOfDay(for: endDate)
+        let hiExclusive = calendar.date(byAdding: .day, value: 1, to: hiDay) ?? hiDay
+        let descriptor = FetchDescriptor<HabitEntry>(
+            predicate: #Predicate { entry in
+                entry.date >= lo && entry.date < hiExclusive
+            }
+        )
+        let entries = (try? context.fetch(descriptor)) ?? []
+        // Pre-build the habit-ID set so we partition only entries that belong
+        // to one of the passed habits (the date-only predicate catches all
+        // habits' entries in the range).
+        let wantedIDs = Set(habits.compactMap { $0.id })
         var result: [UUID: [Date: HabitEntry]] = [:]
-        for habit in habits {
-            guard let id = habit.id else { continue }
-            result[id] = entriesByDay(for: habit, from: startDate, to: endDate)
+        for entry in entries {
+            guard let id = entry.habit?.id, wantedIDs.contains(id) else { continue }
+            let day = calendar.startOfDay(for: entry.date)
+            result[id, default: [:]][day] = entry
         }
         return result
     }
