@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import CoreData
 
 // MARK: - Habit Detail Dashboard View
 
@@ -229,73 +228,46 @@ class HabitDetailViewModel {
     var bestStreak: Int = 0
     var heatmapDates: [Date] = []
     var dailyCompletion: [Date: Double] = [:]
-    var isLoading: Bool = false
 
+    private let calendar = Calendar.current
     private let calculationService = HabitCalculationService.shared
 
     func loadData(for habit: Habit, from startDate: Date, to endDate: Date) {
-        isLoading = true
+        let heatmapStart = calendar.startOfDay(for: startDate)
+        let endDay = calendar.startOfDay(for: endDate)
 
-        let habitObjectID = habit.objectID
-
-        Task {
-            let bgContext = CoreDataManager.shared.container.newBackgroundContext()
-            let service = HabitCalculationService.shared
-
-            let results: (rate: Int, completed: Int, total: Int, streak: Int, best: Int, dates: [Date], completion: [Date: Double]) = await bgContext.perform {
-                guard let bgHabit = try? bgContext.existingObject(with: habitObjectID) as? Habit else {
-                    return (0, 0, 0, 0, 0, [], [:])
-                }
-
-                let calendar = Calendar.current
-                let heatmapStart = calendar.startOfDay(for: startDate)
-                let endDay = calendar.startOfDay(for: endDate)
-
-                var dates: [Date] = []
-                var currentDate = heatmapStart
-                while currentDate <= endDay {
-                    dates.append(currentDate)
-                    guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
-                    currentDate = nextDate
-                }
-
-                let today = calendar.startOfDay(for: Date())
-                let streakStart = calendar.date(byAdding: .day, value: -365, to: today) ?? heatmapStart
-                let fetchStart = min(streakStart, heatmapStart)
-                let entries = service.fetchEntries(for: bgHabit, from: fetchStart, to: endDate, using: bgContext)
-
-                let completionResult = service.calculateCompletionRate(
-                    for: bgHabit, using: entries, from: heatmapStart, to: endDay
-                )
-                let total = completionResult.expected
-                let completed = completionResult.completed
-                let rate = total > 0 ? Int(completionResult.rate * 100) : 0
-
-                var completion: [Date: Double] = [:]
-                for date in dates {
-                    let dayStart = calendar.startOfDay(for: date)
-                    if let entry = entries[dayStart], entry.completionState > 0 {
-                        completion[dayStart] = 1.0
-                    } else {
-                        completion[dayStart] = 0.0
-                    }
-                }
-
-                let streak = service.calculateCurrentStreak(for: bgHabit, using: entries)
-                let best = service.calculateBestStreak(for: bgHabit, using: entries, from: heatmapStart, to: endDay)
-
-                return (rate, completed, total, streak, best, dates, completion)
-            }
-
-            self.completionRate = results.rate
-            self.completedDays = results.completed
-            self.totalDays = results.total
-            self.currentStreak = results.streak
-            self.bestStreak = results.best
-            self.heatmapDates = results.dates
-            self.dailyCompletion = results.completion
-            self.isLoading = false
+        // Heatmap day list.
+        var dates: [Date] = []
+        var currentDate = heatmapStart
+        while currentDate <= endDay {
+            dates.append(currentDate)
+            guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
+            currentDate = nextDate
         }
+
+        // Fetch entries covering both the visible range and the 365-day streak lookback.
+        let today = calendar.startOfDay(for: Date())
+        let streakStart = calendar.date(byAdding: .day, value: -365, to: today) ?? heatmapStart
+        let fetchStart = min(streakStart, heatmapStart)
+        let entries = HabitStore.entriesByDay(for: habit, from: fetchStart, to: endDay)
+
+        let completionResult = calculationService.calculateCompletionRate(
+            for: habit, using: entries, from: heatmapStart, to: endDay
+        )
+
+        var completion: [Date: Double] = [:]
+        for date in dates {
+            let dayStart = calendar.startOfDay(for: date)
+            completion[dayStart] = (entries[dayStart]?.completionState ?? 0) > 0 ? 1.0 : 0.0
+        }
+
+        completionRate = completionResult.expected > 0 ? Int(completionResult.rate * 100) : 0
+        completedDays = completionResult.completed
+        totalDays = completionResult.expected
+        currentStreak = calculationService.calculateCurrentStreak(for: habit, using: entries)
+        bestStreak = calculationService.calculateBestStreak(for: habit, using: entries, from: heatmapStart, to: endDay)
+        heatmapDates = dates
+        dailyCompletion = completion
     }
 }
 
