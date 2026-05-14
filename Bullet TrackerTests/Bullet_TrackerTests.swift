@@ -161,27 +161,28 @@ struct HabitFrequencyEnumTests {
 }
 
 // MARK: - CompletionStyle Tests
+//
+// bt-0003 Wave 2 collapsed `Habit.useMultipleStates: Bool` + `Habit.isNegativeHabit:
+// Bool` into a single `CompletionStyle` enum on the model. The bool-conversion
+// helpers (`.from(useMultipleStates:isNegativeHabit:)` and `.asBools`) that
+// bridged storage to UI were deleted — UI and storage now both speak the enum
+// directly, so the bridge isn't needed. Tests here cover the current enum
+// shape; the conversion-roundtrip tests they replaced no longer have a
+// referent in code.
 
 struct CompletionStyleTests {
-    @Test func fromBoolsReturnsCorrectStyle() {
-        #expect(CompletionStyle.from(useMultipleStates: false, isNegativeHabit: false) == .simple)
-        #expect(CompletionStyle.from(useMultipleStates: true, isNegativeHabit: false) == .multiState)
-        #expect(CompletionStyle.from(useMultipleStates: false, isNegativeHabit: true) == .avoidance)
-    }
-
-    @Test func asBoolsRoundTrips() {
-        for style in CompletionStyle.allCases {
-            let bools = style.asBools
-            let roundTripped = CompletionStyle.from(
-                useMultipleStates: bools.useMultipleStates,
-                isNegativeHabit: bools.isNegativeHabit
-            )
-            #expect(roundTripped == style)
-        }
-    }
-
     @Test func allCasesExist() {
-        #expect(CompletionStyle.allCases.count == 3)
+        let allCases = CompletionStyle.allCases
+        #expect(allCases.count == 3)
+        #expect(allCases.contains(.simple))
+        #expect(allCases.contains(.multiState))
+        #expect(allCases.contains(.avoidance))
+    }
+
+    @Test func rawValuesAreCorrect() {
+        #expect(CompletionStyle.simple.rawValue == "simple")
+        #expect(CompletionStyle.multiState.rawValue == "multiState")
+        #expect(CompletionStyle.avoidance.rawValue == "avoidance")
     }
 }
 
