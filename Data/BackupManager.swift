@@ -107,19 +107,10 @@ class BackupManager {
         updateBackupProgress(0.2)
 
         let habits = fetchHabits(in: context)
-        updateBackupProgress(0.3)
-
-        let habitEntries = fetchHabitEntries(in: context)
         updateBackupProgress(0.4)
 
-        let collections = fetchCollections(in: context)
-        updateBackupProgress(0.5)
-
-        let journalEntries = fetchJournalEntries(in: context)
+        let habitEntries = fetchHabitEntries(in: context)
         updateBackupProgress(0.6)
-
-        let tags = fetchTags(in: context)
-        updateBackupProgress(0.65)
 
         let notes = fetchNotes(in: context)
         updateBackupProgress(0.7)
@@ -129,20 +120,42 @@ class BackupManager {
             createdAt: Date(),
             habits: habits,
             habitEntries: habitEntries,
-            collections: collections,
-            journalEntries: journalEntries,
-            tags: tags,
             notes: notes
         )
     }
 
     // MARK: - Private Methods - Data Fetching
 
+    // The JSON backup wire format is unchanged across the Phase 2 model
+    // restructure (bt-0003 Wave 3 design call). HabitData / HabitEntryData
+    // still carry the legacy field names (`useMultipleStates` / `isNegativeHabit`
+    // / `trackDetails` / `detailType` on habits; `completed` / `completionState: Int`
+    // / `details: String` on entries) so:
+    //   • Old backups round-trip into the new model on restore (forward compat)
+    //   • New backups are still readable by pre-Phase-2 app versions (backward compat)
+    // The typed-model ↔ legacy-wire transform happens at the fetch/import boundary
+    // below.
+
     private func fetchHabits(in context: ModelContext) -> [HabitData] {
         let habits = (try? context.fetch(FetchDescriptor<Habit>())) ?? []
 
         return habits.map { habit in
-            HabitData(
+            // Derive legacy bool/string fields from the typed `completionStyle` + `detailKind`.
+            let style = habit.completionStyle
+            let kind = habit.detailKind
+            let useMultipleStates = (style == .multiState)
+            let isNegativeHabit = (style == .avoidance)
+            let trackDetails = (kind != nil)
+            let detailType: String = {
+                switch kind {
+                case .none, .notes: return "general"
+                case .workout?: return "workout"
+                case .reading?: return "reading"
+                case .mood?: return "mood"
+                }
+            }()
+
+            return HabitData(
                 id: habit.id?.uuidString ?? UUID().uuidString,
                 name: habit.name ?? "",
                 icon: habit.icon ?? "circle.fill",
@@ -152,11 +165,10 @@ class BackupManager {
                 startDate: habit.startDate ?? Date(),
                 notes: habit.notes ?? "",
                 order: Int(habit.order),
-                collectionID: habit.collection?.id?.uuidString,
-                trackDetails: habit.trackDetails,
-                detailType: habit.detailType ?? "general",
-                useMultipleStates: habit.useMultipleStates,
-                isNegativeHabit: habit.isNegativeHabit
+                trackDetails: trackDetails,
+                detailType: detailType,
+                useMultipleStates: useMultipleStates,
+                isNegativeHabit: isNegativeHabit
             )
         }
     }
@@ -165,56 +177,46 @@ class BackupManager {
         let entries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
 
         return entries.map { entry in
-            HabitEntryData(
+            // Convert typed `details: HabitEntryDetails?` back to a JSON string
+            // (matches the pre-Phase-2 wire shape every old backup uses).
+            let detailsJSONString = entry.details.flatMap { jsonifyDetails($0) } ?? ""
+
+            return HabitEntryData(
                 id: entry.id?.uuidString ?? UUID().uuidString,
-                date: entry.date ?? Date(),
-                completed: entry.completed,
-                details: entry.details ?? "",
+                date: entry.date,
+                completed: entry.completionState != .notDone,
+                details: detailsJSONString,
                 habitID: entry.habit?.id?.uuidString ?? "",
-                completionState: Int(entry.completionState)
+                completionState: Int(entry.completionState.rawValue)
             )
         }
     }
 
-    private func fetchCollections(in context: ModelContext) -> [CollectionData] {
-        let collections = (try? context.fetch(FetchDescriptor<Collection>())) ?? []
-
-        return collections.map { collection in
-            CollectionData(
-                id: collection.id?.uuidString ?? UUID().uuidString,
-                name: collection.name ?? ""
-            )
+    /// Convert a typed `HabitEntryDetails` to the legacy JSON string format
+    /// (the same shape pre-Phase-2 backups carried — workout/reading/mood
+    /// have their own field names; `notes` is the universal shared field).
+    private func jsonifyDetails(_ details: HabitEntryDetails) -> String? {
+        var dict: [String: Any] = [:]
+        switch details {
+        case .notes(let notes):
+            dict["notes"] = notes
+        case .workout(let types, let duration, let intensity, let notes):
+            dict["types"] = types
+            dict["type"] = types.first ?? ""
+            dict["duration"] = duration
+            dict["intensity"] = intensity
+            dict["notes"] = notes
+        case .reading(let bookTitle, let pagesRead, let notes):
+            dict["bookTitle"] = bookTitle
+            dict["pagesRead"] = pagesRead
+            dict["notes"] = notes
+        case .mood(let mood, let notes):
+            dict["mood"] = mood
+            dict["notes"] = notes
         }
-    }
-
-    private func fetchJournalEntries(in context: ModelContext) -> [JournalEntryData] {
-        let entries = (try? context.fetch(FetchDescriptor<JournalEntry>())) ?? []
-
-        return entries.map { entry in
-            let tagIDs = (entry.tags ?? []).compactMap { $0.id?.uuidString }
-
-            return JournalEntryData(
-                id: entry.id?.uuidString ?? UUID().uuidString,
-                content: entry.content ?? "",
-                date: entry.date ?? Date(),
-                entryType: entry.entryType ?? "note",
-                taskStatus: entry.taskStatus,
-                priority: entry.priority,
-                collectionID: entry.collection?.id?.uuidString,
-                tagIDs: tagIDs
-            )
-        }
-    }
-
-    private func fetchTags(in context: ModelContext) -> [TagData] {
-        let tags = (try? context.fetch(FetchDescriptor<Tag>())) ?? []
-
-        return tags.map { tag in
-            TagData(
-                id: tag.id?.uuidString ?? UUID().uuidString,
-                name: tag.name ?? ""
-            )
-        }
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let str = String(data: data, encoding: .utf8) else { return nil }
+        return str
     }
 
     private func fetchNotes(in context: ModelContext) -> [NoteData] {
@@ -249,29 +251,17 @@ class BackupManager {
 
     private func clearExistingData(in context: ModelContext) {
         try? context.delete(model: HabitEntry.self)
-        try? context.delete(model: JournalEntry.self)
         try? context.delete(model: Note.self)
-        try? context.delete(model: Tag.self)
         try? context.delete(model: Habit.self)
-        try? context.delete(model: Collection.self)
         try? context.save()
     }
 
     private func importBackupData(_ backupData: BackupData, in context: ModelContext) -> Bool {
-        updateRestoreProgress(0.6)
-        let collectionMap = importCollections(from: backupData.collections, in: context)
-
         updateRestoreProgress(0.7)
-        let tagMap = importTags(from: backupData.tags, in: context)
-
-        updateRestoreProgress(0.8)
-        let habitMap = importHabits(from: backupData.habits, collectionMap: collectionMap, in: context)
+        let habitMap = importHabits(from: backupData.habits, in: context)
 
         updateRestoreProgress(0.85)
         importHabitEntries(from: backupData.habitEntries, habitMap: habitMap, in: context)
-
-        updateRestoreProgress(0.9)
-        importJournalEntries(from: backupData.journalEntries, collectionMap: collectionMap, tagMap: tagMap, in: context)
 
         updateRestoreProgress(0.92)
         if let notes = backupData.notes {
@@ -290,34 +280,27 @@ class BackupManager {
 
     // MARK: - Private Methods - Entity Import
 
-    private func importCollections(from backupCollections: [CollectionData], in context: ModelContext) -> [String: Collection] {
-        var collectionMap: [String: Collection] = [:]
-
-        for collectionData in backupCollections {
-            let collection = Collection(id: UUID(uuidString: collectionData.id), name: collectionData.name)
-            context.insert(collection)
-            collectionMap[collectionData.id] = collection
-        }
-
-        return collectionMap
-    }
-
-    private func importTags(from backupTags: [TagData], in context: ModelContext) -> [String: Tag] {
-        var tagMap: [String: Tag] = [:]
-
-        for tagData in backupTags {
-            let tag = Tag(id: UUID(uuidString: tagData.id), name: tagData.name)
-            context.insert(tag)
-            tagMap[tagData.id] = tag
-        }
-
-        return tagMap
-    }
-
-    private func importHabits(from backupHabits: [HabitData], collectionMap: [String: Collection], in context: ModelContext) -> [String: Habit] {
+    private func importHabits(from backupHabits: [HabitData], in context: ModelContext) -> [String: Habit] {
         var habitMap: [String: Habit] = [:]
 
         for habitData in backupHabits {
+            // Derive typed `completionStyle` + `detailKind` from the legacy
+            // bool/string fields on the wire format.
+            let completionStyle: CompletionStyle = {
+                if habitData.isNegativeHabit { return .avoidance }
+                if habitData.useMultipleStates { return .multiState }
+                return .simple
+            }()
+            let detailKind: DetailKind? = {
+                guard habitData.trackDetails else { return nil }
+                switch habitData.detailType {
+                case "workout": return .workout
+                case "reading": return .reading
+                case "mood": return .mood
+                default: return .notes  // "general" or unknown → .notes
+                }
+            }()
+
             let habit = Habit(
                 id: UUID(uuidString: habitData.id),
                 name: habitData.name,
@@ -328,11 +311,8 @@ class BackupManager {
                 notes: habitData.notes,
                 startDate: habitData.startDate,
                 order: Int32(habitData.order),
-                detailType: habitData.detailType,
-                trackDetails: habitData.trackDetails,
-                useMultipleStates: habitData.useMultipleStates,
-                isNegativeHabit: habitData.isNegativeHabit,
-                collection: habitData.collectionID.flatMap { collectionMap[$0] }
+                completionStyle: completionStyle,
+                detailKind: detailKind
             )
             context.insert(habit)
             habitMap[habitData.id] = habit
@@ -345,31 +325,63 @@ class BackupManager {
         for entryData in backupEntries {
             guard let habit = habitMap[entryData.habitID] else { continue }
 
+            // Map legacy Int completionState → typed CompletionState.
+            // If raw value is out of range, fall back to `.success` for entries
+            // whose legacy `completed` was true; else `.notDone`.
+            let typedState: CompletionState = {
+                if let s = CompletionState(rawValue: Int16(entryData.completionState)) { return s }
+                return entryData.completed ? .success : .notDone
+            }()
+
+            // Parse the legacy details JSON string into typed HabitEntryDetails.
+            // The shape is determined by which JSON keys are present (the four
+            // detail kinds don't share keys, so this is unambiguous).
+            let typedDetails = parseLegacyDetailsJSON(entryData.details, kind: habit.detailKind)
+
             let entry = HabitEntry(
                 id: UUID(uuidString: entryData.id),
                 date: entryData.date,
-                completed: entryData.completed,
-                completionState: Int16(entryData.completionState),
-                details: entryData.details,
+                completionState: typedState,
+                details: typedDetails,
                 habit: habit
             )
             context.insert(entry)
         }
     }
 
-    private func importJournalEntries(from backupEntries: [JournalEntryData], collectionMap: [String: Collection], tagMap: [String: Tag], in context: ModelContext) {
-        for entryData in backupEntries {
-            let entry = JournalEntry(
-                id: UUID(uuidString: entryData.id),
-                date: entryData.date,
-                content: entryData.content,
-                entryType: entryData.entryType,
-                priority: entryData.priority,
-                taskStatus: entryData.taskStatus,
-                collection: entryData.collectionID.flatMap { collectionMap[$0] }
-            )
-            entry.tags = entryData.tagIDs.compactMap { tagMap[$0] }
-            context.insert(entry)
+    /// Parse a legacy `details: String` JSON blob into a typed `HabitEntryDetails`.
+    /// Returns `nil` for empty input. Uses the parent habit's `detailKind` as a
+    /// hint when the JSON shape is ambiguous (e.g., only `notes` present).
+    private func parseLegacyDetailsJSON(_ json: String, kind: DetailKind?) -> HabitEntryDetails? {
+        guard !json.isEmpty else { return nil }
+        guard let data = json.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            // Non-JSON legacy plaintext — treat the whole string as notes.
+            return .notes(notes: json)
+        }
+        let notes = dict["notes"] as? String ?? ""
+
+        // Discriminate by JSON keys first (most reliable signal — they don't overlap).
+        if let types = dict["types"] as? [String] {
+            let duration = dict["duration"] as? String ?? ""
+            let intensity = dict["intensity"] as? Int ?? 3
+            return .workout(types: types, duration: duration, intensity: intensity, notes: notes)
+        }
+        if dict["bookTitle"] != nil || dict["pagesRead"] != nil {
+            let bookTitle = dict["bookTitle"] as? String ?? ""
+            let pagesRead = dict["pagesRead"] as? String ?? ""
+            return .reading(bookTitle: bookTitle, pagesRead: pagesRead, notes: notes)
+        }
+        if let mood = dict["mood"] as? Int {
+            return .mood(mood: mood, notes: notes)
+        }
+        // No discriminator keys — fall back to the parent habit's detailKind hint,
+        // or `.notes` if even that's nil.
+        switch kind {
+        case .workout: return .workout(types: [], duration: "", intensity: 3, notes: notes)
+        case .reading: return .reading(bookTitle: "", pagesRead: "", notes: notes)
+        case .mood:    return .mood(mood: 3, notes: notes)
+        case .notes, nil: return .notes(notes: notes)
         }
     }
 
@@ -404,15 +416,18 @@ class BackupManager {
 }
 
 // MARK: - Data Models for Backup
+//
+// Wire-format note: `BackupData` lost `collections` / `journalEntries` / `tags`
+// fields and `HabitData` lost `collectionID` in bt-0003 Wave 1. Old backup files
+// that carry those keys still decode cleanly — `JSONDecoder` ignores unknown
+// keys by default, so the dormant data is silently dropped on restore. New
+// backups simply don't emit them.
 
 struct BackupData: Codable {
     let version: Int
     let createdAt: Date
     let habits: [HabitData]
     let habitEntries: [HabitEntryData]
-    let collections: [CollectionData]
-    let journalEntries: [JournalEntryData]
-    let tags: [TagData]
     let notes: [NoteData]?
 }
 
@@ -426,7 +441,6 @@ struct HabitData: Codable {
     let startDate: Date
     let notes: String
     let order: Int
-    let collectionID: String?
     let trackDetails: Bool
     let detailType: String
     let useMultipleStates: Bool
@@ -444,7 +458,6 @@ struct HabitData: Codable {
         startDate = try container.decode(Date.self, forKey: .startDate)
         notes = try container.decode(String.self, forKey: .notes)
         order = try container.decode(Int.self, forKey: .order)
-        collectionID = try container.decodeIfPresent(String.self, forKey: .collectionID)
         trackDetails = try container.decodeIfPresent(Bool.self, forKey: .trackDetails) ?? false
         detailType = try container.decodeIfPresent(String.self, forKey: .detailType) ?? "general"
         useMultipleStates = try container.decodeIfPresent(Bool.self, forKey: .useMultipleStates) ?? false
@@ -452,7 +465,7 @@ struct HabitData: Codable {
     }
 
     // Standard initializer for creating backups
-    init(id: String, name: String, icon: String, color: String, frequency: String, customDays: String, startDate: Date, notes: String, order: Int, collectionID: String?, trackDetails: Bool, detailType: String, useMultipleStates: Bool, isNegativeHabit: Bool) {
+    init(id: String, name: String, icon: String, color: String, frequency: String, customDays: String, startDate: Date, notes: String, order: Int, trackDetails: Bool, detailType: String, useMultipleStates: Bool, isNegativeHabit: Bool) {
         self.id = id
         self.name = name
         self.icon = icon
@@ -462,7 +475,6 @@ struct HabitData: Codable {
         self.startDate = startDate
         self.notes = notes
         self.order = order
-        self.collectionID = collectionID
         self.trackDetails = trackDetails
         self.detailType = detailType
         self.useMultipleStates = useMultipleStates
@@ -477,27 +489,6 @@ struct HabitEntryData: Codable {
     let details: String
     let habitID: String
     let completionState: Int
-}
-
-struct CollectionData: Codable {
-    let id: String
-    let name: String
-}
-
-struct JournalEntryData: Codable {
-    let id: String
-    let content: String
-    let date: Date
-    let entryType: String
-    let taskStatus: String?
-    let priority: Bool
-    let collectionID: String?
-    let tagIDs: [String]
-}
-
-struct TagData: Codable {
-    let id: String
-    let name: String
 }
 
 struct NoteData: Codable {

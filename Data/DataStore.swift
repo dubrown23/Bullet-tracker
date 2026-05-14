@@ -21,14 +21,13 @@ enum DataStore {
     /// App Group shared between the main app and the widget extension.
     static let appGroupIdentifier = "group.db23.Bullet-Tracker"
 
-    /// Every persisted model type.
+    /// Every persisted model type. `Collection` / `JournalEntry` / `Tag` were
+    /// dropped in bt-0003 Wave 1 (the dormant bullet-journal layer was never
+    /// wired to UI; live Journal tab uses `Note`).
     static let schema = Schema([
         Habit.self,
         HabitEntry.self,
-        Collection.self,
-        JournalEntry.self,
         Note.self,
-        Tag.self,
     ])
 
     /// File URL of the store inside the shared App Group container — the same path
@@ -44,6 +43,14 @@ enum DataStore {
 
     /// The shared model container. The app installs it via `.modelContainer(DataStore.shared)`;
     /// the widget extension uses the same instance so both read/write one store.
+    ///
+    /// CloudKit re-enabled at bt-0003 Wave 5 ship (2026-05-13). Was temporarily
+    /// `.none` for the duration of the Phase-2 build (Waves 1 → 4.5) after the
+    /// Wave 1 schema-shrink + CloudKit `HistoryExpired` interaction produced
+    /// invalidated-instance crashes. Wave 5 ship recovery flow: take fresh JSON
+    /// backup → wipe iCloud's side → flip this back to `.automatic` → reinstall
+    /// → restore from backup → verify. Now back to `.automatic` for cross-device
+    /// sync + the widget's App-Group read path.
     static let shared: ModelContainer = {
         let configuration = ModelConfiguration(
             schema: schema,

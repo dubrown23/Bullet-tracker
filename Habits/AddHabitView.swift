@@ -23,8 +23,7 @@ struct AddHabitView: View {
                     selectedFrequency: $viewModel.selectedFrequency,
                     customDays: $viewModel.customDays,
                     notes: $viewModel.notes,
-                    trackDetails: $viewModel.trackDetails,
-                    detailType: $viewModel.detailType,
+                    detailKind: $viewModel.detailKind,
                     completionStyle: $viewModel.completionStyle,
                     showingIconSheet: $viewModel.showingIconSheet
                 )

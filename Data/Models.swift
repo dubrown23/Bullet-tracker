@@ -2,16 +2,25 @@
 //  Models.swift
 //  Bullet Tracker
 //
-//  SwiftData @Model types. Phase 1 of the SwiftData migration (bt-0002):
-//  these MIRROR the existing `Bullet_Tracker.xcdatamodeld` field-for-field so
-//  SwiftData can coexist with the Core Data stack on the same App-Group store
-//  while consumers migrate over. The model SHAPE is not changed here — typing
-//  the `details` blob, collapsing the completion state, and dropping the
-//  vestigial JournalEntry fields are Phase 2 (bt-0003).
+//  SwiftData @Model types.
+//
+//  Phase 1 (bt-0002): swapped the Core Data engine for SwiftData; model SHAPE
+//  was unchanged so the existing App-Group store opens in place.
+//
+//  Phase 2 (bt-0003) — in progress:
+//    Wave 1 (done): dropped the dormant bullet-journal layer entirely —
+//      `@Model` types `Collection` / `JournalEntry` / `Tag` and the 7 vestigial
+//      "future log / migration" fields. Live Journal tab uses `Note`.
+//    Waves 2–5 (queued): lift `HabitEntry.date: Date? → Date`; collapse the
+//      4 Habit-level flags into `CompletionStyle` + `DetailKind` enums; type
+//      the `details` JSON blob into `HabitEntryDetails`; rewrite hot-path
+//      predicates.
+//    Wave 6 (queued): the `VersionedSchema` migration that lands all of the
+//      above against the live CloudKit-synced store.
 //
 //  Requirements that must hold for this to work:
 //   • The `.xcdatamodeld` entities' Codegen must be set to "Manual/None" so these
-//     are the only Habit/HabitEntry/Collection/JournalEntry/Note/Tag types.
+//     are the only Habit/HabitEntry/Note types.
 //   • This file must be a member of BOTH the app target and the widget target.
 //   • CloudKit-safe: every relationship is optional; no `@Attribute(.unique)`.
 //
@@ -19,35 +28,74 @@
 import Foundation
 import SwiftData
 
-// MARK: - Collection
+// MARK: - CompletionStyle (Habit-level)
+//
+// Replaces the old `useMultipleStates: Bool` + `isNegativeHabit: Bool` pair
+// on `Habit`. Pure data here; the SwiftUI affordances (`title`, `description`,
+// `icon`, `iconColor`) live as an extension in `Habits/HabitFormView.swift`
+// so this file stays free of SwiftUI imports.
 
-@Model
-final class Collection {
-    var id: UUID?
-    var name: String?
-    var collectionType: String?
-    var isAutomatic: Bool = false
-    var sortOrder: Int32 = 0
+enum CompletionStyle: String, Codable, CaseIterable, Identifiable {
+    case simple
+    case multiState
+    case avoidance
 
-    @Relationship(deleteRule: .nullify, inverse: \Habit.collection)
-    var habits: [Habit]?
+    var id: String { rawValue }
+}
 
-    @Relationship(deleteRule: .nullify, inverse: \JournalEntry.collection)
-    var entries: [JournalEntry]?
+// MARK: - DetailKind (Habit-level)
+//
+// Replaces the old `trackDetails: Bool` + `detailType: String?` pair on
+// `Habit`. `nil` = no detail capture; otherwise specifies which kind.
+// Pairs with `HabitEntryDetails` below — the entry's payload type is
+// determined by the habit's `detailKind`.
 
-    init(
-        id: UUID? = UUID(),
-        name: String? = nil,
-        collectionType: String? = nil,
-        isAutomatic: Bool = false,
-        sortOrder: Int32 = 0
-    ) {
-        self.id = id
-        self.name = name
-        self.collectionType = collectionType
-        self.isAutomatic = isAutomatic
-        self.sortOrder = sortOrder
-    }
+enum DetailKind: String, Codable, CaseIterable, Identifiable {
+    case notes
+    case workout
+    case reading
+    case mood
+
+    var id: String { rawValue }
+}
+
+// MARK: - CompletionState (HabitEntry-level)
+//
+// Replaces the old `completed: Bool` + `completionState: Int16` pair on
+// `HabitEntry`. Interpreted in the context of `Habit.completionStyle`:
+//   .simple     → `.notDone` or `.success`
+//   .multiState → any of the four cases
+//   .avoidance  → `.notDone` (didn't slip) or `.failure` (slipped)
+//
+// Backed by `Int16` so the persisted shape on disk matches the old
+// `completionState: Int16` raw column — keeps the backup-restore transform
+// trivial (raw value 0/1/2/3 maps 1:1 to the enum).
+
+enum CompletionState: Int16, Codable {
+    case notDone = 0
+    case success = 1
+    case partial = 2
+    case failure = 3
+}
+
+// MARK: - HabitEntryDetails (HabitEntry payload)
+//
+// Replaces the old `details: String` JSON blob on `HabitEntry`. Discriminated
+// by `Habit.detailKind` — every site that used to hand-parse `json["duration"]`
+// now reads `entry.details?.workout?.duration` (or pattern-matches the enum).
+// SwiftData persists this as a transformable attribute under the hood; the
+// `BackupManager` round-trip in Wave 3 transforms old `details: String` JSON
+// into this typed shape on import.
+
+enum HabitEntryDetails: Codable {
+    /// Used when `habit.detailKind == .notes`.
+    case notes(notes: String)
+    /// Used when `habit.detailKind == .workout`.
+    case workout(types: [String], duration: String, intensity: Int, notes: String)
+    /// Used when `habit.detailKind == .reading`.
+    case reading(bookTitle: String, pagesRead: String, notes: String)
+    /// Used when `habit.detailKind == .mood`.
+    case mood(mood: Int, notes: String)
 }
 
 // MARK: - Habit
@@ -64,13 +112,14 @@ final class Habit {
     var startDate: Date?
     var order: Int32 = 0
 
-    /// Detail-capture flags (still modeled the legacy way in Phase 1; collapsed in Phase 2).
-    var detailType: String?
-    var trackDetails: Bool = false
-    var useMultipleStates: Bool = false
-    var isNegativeHabit: Bool = false
+    /// Completion style — replaces `useMultipleStates: Bool` + `isNegativeHabit: Bool`
+    /// pair (Call B (c) collapse, Wave 2). The `@Model` macro requires the
+    /// default value to be fully qualified (`.simple` shorthand rejected).
+    var completionStyle: CompletionStyle = CompletionStyle.simple
 
-    var collection: Collection?
+    /// Detail-capture kind — replaces `trackDetails: Bool` + `detailType: String?`
+    /// pair (Call B (c) collapse, Wave 2). `nil` = no detail capture.
+    var detailKind: DetailKind?
 
     @Relationship(deleteRule: .cascade, inverse: \HabitEntry.habit)
     var entries: [HabitEntry]?
@@ -85,11 +134,8 @@ final class Habit {
         notes: String? = nil,
         startDate: Date? = nil,
         order: Int32 = 0,
-        detailType: String? = nil,
-        trackDetails: Bool = false,
-        useMultipleStates: Bool = false,
-        isNegativeHabit: Bool = false,
-        collection: Collection? = nil
+        completionStyle: CompletionStyle = .simple,
+        detailKind: DetailKind? = nil
     ) {
         self.id = id
         self.name = name
@@ -100,11 +146,8 @@ final class Habit {
         self.notes = notes
         self.startDate = startDate
         self.order = order
-        self.detailType = detailType
-        self.trackDetails = trackDetails
-        self.useMultipleStates = useMultipleStates
-        self.isNegativeHabit = isNegativeHabit
-        self.collection = collection
+        self.completionStyle = completionStyle
+        self.detailKind = detailKind
     }
 }
 
@@ -117,95 +160,122 @@ final class HabitEntry {
     #Index<HabitEntry>([\.date])
 
     var id: UUID?
-    var date: Date?
 
-    /// Legacy completion fields — Phase 1 keeps both; Phase 2 collapses to one value.
-    var completed: Bool = false
-    var completionState: Int16 = 0
+    /// Wave 2 — non-optional. `bt-0004` proved SwiftData's `#Predicate` rejects
+    /// every shape of optional-Date comparison on this iOS version; making the
+    /// field non-optional is the structural fix and unblocks the Wave 4 hot-path
+    /// predicate rewrites. `Date.distantPast` is the syntactic-required default
+    /// — every call site must pass an explicit date, so it should never appear
+    /// in real data; flag-up sentinel if it ever does. (Fully qualified per the
+    /// `@Model` macro's requirement.)
+    var date: Date = Date.distantPast
 
-    /// Structured details as a JSON string blob (Phase 2 replaces this with typed fields).
-    var details: String?
+    /// Completion state — replaces `completed: Bool` + `completionState: Int16`
+    /// pair (Call B (c) entry-side collapse, Wave 2). Backed by `Int16` so the
+    /// persisted shape matches the old raw column; backup-restore transform
+    /// reads the old `completionState: Int` → `CompletionState(rawValue:)`.
+    /// (Fully qualified per the `@Model` macro's requirement.)
+    var completionState: CompletionState = CompletionState.notDone
+
+    /// Stored JSON-string representation of the details payload. The typed
+    /// `details: HabitEntryDetails?` accessor below reads/writes this column.
+    ///
+    /// **Why a `String` and not the typed enum directly?** bt-0004-class
+    /// SwiftData failure: storing a `Codable` enum with associated values as a
+    /// SwiftData attribute persists *something* on write but on read the
+    /// decoder fails with `Could not cast value of type Optional<Any> to
+    /// Array<String>` (verified at Wave 3 device test, 2026-05-13). The legacy
+    /// JSON-string shape is what every pre-Phase-2 entry on the live store
+    /// already used, and `BackupManager`'s wire format also speaks it — so
+    /// storing the JSON string here keeps the storage path battle-tested and
+    /// lets the typed access live in the computed accessor.
+    ///
+    /// Private to the class; nothing outside should read/write this directly.
+    var detailsJSON: String?
+
+    /// Typed access to the details payload. Reads decode the stored JSON
+    /// string lazily on each access (negligible cost — a few µs per entry,
+    /// invoked only on the small surfaces that actually render details).
+    /// Writes encode the typed value to the legacy JSON shape and store it
+    /// via `detailsJSON`. `nil` = no details captured.
+    var details: HabitEntryDetails? {
+        get {
+            guard let raw = detailsJSON, !raw.isEmpty else { return nil }
+            return Self.decodeDetails(raw)
+        }
+        set {
+            detailsJSON = newValue.flatMap { Self.encodeDetails($0) }
+        }
+    }
 
     var habit: Habit?
 
     init(
         id: UUID? = UUID(),
-        date: Date? = nil,
-        completed: Bool = false,
-        completionState: Int16 = 0,
-        details: String? = nil,
+        date: Date,
+        completionState: CompletionState = .notDone,
+        details: HabitEntryDetails? = nil,
         habit: Habit? = nil
     ) {
         self.id = id
         self.date = date
-        self.completed = completed
         self.completionState = completionState
-        self.details = details
+        self.detailsJSON = details.flatMap { Self.encodeDetails($0) }
         self.habit = habit
     }
-}
 
-// MARK: - JournalEntry
+    // MARK: - HabitEntryDetails ⇄ JSON-string conversion
+    //
+    // Same wire shape `BackupManager` (and the pre-Phase-2 `details: String`
+    // column) used — workout/reading/mood have their own field names; `notes`
+    // is the universal shared field. Discriminate on read by which JSON keys
+    // are present (the four kinds don't share keys, so it's unambiguous).
 
-@Model
-final class JournalEntry {
-    // Re-creates the `byDateIndex` fetch index the original `.xcdatamodeld` had (bt-0004).
-    #Index<JournalEntry>([\.date])
+    private static func encodeDetails(_ d: HabitEntryDetails) -> String? {
+        var dict: [String: Any] = [:]
+        switch d {
+        case .notes(let n):
+            dict["notes"] = n
+        case .workout(let types, let duration, let intensity, let n):
+            dict["types"] = types
+            dict["type"] = types.first ?? ""
+            dict["duration"] = duration
+            dict["intensity"] = intensity
+            dict["notes"] = n
+        case .reading(let bookTitle, let pagesRead, let n):
+            dict["bookTitle"] = bookTitle
+            dict["pagesRead"] = pagesRead
+            dict["notes"] = n
+        case .mood(let mood, let n):
+            dict["mood"] = mood
+            dict["notes"] = n
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let str = String(data: data, encoding: .utf8) else { return nil }
+        return str
+    }
 
-    var id: UUID?
-    var date: Date?
-    var content: String?
-    var entryType: String? = "note"
-    var isDraft: Bool = false
-    var priority: Bool = false
-    var originalDate: Date?
-
-    /// Vestigial "future log / migration" fields — no live UI; removed in Phase 2 (pending #9 intent).
-    var isFutureEntry: Bool = false
-    var isSpecialEntry: Bool = false
-    var hasMigrated: Bool = false
-    var targetMonth: Date?
-    var scheduledDate: Date?
-    var specialEntryType: String?
-    var taskStatus: String?
-
-    var collection: Collection?
-
-    @Relationship(deleteRule: .nullify, inverse: \Tag.entries)
-    var tags: [Tag]?
-
-    init(
-        id: UUID? = UUID(),
-        date: Date? = nil,
-        content: String? = nil,
-        entryType: String? = "note",
-        isDraft: Bool = false,
-        priority: Bool = false,
-        originalDate: Date? = nil,
-        isFutureEntry: Bool = false,
-        isSpecialEntry: Bool = false,
-        hasMigrated: Bool = false,
-        targetMonth: Date? = nil,
-        scheduledDate: Date? = nil,
-        specialEntryType: String? = nil,
-        taskStatus: String? = nil,
-        collection: Collection? = nil
-    ) {
-        self.id = id
-        self.date = date
-        self.content = content
-        self.entryType = entryType
-        self.isDraft = isDraft
-        self.priority = priority
-        self.originalDate = originalDate
-        self.isFutureEntry = isFutureEntry
-        self.isSpecialEntry = isSpecialEntry
-        self.hasMigrated = hasMigrated
-        self.targetMonth = targetMonth
-        self.scheduledDate = scheduledDate
-        self.specialEntryType = specialEntryType
-        self.taskStatus = taskStatus
-        self.collection = collection
+    private static func decodeDetails(_ str: String) -> HabitEntryDetails? {
+        guard let data = str.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            // Non-JSON legacy plaintext — treat the whole string as notes.
+            return .notes(notes: str)
+        }
+        let notes = dict["notes"] as? String ?? ""
+        if let types = dict["types"] as? [String] {
+            let duration = dict["duration"] as? String ?? ""
+            let intensity = dict["intensity"] as? Int ?? 3
+            return .workout(types: types, duration: duration, intensity: intensity, notes: notes)
+        }
+        if dict["bookTitle"] != nil || dict["pagesRead"] != nil {
+            let bookTitle = dict["bookTitle"] as? String ?? ""
+            let pagesRead = dict["pagesRead"] as? String ?? ""
+            return .reading(bookTitle: bookTitle, pagesRead: pagesRead, notes: notes)
+        }
+        if let mood = dict["mood"] as? Int {
+            return .mood(mood: mood, notes: notes)
+        }
+        return .notes(notes: notes)
     }
 }
 
@@ -224,18 +294,3 @@ final class Note {
     }
 }
 
-// MARK: - Tag
-
-@Model
-final class Tag {
-    var id: UUID?
-    var name: String?
-
-    /// Other side of the many-to-many; the inverse is declared on `JournalEntry.tags`.
-    var entries: [JournalEntry]?
-
-    init(id: UUID? = UUID(), name: String? = nil) {
-        self.id = id
-        self.name = name
-    }
-}

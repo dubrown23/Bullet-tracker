@@ -7,15 +7,34 @@
 
 import SwiftUI
 
-// MARK: - Completion Style
+// MARK: - CompletionStyle — UI extension
+//
+// The enum's data definition lives in `Data/Models.swift` (Wave 2 — moved
+// there so storage can reference it). UI affordances (label / description /
+// icon / icon color) stay here in the SwiftUI-importing module so
+// `Data/Models.swift` doesn't need to depend on SwiftUI. The `.from(useMultipleStates:isNegativeHabit:)`
+// + `.asBools` bool-conversion helpers from the pre-Wave-2 enum are deleted —
+// the storage layer now speaks `CompletionStyle` directly.
 
-enum CompletionStyle: String, CaseIterable, Identifiable {
-    case simple = "simple"
-    case multiState = "multiState"
-    case avoidance = "avoidance"
+// MARK: - DetailKind — UI extension
+//
+// Display names for the four detail kinds. Lives here in the SwiftUI-importing
+// module (rather than next to the enum's data definition in `Data/Models.swift`)
+// for the same reason `CompletionStyle`'s affordances do — keeps the data
+// model free of presentation strings.
 
-    var id: String { rawValue }
+extension DetailKind {
+    var displayName: String {
+        switch self {
+        case .notes:   return "General Notes"
+        case .workout: return "Workout Details"
+        case .reading: return "Reading Log"
+        case .mood:    return "Mood Tracking"
+        }
+    }
+}
 
+extension CompletionStyle {
     var title: String {
         switch self {
         case .simple: return "Simple"
@@ -50,22 +69,6 @@ enum CompletionStyle: String, CaseIterable, Identifiable {
         case .avoidance: return .red
         }
     }
-
-    /// Convert from stored Core Data bools
-    static func from(useMultipleStates: Bool, isNegativeHabit: Bool) -> CompletionStyle {
-        if isNegativeHabit { return .avoidance }
-        if useMultipleStates { return .multiState }
-        return .simple
-    }
-
-    /// Convert to stored Core Data bools
-    var asBools: (useMultipleStates: Bool, isNegativeHabit: Bool) {
-        switch self {
-        case .simple: return (false, false)
-        case .multiState: return (true, false)
-        case .avoidance: return (false, true)
-        }
-    }
 }
 
 // MARK: - Shared Form Component
@@ -79,8 +82,9 @@ struct HabitFormView: View {
     @Binding var selectedFrequency: String
     @Binding var customDays: [Int]
     @Binding var notes: String
-    @Binding var trackDetails: Bool
-    @Binding var detailType: String
+    /// `nil` = no detail capture; otherwise specifies which kind. Replaces the
+    /// pre-Wave-2 `@Binding var trackDetails: Bool` + `@Binding var detailType: String` pair.
+    @Binding var detailKind: DetailKind?
     @Binding var completionStyle: CompletionStyle
     @Binding var showingIconSheet: Bool
 
@@ -238,73 +242,50 @@ struct HabitFormView: View {
 
     private var detailLoggingSection: some View {
         Section {
-            Toggle("Log details when completed", isOn: $trackDetails)
-
-            if trackDetails {
-                Picker("Detail Type", selection: $detailType) {
-                    ForEach(HabitConstants.detailTypeOptions, id: \.0) { option in
-                        Text(option.1).tag(option.0)
-                    }
+            Picker("Detail Logging", selection: $detailKind) {
+                Text("Off").tag(DetailKind?.none)
+                ForEach(DetailKind.allCases) { kind in
+                    Text(kind.displayName).tag(DetailKind?.some(kind))
                 }
+            }
 
-                // Preview of what fields the user will see
-                detailTypePreview
+            if detailKind != nil {
+                detailKindPreview
             }
         } header: {
             Text("Detail Logging")
         } footer: {
-            if trackDetails {
+            if detailKind != nil {
                 Text("A detail sheet will appear each time you complete this habit.")
             }
         }
     }
 
     @ViewBuilder
-    private var detailTypePreview: some View {
-        switch detailType {
-        case "workout":
-            VStack(alignment: .leading, spacing: 4) {
-                Text("You'll log:")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    private var detailKindPreview: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("You'll log:")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            switch detailKind {
+            case .workout:
                 Label("Workout type (Cardio, Strength, etc.)", systemImage: "figure.run")
                 Label("Duration", systemImage: "clock")
                 Label("Intensity (1-5)", systemImage: "flame.fill")
                 Label("Notes", systemImage: "note.text")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        case "reading":
-            VStack(alignment: .leading, spacing: 4) {
-                Text("You'll log:")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            case .reading:
                 Label("Book or article title", systemImage: "book.fill")
                 Label("Pages read", systemImage: "number")
                 Label("Notes", systemImage: "note.text")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        case "mood":
-            VStack(alignment: .leading, spacing: 4) {
-                Text("You'll log:")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            case .mood:
                 Label("Mood level (Rough to Great)", systemImage: "sun.max.fill")
                 Label("Notes", systemImage: "note.text")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        default:
-            VStack(alignment: .leading, spacing: 4) {
-                Text("You'll log:")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            case .notes, .none:
                 Label("Free-form notes", systemImage: "note.text")
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
         }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     // MARK: - Section 5: Notes
@@ -344,14 +325,7 @@ struct HabitConstants {
 
     static let frequencyOptions: [(String, String)] = HabitFrequency.allCases.map { ($0.rawValue, $0.displayName) }
 
-    static let detailTypeOptions = [
-        ("general", "General Notes"),
-        ("workout", "Workout Details"),
-        ("reading", "Reading Log"),
-        ("mood", "Mood Tracking")
-    ]
-
-    static let daysOfWeek = [
+static let daysOfWeek = [
         (1, "Sunday"), (2, "Monday"), (3, "Tuesday"), (4, "Wednesday"),
         (5, "Thursday"), (6, "Friday"), (7, "Saturday")
     ]

@@ -11,6 +11,12 @@ import UniformTypeIdentifiers
 
 // MARK: - Document Picker Delegate
 
+// `UIDocumentPickerDelegate` callbacks fire on the main thread per UIKit's
+// contract; pinning the class to `@MainActor` lets it touch the `@MainActor`-
+// isolated `BackupRestoreViewModel.processSelectedBackup(url:)` callback
+// without crossing an actor boundary. Added in bt-0003 Wave 0 (pre-flight
+// enable) after the bt-0002 SwiftData migration left this off-main.
+@MainActor
 class BackupPickerDelegate: NSObject, UIDocumentPickerDelegate {
     var onDocumentsPicked: ((URL) -> Void)?
 
@@ -47,7 +53,18 @@ class BackupPickerDelegate: NSObject, UIDocumentPickerDelegate {
 
 // MARK: - View Model
 
+// `@MainActor` is the fix for the bt-0002 deferred device-test failure:
+// `createBackup` / `restoreFromBackup` spawn unstructured `Task { }`s, which
+// do NOT inherit actor isolation from a non-isolated class. The success
+// handlers (`handleBackupSuccess`, `handleRestoreCompletion`) then ran off
+// the main thread, and the `viewController.present(activityVC, ...)` call in
+// `handleBackupSuccess` tripped `_dispatch_assert_queue_fail` →
+// `EXC_BREAKPOINT`. Pinning the class to `@MainActor` makes the enclosing
+// `Task { }` inherit main-actor isolation; the existing
+// `await Task.detached { ... }.value` still hops off main for the heavy
+// backup/restore work and resumes back on main. Added in bt-0003 Wave 0.
 @Observable
+@MainActor
 class BackupRestoreViewModel {
     // MARK: - Alert Type
     
@@ -89,9 +106,21 @@ class BackupRestoreViewModel {
     var documentPickerDelegate = BackupPickerDelegate()
     
     // MARK: - Private Properties for Memory Management
-    
-    private var backupProgressObserver: NSObjectProtocol?
-    private var restoreProgressObserver: NSObjectProtocol?
+
+    // `nonisolated(unsafe)` is the only valid form here, despite a compiler
+    // warning that suggests bare `nonisolated`. Bare `nonisolated` is rejected
+    // by the compiler for mutable stored properties ("'nonisolated' cannot be
+    // applied to mutable stored properties — convert to `let` or use
+    // `nonisolated(unsafe)`"). `let` is wrong (we mutate them); `unsafe` is
+    // accurate (it's safe in practice because writes go through `@MainActor`
+    // setup paths and `NotificationCenter.removeObserver(_:)` is thread-safe,
+    // but the compiler can't prove it). `@ObservationIgnored` keeps these out
+    // of SwiftUI's tracking — they're cleanup state, not UI state. Added in
+    // bt-0003 Wave 0 alongside the class-level `@MainActor` annotation.
+    @ObservationIgnored
+    private nonisolated(unsafe) var backupProgressObserver: NSObjectProtocol?
+    @ObservationIgnored
+    private nonisolated(unsafe) var restoreProgressObserver: NSObjectProtocol?
     
     // MARK: - Lifecycle
     
@@ -169,7 +198,12 @@ class BackupRestoreViewModel {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            if let progress = notification.userInfo?["progress"] as? Float {
+            // `queue: .main` puts us on the main thread but NOT in the
+            // MainActor execution context (Swift 6 distinction). Hop
+            // explicitly so the `@MainActor`-isolated property write
+            // satisfies the concurrency checker.
+            guard let progress = notification.userInfo?["progress"] as? Float else { return }
+            Task { @MainActor in
                 self?.backupProgress = progress
             }
         }
@@ -186,7 +220,9 @@ class BackupRestoreViewModel {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            if let progress = notification.userInfo?["progress"] as? Float {
+            // Same MainActor hop as the backup-progress observer above.
+            guard let progress = notification.userInfo?["progress"] as? Float else { return }
+            Task { @MainActor in
                 self?.restoreProgress = progress
             }
         }

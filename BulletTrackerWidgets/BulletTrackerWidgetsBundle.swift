@@ -76,28 +76,35 @@ struct CompleteHabitIntent: AppIntent {
     private func toggleHabitCompletion(habitID: String, in context: ModelContext) {
         guard let habitUUID = UUID(uuidString: habitID) else { return }
 
-        // Fetch all habits, find the one we want in Swift (Wave 3a pattern;
-        // small N, dodges `#Predicate`-on-optional-UUID).
+        // Habit-fetch stays the in-Swift filter over the habit set (small N,
+        // dodges `#Predicate`-on-optional-UUID; same rationale Wave 3a noted).
         let allHabits = (try? context.fetch(FetchDescriptor<Habit>())) ?? []
         guard let habit = allHabits.first(where: { $0.id == habitUUID }) else { return }
 
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
 
-        let existingEntry = habit.entries?.first { entry in
-            guard let entryDate = entry.date else { return false }
-            return calendar.isDate(entryDate, inSameDayAs: today)
-        }
+        // Today-entry lookup is an indexed `#Predicate` fetch over the date
+        // range (Wave 4) — `habit.entries` walk faulted the whole relationship.
+        let optHabitUUID: UUID? = habitUUID
+        var entryDescriptor = FetchDescriptor<HabitEntry>(
+            predicate: #Predicate { entry in
+                entry.habit?.id == optHabitUUID && entry.date >= today && entry.date < tomorrow
+            }
+        )
+        entryDescriptor.fetchLimit = 1
+        let existingEntry = (try? context.fetch(entryDescriptor))?.first
 
         if let entry = existingEntry {
-            let nextState = getNextCompletionState(current: Int(entry.completionState), habit: habit)
+            let nextState = getNextCompletionState(current: Int(entry.completionState.rawValue), habit: habit)
             if nextState == 0 {
                 context.delete(entry)
             } else {
-                entry.completionState = Int16(nextState)
+                entry.completionState = CompletionState(rawValue: Int16(nextState)) ?? .success
             }
         } else {
-            let newEntry = HabitEntry(date: today, completed: true, completionState: 1, habit: habit)
+            let newEntry = HabitEntry(date: today, completionState: .success, habit: habit)
             context.insert(newEntry)
         }
 
@@ -109,8 +116,8 @@ struct CompleteHabitIntent: AppIntent {
     }
 
     private func getNextCompletionState(current: Int, habit: Habit) -> Int {
-        if habit.isNegativeHabit { return current == 0 ? 3 : 0 }
-        if !habit.useMultipleStates { return current == 0 ? 1 : 0 }
+        if habit.completionStyle == .avoidance { return current == 0 ? 3 : 0 }
+        if habit.completionStyle != .multiState { return current == 0 ? 1 : 0 }
         switch current {
         case 0: return 1
         case 1: return 2
@@ -183,7 +190,7 @@ struct HabitWidgetProvider: TimelineProvider {
         let habits = fetchTodaysHabits(in: context)
 
         let widgetHabits = habits.map { habit in
-            let state = getCompletionState(for: habit)
+            let state = getCompletionState(for: habit, in: context)
             return WidgetHabit(
                 id: habit.id ?? UUID(),
                 name: habit.name ?? "Unnamed",
@@ -191,8 +198,8 @@ struct HabitWidgetProvider: TimelineProvider {
                 color: habit.color ?? "#007AFF",
                 isCompleted: state > 0,
                 completionState: state,
-                needsDetails: habit.useMultipleStates || habit.trackDetails,
-                isNegativeHabit: habit.isNegativeHabit
+                needsDetails: habit.completionStyle == .multiState || habit.detailKind != nil,
+                isNegativeHabit: habit.completionStyle == .avoidance
             )
         }
 
@@ -224,16 +231,24 @@ struct HabitWidgetProvider: TimelineProvider {
         }
     }
 
-    private func getCompletionState(for habit: Habit) -> Int {
+    private func getCompletionState(for habit: Habit, in context: ModelContext) -> Int {
+        guard let habitID = habit.id else { return 0 }
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
 
-        // SwiftData makes `habit.entries` a plain `[HabitEntry]?` — no `Set` cast.
-        guard let todayEntry = habit.entries?.first(where: { entry in
-            guard let entryDate = entry.date else { return false }
-            return calendar.isDate(entryDate, inSameDayAs: today)
-        }) else { return 0 }
-        return Int(todayEntry.completionState)
+        // Wave 4: indexed `#Predicate` fetch instead of walking
+        // `habit.entries`. With N habits on the widget timeline that walk used
+        // to fault each habit's full entry history; this is index-backed and
+        // limit-1 per habit.
+        var descriptor = FetchDescriptor<HabitEntry>(
+            predicate: #Predicate { entry in
+                entry.habit?.id == habitID && entry.date >= today && entry.date < tomorrow
+            }
+        )
+        descriptor.fetchLimit = 1
+        guard let todayEntry = (try? context.fetch(descriptor))?.first else { return 0 }
+        return Int(todayEntry.completionState.rawValue)
     }
 }
 

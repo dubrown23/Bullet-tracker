@@ -75,8 +75,6 @@ class SettingsViewModel {
 
         static let syncEnabledMessage = "Your data will sync across all devices signed into the same iCloud account."
         static let syncDisabledMessage = "Data will only be stored locally on this device."
-
-        static let defaultCollectionNames = ["Daily Log", "Monthly Log", "Future Log", "Habit Tracker"]
     }
 
     // MARK: - Initialization
@@ -149,23 +147,11 @@ class SettingsViewModel {
         guard let context = modelContext else { return }
 
         try? context.delete(model: HabitEntry.self)
-        try? context.delete(model: JournalEntry.self)
         try? context.delete(model: Note.self)
-        try? context.delete(model: Tag.self)
         try? context.delete(model: Habit.self)
-        try? context.delete(model: Collection.self)
         try? context.save()
-
-        createDefaultCollections(in: context)
 
         showAlert(title: "Data Cleared", message: "All data has been cleared successfully.")
-    }
-
-    private func createDefaultCollections(in context: ModelContext) {
-        for name in Constants.defaultCollectionNames {
-            context.insert(Collection(name: name))
-        }
-        try? context.save()
     }
 }
 
