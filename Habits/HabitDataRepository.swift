@@ -54,7 +54,16 @@ enum HabitStore {
 
     /// The completion state for a habit on a specific date.
     static func completionState(for habit: Habit, on date: Date) -> HabitCompletionState {
-        guard let entry = entry(for: habit, on: date) else {
+        return completionState(for: habit, entry: entry(for: habit, on: date))
+    }
+
+    /// Builds `HabitCompletionState` from an already-fetched entry (or `nil` if
+    /// no entry exists). Use when the caller has prefetched the entry as part
+    /// of a batched range query — avoids the per-day predicate fetch inside
+    /// `completionState(for:on:)`. Wave 4.5 hotfix surface: `TodayHabitRowView`
+    /// prefetches a 7-day window once per card body and feeds the entries here.
+    static func completionState(for habit: Habit, entry: HabitEntry?) -> HabitCompletionState {
+        guard let entry else {
             return HabitCompletionState(isCompleted: false, state: 0, hasDetails: false)
         }
         let state = Int(entry.completionState.rawValue)

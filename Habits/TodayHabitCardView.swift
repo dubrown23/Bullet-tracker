@@ -19,8 +19,20 @@ struct TodayHabitRowView: View {
     @State private var showingDetailView = false
     @State private var checkScale: CGFloat = 1.0
 
+    /// Wave 4.5 prefetch: one indexed range fetch returning up to 7 entries
+    /// for this habit's last 7 days. Both `completionState` (today's render)
+    /// and `last7Days` (mini-dots) read from this dict instead of issuing
+    /// per-day single-row queries. Goes from ~10 fetches per card body down to
+    /// ~1 effective fetch (SwiftData's row cache makes repeat accesses cheap).
+    private var entriesLast7Days: [Date: HabitEntry] {
+        let today = calendar.startOfDay(for: Date())
+        guard let weekAgo = calendar.date(byAdding: .day, value: -6, to: today) else { return [:] }
+        return HabitStore.entriesByDay(for: habit, from: weekAgo, to: today)
+    }
+
     private var completionState: HabitCompletionState {
-        HabitStore.completionState(for: habit, on: date)
+        let entryDate = calendar.startOfDay(for: date)
+        return HabitStore.completionState(for: habit, entry: entriesLast7Days[entryDate])
     }
 
     private var isChecked: Bool { completionState.isCompleted }
@@ -35,12 +47,15 @@ struct TodayHabitRowView: View {
         Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: Date())
     }
 
-    /// Last 7 days completion for mini dots
+    /// Last 7 days completion for mini dots — derived from `entriesLast7Days`
+    /// rather than 7 single-row predicate fetches.
     private var last7Days: [Bool] {
         let today = calendar.startOfDay(for: Date())
         return (0..<7).reversed().map { daysAgo in
             guard let d = calendar.date(byAdding: .day, value: -daysAgo, to: today) else { return false }
-            return HabitStore.completionState(for: habit, on: d).isCompleted
+            let dayStart = calendar.startOfDay(for: d)
+            guard let entry = entriesLast7Days[dayStart] else { return false }
+            return entry.completionState != .notDone
         }
     }
 
