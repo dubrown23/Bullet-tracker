@@ -97,7 +97,7 @@ struct CompleteHabitIntent: AppIntent {
         let existingEntry = (try? context.fetch(entryDescriptor))?.first
 
         if let entry = existingEntry {
-            let nextState = getNextCompletionState(current: Int(entry.completionState.rawValue), habit: habit)
+            let nextState = getNextCompletionState(current: Int(entry.effectiveCompletionState.rawValue), habit: habit)
             if nextState == 0 {
                 context.delete(entry)
             } else {
@@ -248,7 +248,7 @@ struct HabitWidgetProvider: TimelineProvider {
         )
         descriptor.fetchLimit = 1
         guard let todayEntry = (try? context.fetch(descriptor))?.first else { return 0 }
-        return Int(todayEntry.completionState.rawValue)
+        return Int(todayEntry.effectiveCompletionState.rawValue)
     }
 }
 

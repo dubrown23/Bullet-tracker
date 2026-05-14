@@ -55,7 +55,7 @@ struct TodayHabitRowView: View {
             guard let d = calendar.date(byAdding: .day, value: -daysAgo, to: today) else { return false }
             let dayStart = calendar.startOfDay(for: d)
             guard let entry = entriesLast7Days[dayStart] else { return false }
-            return entry.completionState != .notDone
+            return entry.effectiveCompletionState != .notDone
         }
     }
 

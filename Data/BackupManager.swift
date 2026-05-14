@@ -184,10 +184,10 @@ class BackupManager {
             return HabitEntryData(
                 id: entry.id?.uuidString ?? UUID().uuidString,
                 date: entry.date,
-                completed: entry.completionState != .notDone,
+                completed: entry.effectiveCompletionState != .notDone,
                 details: detailsJSONString,
                 habitID: entry.habit?.id?.uuidString ?? "",
-                completionState: Int(entry.completionState.rawValue)
+                completionState: Int(entry.effectiveCompletionState.rawValue)
             )
         }
     }

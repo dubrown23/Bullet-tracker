@@ -626,7 +626,7 @@ class DayJournalViewModel {
         let allEntries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
         let entries = allEntries
             .filter { entry in
-                entry.date >= startOfDay && entry.date < endOfDay && entry.completionState != .notDone
+                entry.date >= startOfDay && entry.date < endOfDay && entry.effectiveCompletionState != .notDone
             }
             .sorted { ($0.habit?.order ?? 0) < ($1.habit?.order ?? 0) }
 
@@ -643,7 +643,7 @@ class DayJournalViewModel {
                 habitName: habit.name ?? "Unknown",
                 icon: habit.icon ?? "circle",
                 color: habit.color ?? "#007AFF",
-                completionState: Int(entry.completionState.rawValue),
+                completionState: Int(entry.effectiveCompletionState.rawValue),
                 isNegativeHabit: habit.completionStyle == .avoidance,
                 rawDetails: legacyString,
                 parsedDetails: parsed
@@ -802,7 +802,7 @@ class DayJournalViewModel {
             guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { continue }
 
             let habitEntries = allHabitEntries.filter { entry in
-                entry.date >= startOfDay && entry.date < endOfDay && entry.completionState != .notDone
+                entry.date >= startOfDay && entry.date < endOfDay && entry.effectiveCompletionState != .notDone
             }
 
             let notes = allNotes.filter { note in

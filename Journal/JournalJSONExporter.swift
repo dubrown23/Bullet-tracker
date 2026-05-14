@@ -27,7 +27,7 @@ struct JournalJSONExporter {
         let allEntries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
         let entries = allEntries
             .filter { entry in
-                entry.date >= startDate && entry.date < endOfRange && entry.completionState != .notDone
+                entry.date >= startDate && entry.date < endOfRange && entry.effectiveCompletionState != .notDone
             }
             .sorted { lhs, rhs in
                 if lhs.date != rhs.date { return lhs.date < rhs.date }
@@ -43,7 +43,7 @@ struct JournalJSONExporter {
                 "habitName": habit.name ?? "",
                 "habitIcon": habit.icon ?? "",
                 "habitColor": habit.color ?? "",
-                "completionState": entry.completionState.rawValue,
+                "completionState": entry.effectiveCompletionState.rawValue,
                 "completionStyle": habit.completionStyle.rawValue
             ]
 

@@ -353,7 +353,7 @@ struct JournalPDFGenerator {
 
         let allEntriesEver = (try? modelContext.fetch(FetchDescriptor<HabitEntry>())) ?? []
         let entriesInRange = allEntriesEver.filter { entry in
-            entry.date >= startDate && entry.date < endOfRange && entry.completionState != .notDone
+            entry.date >= startDate && entry.date < endOfRange && entry.effectiveCompletionState != .notDone
         }
         let totalCompletions = entriesInRange.count
 
@@ -475,7 +475,7 @@ struct JournalPDFGenerator {
         let allEntries = (try? modelContext.fetch(FetchDescriptor<HabitEntry>())) ?? []
         let rangeEntries = allEntries
             .filter { entry in
-                entry.date >= startOfRange && entry.date < endOfRange && entry.completionState != .notDone
+                entry.date >= startOfRange && entry.date < endOfRange && entry.effectiveCompletionState != .notDone
             }
             .sorted { ($0.habit?.order ?? 0) < ($1.habit?.order ?? 0) }
         for entry in rangeEntries {
@@ -485,7 +485,7 @@ struct JournalPDFGenerator {
                 icon: habit.icon ?? "circle",
                 color: habit.color ?? "#007AFF",
                 details: detailsAsLegacyString(entry.details),
-                completionState: Int(entry.completionState.rawValue),
+                completionState: Int(entry.effectiveCompletionState.rawValue),
                 isNegativeHabit: habit.completionStyle == .avoidance
             ))
         }

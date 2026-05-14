@@ -158,7 +158,7 @@ final class HabitCalculationService {
     func isCompleted(in entries: [Date: HabitEntry], on date: Date) -> Bool {
         let dayStart = calendar.startOfDay(for: date)
         guard let entry = entries[dayStart] else { return false }
-        return entry.completionState != .notDone
+        return entry.effectiveCompletionState != .notDone
     }
 
     // MARK: - Streak Calculations (Entry-Aware)
@@ -338,7 +338,7 @@ final class HabitCalculationService {
                     total += 1
                     if let habitId = habit.id,
                        let entry = allEntries[habitId]?[currentDate],
-                       entry.completionState != .notDone {
+                       entry.effectiveCompletionState != .notDone {
                         completed += 1
                     }
                 }

@@ -243,7 +243,7 @@ struct HabitCompletionDetailView: View {
     }
 
     private func loadEntryData(from entry: HabitEntry) {
-        completionState = Int(entry.completionState.rawValue)
+        completionState = Int(entry.effectiveCompletionState.rawValue)
 
         guard let details = entry.details else { return }
 

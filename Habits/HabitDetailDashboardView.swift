@@ -258,7 +258,7 @@ class HabitDetailViewModel {
         var completion: [Date: Double] = [:]
         for date in dates {
             let dayStart = calendar.startOfDay(for: date)
-            let state = entries[dayStart]?.completionState ?? .notDone
+            let state = entries[dayStart]?.effectiveCompletionState ?? .notDone
             completion[dayStart] = state != .notDone ? 1.0 : 0.0
         }
 

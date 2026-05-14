@@ -66,9 +66,9 @@ enum HabitStore {
         guard let entry else {
             return HabitCompletionState(isCompleted: false, state: 0, hasDetails: false)
         }
-        let state = Int(entry.completionState.rawValue)
+        let state = Int(entry.effectiveCompletionState.rawValue)
         let hasDetails = checkForMeaningfulDetails(in: entry, habit: habit, state: state)
-        return HabitCompletionState(isCompleted: entry.completionState != .notDone, state: state, hasDetails: hasDetails)
+        return HabitCompletionState(isCompleted: entry.effectiveCompletionState != .notDone, state: state, hasDetails: hasDetails)
     }
 
     /// All of a habit's entries in `[startDate, endDate]`, keyed by start-of-day.

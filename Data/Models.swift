@@ -177,6 +177,17 @@ final class HabitEntry {
     /// (Fully qualified per the `@Model` macro's requirement.)
     var completionState: CompletionState = CompletionState.notDone
 
+    /// Pass-through accessor (`bt-0007` first attempt — made this field
+    /// optional + nil-coalesced here to absorb null values arriving from
+    /// CloudKit. The change wasn't a SwiftData lightweight migration against
+    /// the live CloudKit-synced schema: SwiftData wrapped the optional in a
+    /// `NSCompositeAttributeDescription` while CloudKit's container schema
+    /// kept `CD_completionState` as `INT64` — mismatch broke sync entirely
+    /// with "Unknown value class" errors. Reverted; accessor kept as a no-op
+    /// so the 13 read-site renames don't have to revert with it. Full failure
+    /// log in `bt-0007`.)
+    var effectiveCompletionState: CompletionState { completionState }
+
     /// Stored JSON-string representation of the details payload. The typed
     /// `details: HabitEntryDetails?` accessor below reads/writes this column.
     ///
