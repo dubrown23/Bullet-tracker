@@ -19,3 +19,5 @@ _(Numbered list. Each entry: decision + reasoning. Append-mostly.)_
 ## Build Log
 
 _(Older Recent build entries migrate here from `STATUS.md` via the 3-entry rolloff. One row per shipped bead: id, ship date, summary, full Why + Decision log.)_
+
+- `bt-0001` (shipped 2026-05-12) — **decided the data foundation: migrate to SwiftData, two-phase.** Was the decision bead; design pass run this session. Build work → `bt-0002` (P1) + `bt-0003` (P2). Full Why + Decision log in the bead file.

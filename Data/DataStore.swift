@@ -44,18 +44,18 @@ enum DataStore {
     /// The shared model container. The app installs it via `.modelContainer(DataStore.shared)`;
     /// the widget extension uses the same instance so both read/write one store.
     ///
-    /// ⚠️ CloudKit is temporarily DISABLED (`cloudKitDatabase: .none`) for the
-    /// bt-0003 Wave 1 recovery (2026-05-13). The Wave 1 schema-shrink + CloudKit
-    /// `HistoryExpired` interaction produced invalidated-instance crashes. The
-    /// recovery flow: disable CloudKit → wipe app + iCloud data → reinstall →
-    /// restore from JSON backup → verify works → re-enable CloudKit. Flip back
-    /// to `.automatic` before any further wave ships. (Do not leave this in
-    /// `.none` permanently — the widget + cross-device sync rely on it.)
+    /// CloudKit re-enabled at bt-0003 Wave 5 ship (2026-05-13). Was temporarily
+    /// `.none` for the duration of the Phase-2 build (Waves 1 → 4.5) after the
+    /// Wave 1 schema-shrink + CloudKit `HistoryExpired` interaction produced
+    /// invalidated-instance crashes. Wave 5 ship recovery flow: take fresh JSON
+    /// backup → wipe iCloud's side → flip this back to `.automatic` → reinstall
+    /// → restore from backup → verify. Now back to `.automatic` for cross-device
+    /// sync + the widget's App-Group read path.
     static let shared: ModelContainer = {
         let configuration = ModelConfiguration(
             schema: schema,
             url: storeURL,
-            cloudKitDatabase: .none
+            cloudKitDatabase: .automatic
         )
         do {
             return try ModelContainer(for: schema, configurations: configuration)
