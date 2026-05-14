@@ -20,4 +20,31 @@ _(Numbered list. Each entry: decision + reasoning. Append-mostly.)_
 
 _(Older Recent build entries migrate here from `STATUS.md` via the 3-entry rolloff. One row per shipped bead: id, ship date, summary, full Why + Decision log.)_
 
-- `bt-0001` (shipped 2026-05-12) — **decided the data foundation: migrate to SwiftData, two-phase.** Was the decision bead; design pass run this session. Build work → `bt-0002` (P1) + `bt-0003` (P2). Full Why + Decision log in the bead file.
+### `bt-0001` (shipped 2026-05-12) — decided the data foundation: migrate to SwiftData, two-phase
+
+**Summary:** decision bead; design pass run this session. Build work → `bt-0002` (Phase 1 — engine swap, model unchanged) + `bt-0003` (Phase 2 — model restructure). Decision-bead deliverable was the direction + a filled Plan, both done.
+
+**Why:**
+
+The entire data layer was hand-rolled Core Data plumbing:
+- `CoreDataManager.shared` — `NSPersistentCloudKitContainer`, App Group store, CRUD on Habit/HabitEntry/Collection
+- `HabitDataRepository.shared` — `@MainActor @Observable` cache (`habits[]` + `[UUID:[Date:HabitEntry]]`), optimistic UI updates, background-context writes, manual `NSManagedObjectContextDidSave` merge, widget reload
+- `HabitCalculationService.shared` — `@unchecked Sendable`, streaks/rates/heatmap, holds its own `viewContext` *and* takes a passed-in context
+- Widget extension, `BackupManager`, `JournalPDFGenerator` all touch Core Data directly
+
+iOS-only, single-user, CloudKit-synced — squarely SwiftData's design target. A SwiftData rewrite would delete most of `CoreDataManager`, the manual merge dance, the optimistic-update bookkeeping, the save-notification listener, and the `@unchecked Sendable` hack.
+
+Real migration with real risk: the `.xcdatamodeld` becomes `@Model` types (existing-store migration needs care), the widget gets rewritten against `ModelContainer`, the JSON backup format must stay round-trip-compatible, and CloudKit-via-SwiftData has its own constraints. The model was mid-cleanup (the `JournalEntry` future-log fields, the dual `completed`/`completionState`, the `details` JSON blob) — a migration was the natural moment to fix those, which made it bigger but more worthwhile.
+
+This bead was the **decision**, not the work. Downstream patchwork items deferred until settled: "three doors into the database" → one owner; `details` JSON blob → typed; 3-way completion state → `CompletionStyle` enum; `HabitDataRepository` cache-thrash; `HabitCalculationService` thread-safety.
+
+**Plan locked at decision (two phases):**
+
+- **Phase 1** — swap the engine, model shape unchanged. Convert the 6 entities (`Habit`, `HabitEntry`, `JournalEntry`, `Collection`, `Note`, `Tag`) to SwiftData `@Model` types field-for-field identical to the existing `.xcdatamodeld`, so SwiftData opens the existing App-Group / CloudKit SQLite store with no data restructuring. Delete most of `CoreDataManager` + `HabitDataRepository` cache + the merge listener; stand up `ModelContainer` with `cloudKitDatabase: .automatic`; rewrite widget + `BackupManager` consumers; fold in flag #4 (kill name-keyword workout detection). Highest risk: first launch opening the existing synced store with the new schema. Mitigation: JSON backup fallback. → became `bt-0002`.
+- **Phase 2** — clean the model (separate bead, after Phase 1 ships + stabilizes). `details` JSON-string → typed; collapse 3-way completion state to one enum; remove vestigial `JournalEntry` future-log fields (blocked on the #9 Journal-intent question). → became `bt-0003`.
+- **Independent of this chain (anytime):** Flag #5 repo-layout cleanup.
+
+**Decision log:**
+- 2026-05-12 — created, queued. Surfaced during the 2026-05-12 fresh-eyes architecture review (flag #6 of 9). Holds the data-foundation decision; Plan stays TBD until a design pass. Flags #1/#2/#3/#7/#8 noted as downstream of this decision.
+- 2026-05-12 — design pass run; **decided: migrate to SwiftData, two-phase**. Rationale: SwiftData structurally *eliminates* flags #1/#7/#8 rather than patching them; moves the one remaining old-stack layer onto the framework Apple is actively developing (less hand-rolled code to own, SDK updates carry it forward — matches Dustin's "rely on Apple under the hood" goal); migration risk to existing synced data is real but reducible via the two-phase split + the JSON-backup fallback. Downstream flag routing locked: #1/#7/#8 → Phase 1; #2/#3 + Journal-fields half of #9 → Phase 2; #4 → folded into Phase 1; #5 → still independent.
+- 2026-05-12 — **shipped** (deliverable = the decided direction + filled Plan, both done). Build work lives in `bt-0002` (Phase 1) + `bt-0003` (Phase 2). This entry is now the permanent decision record.
