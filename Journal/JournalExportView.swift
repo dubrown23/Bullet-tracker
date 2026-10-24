@@ -20,6 +20,9 @@ struct JournalExportView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let url = viewModel.exportedFileURL {
+                    readySection(for: url)
+                }
                 dateRangeSection
                 formatSection
                 optionsSection
@@ -55,23 +58,33 @@ struct JournalExportView: View {
             .onChange(of: viewModel.customEndDate) { _, _ in
                 viewModel.updatePreview()
             }
-            .sheet(isPresented: $viewModel.showingShareSheet) {
-                if let url = viewModel.exportedFileURL {
-                    ShareSheet(url: url) {
-                        viewModel.showingSuccess = true
-                    }
-                }
+            .onChange(of: viewModel.selectedFormat) { _, _ in
+                viewModel.exportedFileURL = nil
             }
-            .alert("Export Complete", isPresented: $viewModel.showingSuccess) {
-                Button("Done") { dismiss() }
-            } message: {
-                Text("Your journal has been saved successfully.")
+            .onChange(of: viewModel.includeSummaryDashboard) { _, _ in
+                viewModel.exportedFileURL = nil
             }
             .alert("Export Failed", isPresented: $viewModel.showingError) {
                 Button("OK") { }
             } message: {
                 Text(viewModel.errorMessage)
             }
+        }
+    }
+
+    // MARK: - Ready Section
+
+    /// Appears after a successful export. `ShareLink` presents from this
+    /// view's own window, so it works at any window size.
+    private func readySection(for url: URL) -> some View {
+        Section {
+            ShareLink(item: url) {
+                Label("Share \(url.pathExtension.uppercased())", systemImage: "square.and.arrow.up")
+            }
+        } header: {
+            Text("Ready")
+        } footer: {
+            Text("\(url.lastPathComponent)\nShare it to save to Files, send by Mail, or open in another app.")
         }
     }
 
@@ -201,25 +214,6 @@ struct JournalExportView: View {
     }
 }
 
-// MARK: - Share Sheet
-
-struct ShareSheet: UIViewControllerRepresentable {
-    let url: URL
-    var onComplete: (() -> Void)?
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        controller.completionWithItemsHandler = { _, completed, _, _ in
-            if completed {
-                onComplete?()
-            }
-        }
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
 // MARK: - Types
 
 enum DateRangeType: String, CaseIterable {
@@ -292,8 +286,6 @@ class JournalExportViewModel {
 
     // Export state
     var isExporting = false
-    var showingShareSheet = false
-    var showingSuccess = false
     var showingError = false
     var errorMessage = ""
     var exportedFileURL: URL?
@@ -345,6 +337,9 @@ class JournalExportViewModel {
     }
 
     func updatePreview() {
+        // Any change to the range invalidates a previously exported file.
+        exportedFileURL = nil
+
         let (startDate, endDate) = getDateRange()
 
         let dayCount = calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 0
@@ -419,7 +414,6 @@ class JournalExportViewModel {
             try pdfData.write(to: tempURL)
             await MainActor.run {
                 exportedFileURL = tempURL
-                showingShareSheet = true
             }
         } catch {
             await MainActor.run {
@@ -456,7 +450,6 @@ class JournalExportViewModel {
             try jsonData.write(to: tempURL)
             await MainActor.run {
                 exportedFileURL = tempURL
-                showingShareSheet = true
             }
         } catch {
             await MainActor.run {

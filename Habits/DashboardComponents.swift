@@ -20,7 +20,11 @@ struct ContributionHeatmapView: View {
     private let minCellSize: CGFloat = 7
     private static let monthSymbols = Calendar.current.shortMonthSymbols
 
-    @State private var containerWidth: CGFloat = UIScreen.main.bounds.width - 40
+    /// Measured from the view's own container (see the GeometryReader in `body`),
+    /// never from the screen — the window can be narrower than the screen and
+    /// can change size while the app runs (iPhone Duo fold / unfold, Stage Manager).
+    /// `0` means "not measured yet"; the sizing helpers fall back to a default.
+    @State private var containerWidth: CGFloat = 0
 
     // MARK: - Week Columns
 
@@ -101,7 +105,7 @@ struct ContributionHeatmapView: View {
     private var computedCellSize: CGFloat {
         let cols = weekColumns
         let groups = monthGroups
-        guard !cols.isEmpty, !groups.isEmpty else { return 14 }
+        guard !cols.isEmpty, !groups.isEmpty, containerWidth > 0 else { return 14 }
         let totalWeeks = CGFloat(cols.count)
         let numGroups = CGFloat(groups.count)
         let cellSpacing: CGFloat = 2
@@ -119,7 +123,7 @@ struct ContributionHeatmapView: View {
     private var needsScroll: Bool {
         let cols = weekColumns
         let groups = monthGroups
-        guard !cols.isEmpty, !groups.isEmpty else { return false }
+        guard !cols.isEmpty, !groups.isEmpty, containerWidth > 0 else { return false }
         let totalWeeks = CGFloat(cols.count)
         let numGroups = CGFloat(groups.count)
         let available = containerWidth - dayLabelWidth - 4

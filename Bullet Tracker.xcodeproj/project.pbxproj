@@ -21,7 +21,7 @@
 		772F01262F903D6800AA7F11 /* TodayViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772F01252F903D6800AA7F11 /* TodayViewModel.swift */; };
 		772F01282F903D6800AA7F11 /* TodayHabitCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772F01272F903D6800AA7F11 /* TodayHabitCardView.swift */; };
 		772F012A2F903D6900AA7F11 /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772F01292F903D6900AA7F11 /* TodayView.swift */; };
-		772F012D2F91152400AA7F11 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772F012C2F91143D00AA7F11 /* NotesView.swift */; };
+		772F012D2F91152400AA7F11 /* EditNoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772F012C2F91143D00AA7F11 /* EditNoteView.swift */; };
 		774023302FB60DD80036690B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7740232E2FB60DD80036690B /* Assets.xcassets */; };
 		774843FF2EB2D27A007F3B9B /* HabitDataRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */; };
 		77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535962DD62DAE008BBCD8 /* BackupManager.swift */; };
@@ -94,7 +94,7 @@
 		772F01252F903D6800AA7F11 /* TodayViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayViewModel.swift; sourceTree = "<group>"; };
 		772F01272F903D6800AA7F11 /* TodayHabitCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayHabitCardView.swift; sourceTree = "<group>"; };
 		772F01292F903D6900AA7F11 /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
-		772F012C2F91143D00AA7F11 /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
+		772F012C2F91143D00AA7F11 /* EditNoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditNoteView.swift; sourceTree = "<group>"; };
 		7740232E2FB60DD80036690B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7740232F2FB60DD80036690B /* Bullet Tracker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Bullet Tracker.entitlements"; sourceTree = "<group>"; };
 		774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitDataRepository.swift; sourceTree = "<group>"; };
@@ -273,7 +273,7 @@
 		77D9A5212F294D660019C64C /* Notes */ = {
 			isa = PBXGroup;
 			children = (
-				772F012C2F91143D00AA7F11 /* NotesView.swift */,
+				772F012C2F91143D00AA7F11 /* EditNoteView.swift */,
 			);
 			path = Notes;
 			sourceTree = "<group>";
@@ -454,7 +454,7 @@
 		7783B2572DD2894B0008E0F3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
-				772F012D2F91152400AA7F11 /* NotesView.swift in Sources */,
+				772F012D2F91152400AA7F11 /* EditNoteView.swift in Sources */,
 				77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */,
 				77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */,
 				77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */,
@@ -720,6 +720,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -750,6 +751,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -771,7 +773,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6W932TN323;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "db23.Bullet-TrackerTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -790,7 +792,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6W932TN323;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "db23.Bullet-TrackerTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -808,6 +810,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6W932TN323;
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "db23.Bullet-TrackerUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -825,6 +828,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6W932TN323;
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "db23.Bullet-TrackerUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";

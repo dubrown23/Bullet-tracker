@@ -98,10 +98,14 @@ struct DayJournalView: View {
 
                         Divider()
 
-                        Button(action: { viewModel.exportDayData() }) {
+                        // ShareLink presents from this view's own window, so it
+                        // works in any window size / multi-window setup. Menu
+                        // content is built when the menu opens, so the export
+                        // text is only generated on demand.
+                        ShareLink(item: viewModel.dayExportText()) {
                             Label("Quick Export This Day", systemImage: "doc.text")
                         }
-                        Button(action: { viewModel.exportMonthData() }) {
+                        ShareLink(item: viewModel.monthExportText()) {
                             Label("Quick Export This Month", systemImage: "calendar")
                         }
                     } label: {
@@ -766,15 +770,16 @@ class DayJournalViewModel {
 
     // MARK: - Export
 
-    func exportDayData() {
-        let export = buildExportData(for: [selectedDate])
-        shareText(export)
+    /// Plain-text export of the selected day, for `ShareLink`.
+    func dayExportText() -> String {
+        buildExportData(for: [selectedDate])
     }
 
-    func exportMonthData() {
+    /// Plain-text export of the selected day's whole month, for `ShareLink`.
+    func monthExportText() -> String {
         guard let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDate)),
               let endOfMonth = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth) else {
-            return
+            return ""
         }
 
         var dates: [Date] = []
@@ -784,8 +789,7 @@ class DayJournalViewModel {
             currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? endOfMonth
         }
 
-        let export = buildExportData(for: dates)
-        shareText(export)
+        return buildExportData(for: dates)
     }
 
     private func buildExportData(for dates: [Date]) -> String {
@@ -852,20 +856,6 @@ class DayJournalViewModel {
         }
 
         return lines.joined(separator: "\n")
-    }
-
-    private func shareText(_ text: String) {
-        guard !text.isEmpty else { return }
-
-        let activityVC = UIActivityViewController(
-            activityItems: [text],
-            applicationActivities: nil
-        )
-
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootVC = windowScene.windows.first?.rootViewController {
-            rootVC.present(activityVC, animated: true)
-        }
     }
 }
 

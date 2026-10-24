@@ -31,11 +31,15 @@ enum HabitFrequency: String, CaseIterable {
     
     /// Determines if a habit with this frequency should be tracked on a given date
     static func shouldTrack(frequency: String?, on date: Date, customDays: String?, startDate: Date?) -> Bool {
-        if let startDate = startDate, date < startDate {
+        let calendar = Calendar.current
+
+        // Whole-day comparison — mirrors the app's `HabitFrequency.shouldTrack`
+        // (Utilities/Constants.swift). See bt-0008.
+        if let startDate = startDate,
+           calendar.startOfDay(for: date) < calendar.startOfDay(for: startDate) {
             return false
         }
-        
-        let calendar = Calendar.current
+
         let weekday = calendar.component(.weekday, from: date)
         let freq = HabitFrequency(rawValue: frequency ?? HabitFrequency.daily.rawValue) ?? .daily
         

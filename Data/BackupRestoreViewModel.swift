@@ -103,6 +103,8 @@ class BackupRestoreViewModel {
     var showImportPicker = false
     var showConfirmRestore = false
     var selectedBackupURL: URL?
+    /// The most recent backup file, ready to hand to a `ShareLink`.
+    var backupFileURL: URL?
     var documentPickerDelegate = BackupPickerDelegate()
     
     // MARK: - Private Properties for Memory Management
@@ -136,10 +138,13 @@ class BackupRestoreViewModel {
     
     // MARK: - Public Methods
     
-    /// Creates a backup and presents share sheet
-    func createBackup(from viewController: UIViewController, sourceView: UIView) {
+    /// Creates a backup file. On success `backupFileURL` is set and the view
+    /// shows a `ShareLink` for it — no UIKit presentation from a root view
+    /// controller, so this works in any window (iPhone Duo, iPad, multi-window).
+    func createBackup() {
         isCreatingBackup = true
         backupProgress = 0
+        backupFileURL = nil
         setupBackupProgressObserver()
 
         Task {
@@ -149,7 +154,7 @@ class BackupRestoreViewModel {
             }.value
 
             if let backupURL {
-                handleBackupSuccess(with: backupURL, from: viewController, sourceView: sourceView)
+                handleBackupSuccess(with: backupURL)
             } else {
                 handleBackupError()
             }
@@ -242,26 +247,11 @@ class BackupRestoreViewModel {
         }
     }
     
-    private func handleBackupSuccess(
-        with url: URL,
-        from viewController: UIViewController,
-        sourceView: UIView
-    ) {
-        let activityVC = UIActivityViewController(
-            activityItems: [url],
-            applicationActivities: nil
-        )
-
-        if let popoverController = activityVC.popoverPresentationController {
-            popoverController.sourceView = sourceView
-            popoverController.sourceRect = sourceView.bounds
-        }
-
+    private func handleBackupSuccess(with url: URL) {
         isCreatingBackup = false
         backupProgress = 1.0
         removeBackupProgressObserver()
-
-        viewController.present(activityVC, animated: true)
+        backupFileURL = url
     }
 
     private func handleBackupError() {
@@ -292,9 +282,7 @@ struct BackupRestoreView: View {
     // MARK: - State Properties
     
     @State private var viewModel = BackupRestoreViewModel()
-    @State private var actionSourceRect: CGRect = .zero
-    @State private var actionSourceView: UIView? = nil
-    
+
     // MARK: - Body
     
     var body: some View {
@@ -334,8 +322,12 @@ struct BackupRestoreView: View {
                 if viewModel.isCreatingBackup {
                     backupProgressView
                 }
-                
+
                 createBackupButton
+
+                if let url = viewModel.backupFileURL, !viewModel.isCreatingBackup {
+                    shareBackupLink(for: url)
+                }
             }
             .padding(.vertical, 5)
         } label: {
@@ -359,9 +351,9 @@ struct BackupRestoreView: View {
     
     private var createBackupButton: some View {
         Button {
-            performBackup()
+            viewModel.createBackup()
         } label: {
-            Label("Create Backup File", systemImage: "square.and.arrow.up")
+            Label("Create Backup File", systemImage: "doc.badge.plus")
                 .frame(maxWidth: .infinity)
                 .padding()
                 .background(Color.blue)
@@ -369,7 +361,24 @@ struct BackupRestoreView: View {
                 .cornerRadius(10)
         }
         .disabled(viewModel.isCreatingBackup)
-        .background(captureSourceView)
+    }
+
+    /// Shown once a backup file exists. `ShareLink` presents the share sheet
+    /// from this view's own window and anchors itself.
+    private func shareBackupLink(for url: URL) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ShareLink(item: url) {
+                Label("Share Backup File", systemImage: "square.and.arrow.up")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.green)
+                    .foregroundStyle(.white)
+                    .cornerRadius(10)
+            }
+            Text("Ready: \(url.lastPathComponent)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
     
     private var restoreSection: some View {
@@ -450,18 +459,6 @@ struct BackupRestoreView: View {
             .font(.subheadline)
     }
     
-    private var captureSourceView: some View {
-        GeometryReader { geometry in
-            Color.clear
-                .onAppear {
-                    actionSourceRect = geometry.frame(in: .global)
-                    if actionSourceView == nil {
-                        actionSourceView = UIView(frame: actionSourceRect)
-                    }
-                }
-        }
-    }
-    
     // MARK: - Sheets
     
     private var importPickerSheet: some View {
@@ -476,16 +473,6 @@ struct BackupRestoreView: View {
             Button("Restore", role: .destructive) {
                 viewModel.restoreFromBackup()
             }
-        }
-    }
-    
-    // MARK: - Helper Methods
-    
-    private func performBackup() {
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootVC = windowScene.windows.first?.rootViewController,
-           let sourceView = actionSourceView {
-            viewModel.createBackup(from: rootVC, sourceView: sourceView)
         }
     }
 }

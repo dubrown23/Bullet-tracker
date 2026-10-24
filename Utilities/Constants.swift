@@ -47,11 +47,16 @@ enum HabitFrequency: String, CaseIterable, Identifiable {
     ///   - startDate: The habit's start date; returns false for dates before this
     /// - Returns: Whether the habit should be tracked on the given date
     static func shouldTrack(frequency: String?, on date: Date, customDays: String?, startDate: Date?) -> Bool {
-        if let startDate = startDate, date < startDate {
+        let calendar = Calendar.current
+
+        // Compare whole days. `Habit.startDate` is stored with a time of day
+        // (`Date()` at creation) while Today asks about start-of-day, so a raw
+        // `date < startDate` hid a new habit on the day it was created (bt-0008).
+        if let startDate = startDate,
+           calendar.startOfDay(for: date) < calendar.startOfDay(for: startDate) {
             return false
         }
-        
-        let calendar = Calendar.current
+
         let weekday = calendar.component(.weekday, from: date)
         let freq = HabitFrequency(rawValue: frequency ?? HabitFrequency.daily.rawValue) ?? .daily
         

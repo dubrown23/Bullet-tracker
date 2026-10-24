@@ -112,6 +112,24 @@ struct HabitFrequencyTests {
         #expect(HabitFrequency.shouldTrack(frequency: "daily", on: afterStart, customDays: nil, startDate: startDate))
     }
 
+    /// A habit created mid-day (startDate carries a time of day) must still be
+    /// tracked on that same day when Today asks about start-of-day. bt-0008.
+    @Test func startDateWithTimeOfDayStillTracksSameDay() {
+        var components = DateComponents()
+        components.year = 2026
+        components.month = 10
+        components.day = 24
+        components.hour = 10
+        components.minute = 44
+        let startDateMidMorning = calendar.date(from: components)!
+
+        let sameDayMidnight = calendar.startOfDay(for: startDateMidMorning)
+        let dayBeforeMidnight = calendar.date(byAdding: .day, value: -1, to: sameDayMidnight)!
+
+        #expect(HabitFrequency.shouldTrack(frequency: "daily", on: sameDayMidnight, customDays: nil, startDate: startDateMidMorning))
+        #expect(!HabitFrequency.shouldTrack(frequency: "daily", on: dayBeforeMidnight, customDays: nil, startDate: startDateMidMorning))
+    }
+
     @Test func nilFrequencyDefaultsToDaily() {
         let date = dateForWeekday(3) // Tuesday
         #expect(HabitFrequency.shouldTrack(frequency: nil, on: date, customDays: nil, startDate: nil))
