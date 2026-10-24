@@ -162,38 +162,37 @@ struct HabitCompletionDetailView: View {
         }
 
         Section("Duration") {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(durationOptions, id: \.self) { mins in
-                        let isSelected = duration == mins
-                        Button(action: { duration = mins }) {
-                            Text("\(mins) min")
-                                .font(.subheadline.weight(isSelected ? .semibold : .regular))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(isSelected ? habitColor : Color(.systemGray5))
-                                .foregroundStyle(isSelected ? .white : .primary)
-                                .clipShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
+            // Wraps like the workout-type chips. The old horizontal ScrollView
+            // hid "75 min" / "90 min" off-screen at 466pt with no scroll cue
+            // (seen on the Duo sim, bt-0009).
+            FlowLayout(spacing: 8) {
+                ForEach(durationOptions, id: \.self) { mins in
+                    let isSelected = duration == mins
+                    Button(action: { duration = mins }) {
+                        Text("\(mins) min")
+                            .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(isSelected ? habitColor : Color(.systemGray5))
+                            .foregroundStyle(isSelected ? .white : .primary)
+                            .clipShape(Capsule())
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
         }
 
-        Section {
-            HStack {
-                Text("Intensity")
-                Spacer()
-                Picker("Intensity", selection: $intensity) {
-                    ForEach(1...5, id: \.self) { level in
-                        Text("\(level)").tag(level)
-                    }
+        Section("Intensity") {
+            // Segmented picker fills the row instead of a fixed 200pt frame
+            // that squeezed the label at narrow widths (bt-0009).
+            Picker("Intensity", selection: $intensity) {
+                ForEach(1...5, id: \.self) { level in
+                    Text("\(level)").tag(level)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 200)
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
         }
     }
 
@@ -209,7 +208,7 @@ struct HabitCompletionDetailView: View {
                 TextField("0", text: $pagesRead)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
-                    .frame(width: 60)
+                    .frame(minWidth: 60, maxWidth: 120)
             }
         }
     }

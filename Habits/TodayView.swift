@@ -34,14 +34,16 @@ struct TodayView: View {
                     }
                 } else {
                     Section {
-                        ForEach(trackableHabits) { habit in
+                        // One habit per row folded, two per row unfolded / iPad
+                        // (see `PairedRows`, bt-0009).
+                        PairedRows(items: trackableHabits) { habit in
                             TodayHabitRowView(
                                 habit: habit,
                                 date: viewModel.selectedDate,
                                 streak: viewModel.currentStreak(for: habit)
                             )
-                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         }
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     }
                 }
             }

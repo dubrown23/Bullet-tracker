@@ -13,6 +13,8 @@ struct HabitDashboardView: View {
     private var habits: [Habit]
 
     @State private var viewModel = HabitDashboardViewModel()
+    @State private var selectedHabit: Habit?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         NavigationStack {
@@ -65,17 +67,18 @@ struct HabitDashboardView: View {
 
                     // Per-habit breakdown
                     Section("By Habit") {
-                        ForEach(viewModel.habitStats) { stat in
-                            NavigationLink(destination: HabitDetailDashboardView(
-                                habit: habits.first { $0.id == stat.id }
-                            )) {
-                                habitStatRow(stat)
-                            }
+                        // One habit per row folded, two per row unfolded / iPad
+                        // (see `PairedRows`, bt-0009).
+                        PairedRows(items: viewModel.habitStats) { stat in
+                            habitCell(stat)
                         }
                     }
                 }
             }
             .listStyle(.insetGrouped)
+            .navigationDestination(item: $selectedHabit) { habit in
+                HabitDetailDashboardView(habit: habit)
+            }
             .navigationTitle("Dashboard")
             .onAppear { viewModel.loadData(habits: habits) }
             .onChange(of: viewModel.selectedPeriod) { _, _ in
@@ -104,9 +107,35 @@ struct HabitDashboardView: View {
         .frame(maxWidth: .infinity)
     }
 
+    // MARK: - Habit Cell
+
+    /// Compact width: a standard `NavigationLink` row (system chevron + highlight).
+    /// Regular width: two cells share one list row, and two `NavigationLink`s in
+    /// one row fire together (verified on iPad sim, bt-0009). So wide cells are
+    /// plain `Button`s that drive `navigationDestination(item:)` instead, with
+    /// the chevron drawn in the label.
+    @ViewBuilder
+    private func habitCell(_ stat: HabitStatData) -> some View {
+        let habit = habits.first { $0.id == stat.id }
+
+        if horizontalSizeClass == .regular {
+            Button {
+                selectedHabit = habit
+            } label: {
+                habitStatRow(stat, showsChevron: true)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            NavigationLink(destination: HabitDetailDashboardView(habit: habit)) {
+                habitStatRow(stat, showsChevron: false)
+            }
+        }
+    }
+
     // MARK: - Habit Stat Row
 
-    private func habitStatRow(_ stat: HabitStatData) -> some View {
+    private func habitStatRow(_ stat: HabitStatData, showsChevron: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: stat.icon)
@@ -124,6 +153,12 @@ struct HabitDashboardView: View {
                 Text("\(stat.completionRate)%")
                     .font(.system(.subheadline, design: .rounded, weight: .semibold))
                     .foregroundStyle(.secondary)
+
+                if showsChevron {
+                    Image(systemName: "chevron.forward")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             // Progress bar

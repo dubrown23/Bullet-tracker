@@ -24,6 +24,7 @@
 		772F012D2F91152400AA7F11 /* EditNoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772F012C2F91143D00AA7F11 /* EditNoteView.swift */; };
 		774023302FB60DD80036690B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7740232E2FB60DD80036690B /* Assets.xcassets */; };
 		774843FF2EB2D27A007F3B9B /* HabitDataRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */; };
+		77A9E554308D03FF000C0F07 /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77A9E553308D03FF000C0F07 /* AdaptiveLayout.swift */; };
 		77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535962DD62DAE008BBCD8 /* BackupManager.swift */; };
 		77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */; };
 		77D9A51F2F294BBB0019C64C /* HabitDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A51E2F294BBB0019C64C /* HabitDashboardView.swift */; };
@@ -101,6 +102,7 @@
 		7783B25B2DD2894B0008E0F3 /* Bullet Tracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Bullet Tracker.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7783B26D2DD2894D0008E0F3 /* Bullet TrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Bullet TrackerTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7783B2772DD2894D0008E0F3 /* Bullet TrackerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Bullet TrackerUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		77A9E553308D03FF000C0F07 /* AdaptiveLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveLayout.swift; sourceTree = "<group>"; };
 		77B535962DD62DAE008BBCD8 /* BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManager.swift; sourceTree = "<group>"; };
 		77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRestoreViewModel.swift; sourceTree = "<group>"; };
 		77D9A51E2F294BBB0019C64C /* HabitDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitDashboardView.swift; sourceTree = "<group>"; };
@@ -226,6 +228,7 @@
 				77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */,
 				77DB37B32DEBFBB4004E2ED9 /* Constants.swift */,
 				77DB37B22DEBFBB4004E2ED9 /* Color+Hex.swift */,
+				77A9E553308D03FF000C0F07 /* AdaptiveLayout.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -457,6 +460,7 @@
 				772F012D2F91152400AA7F11 /* EditNoteView.swift in Sources */,
 				77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */,
 				77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */,
+				77A9E554308D03FF000C0F07 /* AdaptiveLayout.swift in Sources */,
 				77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */,
 				77D9A5312F2C03AA0019C64C /* JournalExportView.swift in Sources */,
 				77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */,

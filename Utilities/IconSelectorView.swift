@@ -81,7 +81,9 @@ struct IconSelectorView: View {
         return Self.allIcons.filter { $0.localizedCaseInsensitiveContains(searchText) }
     }
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 6)
+    /// Adaptive columns: as many 44pt cells as fit the current width, so the
+    /// grid fills a folded phone, an unfolded Duo and an iPad alike (bt-0009).
+    private let columns = [GridItem(.adaptive(minimum: 44), spacing: 12)]
 
     // MARK: - Body
 

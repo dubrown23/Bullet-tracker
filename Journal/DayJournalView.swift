@@ -27,14 +27,18 @@ struct DayJournalView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Date selector (custom — keep as-is, works well)
+                // Date selector (custom header; bt-0010 moves it onto glass)
                 dateSelector
-
-                // Quick add note bar
-                quickAddNoteBar
 
                 // Main content
                 List {
+                    // Quick add note — a list row, Reminders-style, so it gets
+                    // the system insets and sits inside the grouped list instead
+                    // of straddling the header seam (bt-0009).
+                    Section {
+                        quickAddNoteRow
+                    }
+
                     // Binary habits (compact completed icons)
                     if !viewModel.binaryHabits.isEmpty {
                         Section("Completed") {
@@ -209,12 +213,14 @@ struct DayJournalView: View {
 
     private var calendar: Calendar { Calendar.current }
 
-    // MARK: - Quick Add Note Bar
+    // MARK: - Quick Add Note Row
 
-    private var quickAddNoteBar: some View {
+    private var quickAddNoteRow: some View {
         HStack(spacing: 12) {
-            TextField("Add a note...", text: $newNoteText)
-                .textFieldStyle(.plain)
+            Image(systemName: "square.and.pencil")
+                .foregroundStyle(.secondary)
+
+            TextField("Add a note…", text: $newNoteText)
                 .focused($isNoteFieldFocused)
                 .submitLabel(.done)
                 .onSubmit {
@@ -224,14 +230,12 @@ struct DayJournalView: View {
             if !newNoteText.isEmpty {
                 Button(action: saveQuickNote) {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 24))
+                        .font(.title2)
                         .foregroundStyle(Color.accentColor)
                 }
+                .buttonStyle(.borderless)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color(.systemBackground))
     }
 
     private func saveQuickNote() {
@@ -275,7 +279,7 @@ struct DayCell: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(isSelected ? .white.opacity(0.9) : .secondary)
             }
-            .frame(width: 44, height: 56)
+            .frame(minWidth: 44, minHeight: 56)
             .background(backgroundView)
         }
         .buttonStyle(.plain)
