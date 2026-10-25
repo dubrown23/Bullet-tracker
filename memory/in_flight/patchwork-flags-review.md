@@ -2,7 +2,7 @@
 topic: Bullet Tracker fresh-eyes architecture review — 9 patchwork flags
 started: 2026-05-12
 closed: 2026-05-13
-status: closed — all 9 flags addressed; file kept as historical snapshot of the pre-bt-0001 architecture audit
+status: done — all 9 flags addressed; file kept as historical snapshot of the pre-bt-0001 architecture audit
 resolution_map: |
   #1 three doors into the database — resolved by bt-0002 (Phase 1 SwiftData engine swap, dropped CoreDataManager + HabitDataRepository + HabitCalculationService trio)
   #2 details JSON blob — resolved by bt-0003 Wave 2 (typed HabitEntryDetails) + 3.5 (computed property over String column, bt-0004-class SwiftData rejection)
