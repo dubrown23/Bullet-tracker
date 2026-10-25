@@ -15,6 +15,11 @@ struct TodayView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.calendar) private var calendar
+
+    /// Same base as the row's cells so the day letters line up with the squares.
+    @ScaledMetric(relativeTo: .body) private var weekCellBase: CGFloat = 24
 
     @State private var viewModel = TodayViewModel()
     /// Pending delete, confirmed by the alert below. Held here (not in the
@@ -41,6 +46,17 @@ struct TodayView: View {
                     }
                 } else {
                     Section {
+                        // Day letters above the grid columns. A clear row with
+                        // the same insets as the habit rows, so the letters sit
+                        // exactly over the squares.
+                        if !dynamicTypeSize.isAccessibilitySize {
+                            weekdayHeader
+                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .accessibilityHidden(true)
+                        }
+
                         // One habit per row folded, two per row unfolded / iPad
                         // (see `PairedRows`, bt-0009).
                         PairedRows(items: trackableHabits) { habit in
@@ -107,6 +123,52 @@ struct TodayView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Weekday header
+
+    private var weekMetrics: WeekGridMetrics {
+        WeekGridMetrics(scaledBase: weekCellBase, isRegularWidth: horizontalSizeClass == .regular)
+    }
+
+    /// Narrow weekday letters for the 7 days ending on the selected day.
+    private var weekdayLetters: [String] {
+        let end = calendar.startOfDay(for: viewModel.selectedDate)
+        return (0..<WeekGridMetrics.dayCount).reversed().compactMap { offset in
+            calendar.date(byAdding: .day, value: -offset, to: end)
+        }.map { $0.formatted(.dateTime.weekday(.narrow)) }
+    }
+
+    private var weekdayLetterStrip: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(weekdayLetters.enumerated()), id: \.offset) { _, letter in
+                Text(letter)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: weekMetrics.slotWidth)
+            }
+        }
+        .fixedSize()
+    }
+
+    /// Mirrors `PairedRows` geometry in regular width (two columns, 16pt gap,
+    /// divider) so each column's letters line up with its own grid.
+    @ViewBuilder
+    private var weekdayHeader: some View {
+        if horizontalSizeClass == .regular {
+            HStack(spacing: 16) {
+                weekdayLetterStrip
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                Divider().hidden()
+                weekdayLetterStrip
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .padding(.bottom, 2)
+        } else {
+            weekdayLetterStrip
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.bottom, 2)
         }
     }
 
