@@ -16,6 +16,7 @@ struct HabitDashboardView: View {
     @State private var selectedHabit: Habit?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var tileSize: CGFloat = 28
 
     var body: some View {
         NavigationStack {
@@ -61,16 +62,16 @@ struct HabitDashboardView: View {
                                 icon: "trophy.fill",
                                 value: "\(viewModel.bestStreak)",
                                 label: "Best Streak",
-                                color: .orange
+                                color: AppTheme.partial
                             )
                             summaryStatView(
                                 icon: "flame.fill",
                                 value: "\(viewModel.currentStreak)",
                                 label: "Current",
-                                color: .green
+                                color: AppTheme.accent
                             )
                         }
-                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                        .padding(.vertical, 4)
                     }
 
                     // Per-habit breakdown
@@ -149,13 +150,7 @@ struct HabitDashboardView: View {
     private func habitStatRow(_ stat: HabitStatData, showsChevron: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Image(systemName: stat.icon)
-                    .font(.body)
-                    .foregroundStyle(Color(hex: stat.color))
-                    .frame(width: 28, height: 28)
-                    .background(Color(hex: stat.color).opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .accessibilityHidden(true)
+                HabitIconTile(systemImage: stat.icon, colorHex: stat.color, size: tileSize)
 
                 Text(stat.name)
                     .font(.body)

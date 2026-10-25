@@ -43,7 +43,9 @@ struct WeekGridMetrics {
         let base = min(scaledBase, 32)
         let size = isRegularWidth ? base * 1.2 : base
         cellSize = size
-        slotWidth = size + (isRegularWidth ? 8 : 6)
+        // Compact: 4pt gaps keep a 7-day strip at 196pt so the habit name
+        // keeps ~84pt beside it on a folded phone with default row insets.
+        slotWidth = size + (isRegularWidth ? 8 : 4)
     }
 
     var stripWidth: CGFloat { slotWidth * CGFloat(Self.dayCount) }
@@ -228,7 +230,7 @@ struct TodayHabitRowView: View {
                 if streak > 0 {
                     HStack(spacing: 2) {
                         Image(systemName: "flame.fill")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AppTheme.accent)
                         Text("\(streak)")
                     }
                     .font(.system(.caption, design: .rounded, weight: .semibold))
@@ -279,37 +281,25 @@ struct TodayHabitRowView: View {
         .accessibilityAddTraits(isSelected ? [.isToggle, .isSelected] : .isToggle)
     }
 
+    /// Shared `DaySquare` (bt-0015): same square family as the Journal strip.
     @ViewBuilder
     private func dayCell(state dayState: Int, isSelected: Bool, isCleanAvoidanceWin: Bool) -> some View {
         let size = metrics.cellSize
-        let shape = RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
 
         if isCleanAvoidanceWin {
-            shape
-                .fill(habitColor)
-                .frame(width: size, height: size)
+            DaySquare(size: size, style: .filled(habitColor))
         } else if dayState != 0 {
-            shape
-                .fill(color(forState: dayState))
-                .frame(width: size, height: size)
-                .overlay {
-                    if isSelected {
-                        Image(systemName: symbol(forState: dayState))
-                            .font(.system(size: size * 0.55, weight: .bold))
-                            .foregroundStyle(AppTheme.readableForeground(onHex: hex(forState: dayState)))
-                    }
+            DaySquare(size: size, style: .filled(color(forState: dayState))) {
+                if isSelected {
+                    Image(systemName: symbol(forState: dayState))
+                        .font(.system(size: size * 0.55, weight: .bold))
+                        .foregroundStyle(AppTheme.readableForeground(onHex: hex(forState: dayState)))
                 }
+            }
         } else if isSelected {
-            shape
-                .strokeBorder(habitColor, lineWidth: 2)
-                .frame(width: size, height: size)
+            DaySquare(size: size, style: .outlined(habitColor))
         } else {
-            // Empty day: a light fill plus a hairline edge so the slot reads in
-            // dark mode too (a bare systemGray5 fill was ~1.2:1 on the card).
-            shape
-                .fill(Color(.systemGray5))
-                .overlay(shape.strokeBorder(Color(.systemGray3), lineWidth: 1))
-                .frame(width: size, height: size)
+            DaySquare(size: size, style: .empty)
         }
     }
 

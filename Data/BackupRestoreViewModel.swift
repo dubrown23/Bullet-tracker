@@ -372,7 +372,7 @@ struct BackupRestoreView: View {
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
                 }
-                .foregroundStyle(.orange)
+                .foregroundStyle(AppTheme.partial)
             }
         }
     }

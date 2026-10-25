@@ -221,7 +221,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 } icon: {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(AppTheme.success)
                 }
             }
         }

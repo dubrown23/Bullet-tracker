@@ -64,9 +64,9 @@ extension CompletionStyle {
 
     var iconColor: Color {
         switch self {
-        case .simple: return .green
-        case .multiState: return .orange
-        case .avoidance: return .red
+        case .simple: return AppTheme.success
+        case .multiState: return AppTheme.partial
+        case .avoidance: return AppTheme.failed
         }
     }
 }
@@ -118,12 +118,7 @@ struct HabitFormView: View {
             } label: {
                 LabeledContent("Icon") {
                     HStack(spacing: 8) {
-                        Image(systemName: selectedIcon)
-                            .font(.title3)
-                            .foregroundStyle(Color(hex: selectedColor))
-                            .frame(width: iconTileSize, height: iconTileSize)
-                            .background(Color(hex: selectedColor).opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        HabitIconTile(systemImage: selectedIcon, colorHex: selectedColor, size: iconTileSize, font: .title3)
                         Image(systemName: "chevron.forward")
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.secondary)
@@ -251,11 +246,11 @@ struct HabitFormView: View {
             if completionStyle == .multiState {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Success — Full completion", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(AppTheme.success)
                     Label("Partial — Did some but not all", systemImage: "circle.lefthalf.filled")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(AppTheme.partial)
                     Label("Tried — Attempted but struggled", systemImage: "xmark.circle.fill")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(AppTheme.failed)
                 }
                 .font(.caption)
             }

@@ -213,7 +213,7 @@ struct ContributionHeatmapView: View {
                 HStack(spacing: cellSpacing) {
                     ForEach(0..<group.columns.count, id: \.self) { col in
                         if let date = group.columns[col][row] {
-                            RoundedRectangle(cornerRadius: 2)
+                            AppShape.rounded(cellSize)
                                 .fill(cellColor(for: date))
                                 .frame(width: cellSize, height: cellSize)
                         } else {

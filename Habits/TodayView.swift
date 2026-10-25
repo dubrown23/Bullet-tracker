@@ -36,8 +36,9 @@ struct TodayView: View {
     /// the pinned letters must use the same rule to line up with the squares.
     @State private var listSafeAreaInsets = EdgeInsets()
 
-    private var headerLeadingPadding: CGFloat { max(20 - listSafeAreaInsets.leading, 0) + 16 }
-    private var headerTrailingPadding: CGFloat { max(20 - listSafeAreaInsets.trailing, 0) + 16 }
+    /// Card margin + the default inset-grouped row inset (20 on iOS).
+    private var headerLeadingPadding: CGFloat { max(20 - listSafeAreaInsets.leading, 0) + 20 }
+    private var headerTrailingPadding: CGFloat { max(20 - listSafeAreaInsets.trailing, 0) + 20 }
 
     private var trackableHabits: [Habit] { viewModel.trackableHabits(from: habits) }
 
@@ -60,7 +61,6 @@ struct TodayView: View {
                                 onRequestDelete: { habitToDelete = habit }
                             )
                         }
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     }
                 }
             }
@@ -151,23 +151,12 @@ struct TodayView: View {
         WeekGridMetrics(scaledBase: weekCellBase, isRegularWidth: horizontalSizeClass == .regular)
     }
 
-    /// Narrow weekday letters for the visible window (same rule as the rows).
-    private var weekdayLetters: [String] {
-        WeekGridMetrics.windowDays(for: viewModel.selectedDate, calendar: calendar)
-            .map { $0.formatted(.dateTime.weekday(.narrow)) }
-    }
-
+    /// Shared letters component over the visible window (same rule as the rows).
     private var weekdayLetterStrip: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(weekdayLetters.enumerated()), id: \.offset) { _, letter in
-                Text(letter)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: weekMetrics.slotWidth)
-            }
-        }
-        .fixedSize()
-        .accessibilityHidden(true) // each square already speaks its weekday
+        WeekdayLetterStrip(
+            days: WeekGridMetrics.windowDays(for: viewModel.selectedDate, calendar: calendar),
+            slotWidth: weekMetrics.slotWidth
+        )
     }
 
     /// Mirrors `PairedRows` geometry in regular width (two columns, 16pt gap,

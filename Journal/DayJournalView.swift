@@ -96,7 +96,7 @@ struct DayJournalView: View {
                 dateSelector
             }
             .navigationTitle("Journal")
-            .navigationBarTitleDisplayMode(.inline)
+            .keepNavigationBarVisible() // large title like the other tabs; never minimises
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -154,7 +154,6 @@ struct DayJournalView: View {
                 }
             }
             .padding(.vertical, 4)
-            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         }
     }
 
@@ -197,37 +196,38 @@ struct DayJournalView: View {
             }
             .padding(.horizontal, 8)
 
-            // Horizontal day slider
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(viewModel.visibleDays, id: \.self) { date in
-                            DayCell(
-                                date: date,
-                                isSelected: Calendar.current.isDate(date, inSameDayAs: viewModel.selectedDate),
-                                isToday: Calendar.current.isDateInToday(date),
-                                onTap: {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        viewModel.selectDate(date)
-                                    }
-                                }
-                            )
-                            .id(date)
+            // One week of day squares with the weekday letters above — the same
+            // square family as the Today grid (bt-0015 rule 3). The window is
+            // anchored to today and the week arrows page it.
+            let days = WeekGridMetrics.windowDays(for: viewModel.selectedDate, calendar: calendar)
+            VStack(spacing: 4) {
+                HStack(spacing: 0) {
+                    ForEach(days, id: \.self) { day in
+                        Text(day.formatted(.dateTime.weekday(.narrow)))
+                            .sectionLabel()
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .accessibilityHidden(true)
+
+                HStack(spacing: 0) {
+                    ForEach(days, id: \.self) { day in
+                        JournalDayButton(
+                            date: day,
+                            isSelected: calendar.isDate(day, inSameDayAs: viewModel.selectedDate),
+                            isToday: calendar.isDateInToday(day)
+                        ) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                viewModel.selectDate(day)
+                            }
                         }
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, 12)
-                }
-                .onChange(of: viewModel.selectedDate) { _, newDate in
-                    withAnimation {
-                        proxy.scrollTo(calendar.startOfDay(for: newDate), anchor: .center)
-                    }
-                }
-                .onAppear {
-                    proxy.scrollTo(calendar.startOfDay(for: viewModel.selectedDate), anchor: .center)
                 }
             }
+            .padding(.horizontal, 12)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
     }
 
     private var calendar: Calendar { Calendar.current }
@@ -266,46 +266,49 @@ struct DayJournalView: View {
     }
 }
 
-// MARK: - Day Cell Component
+// MARK: - Journal Day Button
 
-struct DayCell: View {
+/// A day in the Journal strip: the shared `DaySquare` with the day number
+/// inside. Selected = accent fill, today = accent outline, else empty.
+struct JournalDayButton: View {
     let date: Date
     let isSelected: Bool
     let isToday: Bool
     let onTap: () -> Void
 
-    private var dayNumber: String {
-        DateFormatters.dayNumber.string(from: date)
-    }
+    /// Scales with text size, capped so seven still fit a folded phone.
+    @ScaledMetric(relativeTo: .callout) private var scaledSize: CGFloat = 36
+    private var size: CGFloat { min(scaledSize, 44) }
 
-    private var dayOfWeek: String {
-        DateFormatters.shortDayOfWeek.string(from: date).prefix(3).uppercased()
-    }
-
-    private var isFuture: Bool {
-        date > Date()
-    }
+    private var isFuture: Bool { date > Date() }
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 4) {
-                Text(dayNumber)
-                    .font(.title3.weight(isSelected ? .bold : .semibold))
+            DaySquare(size: size, style: style) {
+                Text(date.formatted(.dateTime.day()))
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(textColor)
-
-                Text(dayOfWeek)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(isSelected ? selectedForeground.opacity(0.85) : .secondary)
             }
-            .frame(minWidth: 44, minHeight: 56)
-            .background(backgroundView)
+            .frame(minHeight: 44) // comfortable tap target
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isFuture)
-        .opacity(isFuture ? 0.4 : 1.0)
-        // Label replaces the "24, SAT" text; the Button itself is the element.
+        .opacity(isFuture ? 0.35 : 1)
         .accessibilityLabel(accessibilityDateLabel)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var style: DaySquare<Text>.Style {
+        if isSelected { return .filled(AppTheme.accent) }
+        if isToday { return .outlined(AppTheme.accent) }
+        return .empty
+    }
+
+    private var textColor: Color {
+        if isSelected { return AppTheme.readableForeground(onHex: AppTheme.accentHex) }
+        if isToday { return AppTheme.accent }
+        return .primary
     }
 
     /// "Saturday, October 24" (+ "Today" when it is).
@@ -313,58 +316,19 @@ struct DayCell: View {
         let base = date.formatted(.dateTime.weekday(.wide).month(.wide).day())
         return isToday ? "\(base), Today" : base
     }
-
-    /// Black or white, whichever reads on the accent fill (contrast audit:
-    /// white on the orange accent is ~2.3:1).
-    private var selectedForeground: Color {
-        AppTheme.readableForeground(onHex: AppTheme.accentHex)
-    }
-
-    private var textColor: Color {
-        if isSelected {
-            return selectedForeground
-        } else if isToday {
-            return .accentColor
-        } else {
-            return .primary
-        }
-    }
-
-    @ViewBuilder
-    private var backgroundView: some View {
-        if isSelected {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.accentColor)
-        } else if isToday {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.accentColor, lineWidth: 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.accentColor.opacity(0.1))
-                )
-        } else {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(.secondarySystemBackground))
-        }
-    }
 }
 
 // MARK: - Data Habit Row (for habits with captured data)
 
 struct DataHabitRow: View {
     let entry: JournalHabitEntry
+    @ScaledMetric(relativeTo: .body) private var tileSize: CGFloat = 28
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Header
             HStack(spacing: 10) {
-                Image(systemName: entry.icon)
-                    .font(.body)
-                    .foregroundStyle(Color(hex: entry.color))
-                    .frame(width: 28, height: 28)
-                    .background(Color(hex: entry.color).opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .accessibilityHidden(true)
+                HabitIconTile(systemImage: entry.icon, colorHex: entry.color, size: tileSize)
 
                 Text(entry.habitName)
                     .font(.body)
@@ -396,7 +360,7 @@ struct DataHabitRow: View {
                         if let intensity = details.intensity {
                             Label("\(intensity)/5", systemImage: "flame.fill")
                                 .font(.subheadline)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(AppTheme.accent)
                         }
                     }
 

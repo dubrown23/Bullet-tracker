@@ -13,6 +13,7 @@ struct HabitDetailDashboardView: View {
     let habit: Habit?
 
     @State private var viewModel = HabitDetailViewModel()
+    @ScaledMetric(relativeTo: .title2) private var tileSize: CGFloat = 44
     @State private var rangeEnd: Date = Calendar.current.startOfDay(for: Date())
     @State private var rangeStart: Date = Calendar.current.date(
         byAdding: .day, value: -83,
@@ -48,13 +49,12 @@ struct HabitDetailDashboardView: View {
                 List {
                     Section {
                         HStack(spacing: 14) {
-                            Image(systemName: habit.icon ?? "circle")
-                                .font(.title2)
-                                .foregroundStyle(habitColor)
-                                .frame(width: 44, height: 44)
-                                .background(habitColor.opacity(0.12))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .accessibilityHidden(true)
+                            HabitIconTile(
+                                systemImage: habit.icon ?? "circle",
+                                colorHex: habit.color ?? AppTheme.accentHex,
+                                size: tileSize,
+                                font: .title2
+                            )
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(habit.name ?? "")
@@ -89,7 +89,7 @@ struct HabitDetailDashboardView: View {
                             }
                         } icon: {
                             Image(systemName: "flame.fill")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(AppTheme.accent)
                         }
 
                         Label {
@@ -101,7 +101,7 @@ struct HabitDetailDashboardView: View {
                             }
                         } icon: {
                             Image(systemName: "trophy.fill")
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(AppTheme.partial)
                         }
 
                         Label {
@@ -113,7 +113,7 @@ struct HabitDetailDashboardView: View {
                             }
                         } icon: {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                                .foregroundStyle(AppTheme.success)
                         }
                     }
 

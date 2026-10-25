@@ -44,8 +44,6 @@ struct HabitCompletionDetailView: View {
 
     private var habitColorHex: String { habit.color ?? AppTheme.accentHex }
     private var habitColor: Color { Color(hex: habitColorHex) }
-    /// Text colour on a chip filled with the habit colour (contrast audit).
-    private var onHabitColor: Color { AppTheme.readableForeground(onHex: habitColorHex) }
 
     private var useMultipleStates: Bool {
         habit.completionStyle == .multiState
@@ -85,13 +83,13 @@ struct HabitCompletionDetailView: View {
                     Section("How'd it go?") {
                         Picker("State", selection: $completionState) {
                             Label("Success", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                                .foregroundStyle(AppTheme.success)
                                 .tag(1)
                             Label("Partial", systemImage: "circle.lefthalf.filled")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(AppTheme.partial)
                                 .tag(2)
                             Label("Tried", systemImage: "xmark.circle.fill")
-                                .foregroundStyle(.red)
+                                .foregroundStyle(AppTheme.failed)
                                 .tag(3)
                         }
                         .pickerStyle(.inline)
@@ -144,51 +142,34 @@ struct HabitCompletionDetailView: View {
 
     @ViewBuilder
     private var workoutSection: some View {
+        // System chips: toggles in the button style, capsule-shaped, tinted
+        // with the habit colour (bt-0015 rule 4). The system handles the
+        // on/off fill, label contrast, press feedback and VoiceOver.
         Section("Workout Type") {
             FlowLayout(spacing: 8) {
                 ForEach(workoutTypes, id: \.self) { type in
-                    let isSelected = selectedWorkoutTypes.contains(type)
-                    Button(action: {
-                        if isSelected { selectedWorkoutTypes.remove(type) }
-                        else { selectedWorkoutTypes.insert(type) }
-                    }) {
-                        Text(type)
-                            .font(.subheadline)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(isSelected ? habitColor : Color(.systemGray5))
-                            .foregroundStyle(isSelected ? onHabitColor : .primary)
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                    Toggle(type, isOn: workoutTypeBinding(type))
+                        .toggleStyle(.button)
+                        .buttonStyle(.bordered) // off = outlined capsule, on = tint fill
+                        .buttonBorderShape(.capsule)
+                        .tint(habitColor)
                 }
             }
-            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+            .padding(.vertical, 4)
         }
 
         Section("Duration") {
-            // Wraps like the workout-type chips. The old horizontal ScrollView
-            // hid "75 min" / "90 min" off-screen at 466pt with no scroll cue
-            // (seen on the Duo sim, bt-0009).
             FlowLayout(spacing: 8) {
                 ForEach(durationOptions, id: \.self) { mins in
-                    let isSelected = duration == mins
-                    Button(action: { duration = mins }) {
-                        Text("\(mins) min")
-                            .font(.subheadline.weight(isSelected ? .semibold : .regular))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(isSelected ? habitColor : Color(.systemGray5))
-                            .foregroundStyle(isSelected ? onHabitColor : .primary)
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(mins) minutes")
-                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                    Toggle("\(mins) min", isOn: durationBinding(mins))
+                        .toggleStyle(.button)
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .tint(habitColor)
+                        .accessibilityLabel("\(mins) minutes")
                 }
             }
-            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+            .padding(.vertical, 4)
         }
 
         Section("Intensity") {
@@ -202,6 +183,23 @@ struct HabitCompletionDetailView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
         }
+    }
+
+    private func workoutTypeBinding(_ type: String) -> Binding<Bool> {
+        Binding(
+            get: { selectedWorkoutTypes.contains(type) },
+            set: { isOn in
+                if isOn { selectedWorkoutTypes.insert(type) } else { selectedWorkoutTypes.remove(type) }
+            }
+        )
+    }
+
+    /// Single-select: turning one duration on clears the others.
+    private func durationBinding(_ mins: String) -> Binding<Bool> {
+        Binding(
+            get: { duration == mins },
+            set: { isOn in duration = isOn ? mins : "" }
+        )
     }
 
     // MARK: - Reading
