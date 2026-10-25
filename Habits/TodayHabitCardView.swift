@@ -43,6 +43,20 @@ struct WeekGridMetrics {
     }
 
     var stripWidth: CGFloat { slotWidth * CGFloat(Self.dayCount) }
+
+    /// The 7 days to show for a selected day. The window stays anchored to
+    /// today (today = rightmost square) and the arrows move the highlight
+    /// across it; only when the selection leaves the last 7 days does the
+    /// window slide so the selected day is the rightmost square.
+    static func windowDays(for selected: Date, calendar: Calendar) -> [Date] {
+        let today = calendar.startOfDay(for: Date())
+        let selectedDay = calendar.startOfDay(for: selected)
+        let daysBack = calendar.dateComponents([.day], from: selectedDay, to: today).day ?? 0
+        let end = (0..<dayCount).contains(daysBack) ? today : selectedDay
+        return (0..<dayCount).reversed().compactMap {
+            calendar.date(byAdding: .day, value: -$0, to: end)
+        }
+    }
 }
 
 // MARK: - Row
@@ -50,7 +64,7 @@ struct WeekGridMetrics {
 struct TodayHabitRowView: View {
     let habit: Habit
     /// The selected day (today, or wherever the toolbar arrows went). The
-    /// grid shows the 7 days ending here; this day is the outlined cell.
+    /// grid stays anchored to today; this day is the highlighted cell.
     let date: Date
     let streak: Int
     /// Asks the owner (TodayView) to confirm + delete. The confirmation alert
@@ -83,12 +97,9 @@ struct TodayHabitRowView: View {
 
     // MARK: - Data
 
-    /// The seven days ending on the selected day, oldest first.
+    /// The seven visible days, oldest first (see `WeekGridMetrics.windowDays`).
     private var weekDays: [Date] {
-        let end = calendar.startOfDay(for: date)
-        return (0..<WeekGridMetrics.dayCount).reversed().compactMap {
-            calendar.date(byAdding: .day, value: -$0, to: end)
-        }
+        WeekGridMetrics.windowDays(for: date, calendar: calendar)
     }
 
     /// One indexed range fetch for the visible window; every per-day read

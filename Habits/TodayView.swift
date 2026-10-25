@@ -132,12 +132,10 @@ struct TodayView: View {
         WeekGridMetrics(scaledBase: weekCellBase, isRegularWidth: horizontalSizeClass == .regular)
     }
 
-    /// Narrow weekday letters for the 7 days ending on the selected day.
+    /// Narrow weekday letters for the visible window (same rule as the rows).
     private var weekdayLetters: [String] {
-        let end = calendar.startOfDay(for: viewModel.selectedDate)
-        return (0..<WeekGridMetrics.dayCount).reversed().compactMap { offset in
-            calendar.date(byAdding: .day, value: -offset, to: end)
-        }.map { $0.formatted(.dateTime.weekday(.narrow)) }
+        WeekGridMetrics.windowDays(for: viewModel.selectedDate, calendar: calendar)
+            .map { $0.formatted(.dateTime.weekday(.narrow)) }
     }
 
     private var weekdayLetterStrip: some View {
