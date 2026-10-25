@@ -109,6 +109,38 @@ enum HabitFrequencyHelper {
     }
 }
 
+// MARK: - Win Rule (bt-0014)
+//
+// The ONE definition of "this tracked day counts" — used by the Today header,
+// streaks, completion rates, the heatmap and the PDF summary. Before this,
+// every site checked "an entry exists with state ≠ notDone", which for an
+// avoidance habit means *you slipped*, so slipping counted as completing.
+//
+//   simple      → checked
+//   multiState  → success or partial ("Tried" is an honest miss, not a win)
+//   avoidance   → no slip that day; today counts as clean so far; future days
+//                 can't be wins yet
+
+enum HabitWinRule {
+    static func isWin(style: CompletionStyle, state: CompletionState?, isFuture: Bool) -> Bool {
+        switch style {
+        case .simple:
+            return state != nil && state != .notDone
+        case .multiState:
+            return state == .success || state == .partial
+        case .avoidance:
+            return !isFuture && (state == nil || state == .notDone)
+        }
+    }
+
+    /// Whether the entry (or its absence) means the person *logged* something
+    /// that day — a check, a partial, a miss, or a slip. Drives row visuals,
+    /// not scores.
+    static func isLogged(state: CompletionState?) -> Bool {
+        state != nil && state != .notDone
+    }
+}
+
 // MARK: - Habit Calculation Service (pure — no persistence)
 
 final class HabitCalculationService {
@@ -152,13 +184,18 @@ final class HabitCalculationService {
         return count
     }
 
-    // MARK: - Completion Checking (Entry-Aware)
+    // MARK: - Win Checking (Entry-Aware)
 
-    /// Checks completion from a pre-fetched entries dictionary — O(1) lookup
-    func isCompleted(in entries: [Date: HabitEntry], on date: Date) -> Bool {
+    /// Whether `date` counts as a win for `habit`, per `HabitWinRule` — O(1)
+    /// lookup in a pre-fetched entries dictionary.
+    func isWin(for habit: Habit, in entries: [Date: HabitEntry], on date: Date) -> Bool {
         let dayStart = calendar.startOfDay(for: date)
-        guard let entry = entries[dayStart] else { return false }
-        return entry.effectiveCompletionState != .notDone
+        let isFuture = dayStart > calendar.startOfDay(for: Date())
+        return HabitWinRule.isWin(
+            style: habit.completionStyle,
+            state: entries[dayStart]?.effectiveCompletionState,
+            isFuture: isFuture
+        )
     }
 
     // MARK: - Streak Calculations (Entry-Aware)
@@ -176,7 +213,7 @@ final class HabitCalculationService {
                 continue
             }
 
-            if isCompleted(in: entries, on: currentDate) {
+            if isWin(for: habit, in: entries, on: currentDate) {
                 streak += 1
                 guard let previousDay = calendar.date(byAdding: .day, value: -1, to: currentDate) else { break }
                 currentDate = previousDay
@@ -196,7 +233,7 @@ final class HabitCalculationService {
 
         while currentDate <= endDate {
             if shouldTrackHabit(habit, on: currentDate) {
-                if isCompleted(in: entries, on: currentDate) {
+                if isWin(for: habit, in: entries, on: currentDate) {
                     currentStreak += 1
                     bestStreak = max(bestStreak, currentStreak)
                 } else {
@@ -226,7 +263,7 @@ final class HabitCalculationService {
                 if shouldTrackHabit(habit, on: currentDate) {
                     anyTracked = true
                     let entries = allEntries[habit.id ?? UUID()] ?? [:]
-                    if !isCompleted(in: entries, on: currentDate) {
+                    if !isWin(for: habit, in: entries, on: currentDate) {
                         allCompleted = false
                         break
                     }
@@ -256,7 +293,7 @@ final class HabitCalculationService {
         var currentDate = startDate
 
         while currentDate <= endDate {
-            if shouldTrackHabit(habit, on: currentDate) && isCompleted(in: entries, on: currentDate) {
+            if shouldTrackHabit(habit, on: currentDate) && isWin(for: habit, in: entries, on: currentDate) {
                 completed += 1
             }
             guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
@@ -291,7 +328,7 @@ final class HabitCalculationService {
             var completedDays = 0
             var currentDate = startDate
             while currentDate <= endDate {
-                if shouldTrackHabit(habit, on: currentDate) && isCompleted(in: entriesForHabit, on: currentDate) {
+                if shouldTrackHabit(habit, on: currentDate) && isWin(for: habit, in: entriesForHabit, on: currentDate) {
                     completedDays += 1
                 }
                 guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
@@ -336,9 +373,8 @@ final class HabitCalculationService {
             for habit in habits {
                 if shouldTrackHabit(habit, on: currentDate) {
                     total += 1
-                    if let habitId = habit.id,
-                       let entry = allEntries[habitId]?[currentDate],
-                       entry.effectiveCompletionState != .notDone {
+                    let entries = allEntries[habit.id ?? UUID()] ?? [:]
+                    if isWin(for: habit, in: entries, on: currentDate) {
                         completed += 1
                     }
                 }

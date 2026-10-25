@@ -204,6 +204,49 @@ struct CompletionStyleTests {
     }
 }
 
+// MARK: - Win Rule Tests (bt-0014)
+//
+// The single definition of "this day counts", shared by the Today header,
+// streaks, completion rates, heatmap and PDF summary.
+
+struct HabitWinRuleTests {
+    @Test func simpleHabitWinsWhenChecked() {
+        #expect(HabitWinRule.isWin(style: .simple, state: .success, isFuture: false))
+        #expect(!HabitWinRule.isWin(style: .simple, state: nil, isFuture: false))
+        #expect(!HabitWinRule.isWin(style: .simple, state: .notDone, isFuture: false))
+    }
+
+    @Test func multiStateSuccessAndPartialWinButTriedDoesNot() {
+        #expect(HabitWinRule.isWin(style: .multiState, state: .success, isFuture: false))
+        #expect(HabitWinRule.isWin(style: .multiState, state: .partial, isFuture: false))
+        #expect(!HabitWinRule.isWin(style: .multiState, state: .failure, isFuture: false))
+        #expect(!HabitWinRule.isWin(style: .multiState, state: nil, isFuture: false))
+    }
+
+    @Test func avoidanceWinsWhenNothingWasLogged() {
+        // No entry = didn't slip = a win (today counts as clean so far).
+        #expect(HabitWinRule.isWin(style: .avoidance, state: nil, isFuture: false))
+        #expect(HabitWinRule.isWin(style: .avoidance, state: .notDone, isFuture: false))
+    }
+
+    @Test func avoidanceSlipIsNotAWin() {
+        #expect(!HabitWinRule.isWin(style: .avoidance, state: .failure, isFuture: false))
+        // Legacy slips were stored as `.success`; still a slip.
+        #expect(!HabitWinRule.isWin(style: .avoidance, state: .success, isFuture: false))
+    }
+
+    @Test func avoidanceFutureDaysAreNotWinsYet() {
+        #expect(!HabitWinRule.isWin(style: .avoidance, state: nil, isFuture: true))
+    }
+
+    @Test func loggedMeansAnyNonEmptyState() {
+        #expect(!HabitWinRule.isLogged(state: nil))
+        #expect(!HabitWinRule.isLogged(state: .notDone))
+        #expect(HabitWinRule.isLogged(state: .success))
+        #expect(HabitWinRule.isLogged(state: .failure))
+    }
+}
+
 // MARK: - HabitCompletionState Tests
 
 struct HabitCompletionStateTests {

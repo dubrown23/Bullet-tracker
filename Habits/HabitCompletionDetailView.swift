@@ -79,8 +79,9 @@ struct HabitCompletionDetailView: View {
                     }
                 }
 
-                // Completion state
-                if useMultipleStates {
+                // Completion state — only offered once the day is actually
+                // logged. Done never changes the day's state on its own (bt-0014).
+                if useMultipleStates && entryExists {
                     Section("How'd it go?") {
                         Picker("State", selection: $completionState) {
                             Label("Success", systemImage: "checkmark.circle.fill")
@@ -276,7 +277,11 @@ struct HabitCompletionDetailView: View {
 
     private func saveAndDismiss() {
         let details = buildDetails()
-        HabitStore.updateEntryDetails(for: habit, on: date, state: completionState, details: details, in: modelContext)
+        // Done saves the details and keeps whatever state the day already has.
+        // If nothing was logged yet, the entry is created as `.notDone` with
+        // the notes attached — the square is the only thing that marks a day.
+        let state = entryExists ? completionState : 0
+        HabitStore.updateEntryDetails(for: habit, on: date, state: state, details: details, in: modelContext)
         dismiss()
     }
 

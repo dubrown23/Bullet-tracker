@@ -4,6 +4,10 @@
 //
 //  Daily habit checklist using native iOS patterns.
 //
+//  bt-0014 layout: the header is fixed and only the habit rows scroll —
+//  the day summary lives in the navigation bar as a subtitle, the weekday
+//  letters are a `safeAreaBar` pinned under it, and the List holds habits only.
+//
 
 import SwiftUI
 import SwiftData
@@ -18,45 +22,34 @@ struct TodayView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.calendar) private var calendar
 
-    /// Same base as the row's cells so the day letters line up with the squares.
-    @ScaledMetric(relativeTo: .body) private var weekCellBase: CGFloat = 24
-
     @State private var viewModel = TodayViewModel()
     /// Pending delete, confirmed by the alert below. Held here (not in the
     /// row) so the alert survives the List tearing the swiped row down.
     @State private var habitToDelete: Habit?
 
-    /// Progress ring scales with the user's text size (Dynamic Type).
-    @ScaledMetric(relativeTo: .headline) private var ringSize: CGFloat = 44
+    /// Same base as the row's cells so the day letters line up with the squares.
+    @ScaledMetric(relativeTo: .body) private var weekCellBase: CGFloat = 24
+
+    /// The List's safe-area insets, read from its background. The inset-grouped
+    /// card margin is `max(20, safeAreaInset)` per side, so where a side already
+    /// has a safe-area inset (the Duo's toolbar rail) the card margin is 0 and
+    /// the pinned letters must use the same rule to line up with the squares.
+    @State private var listSafeAreaInsets = EdgeInsets()
+
+    private var headerLeadingPadding: CGFloat { max(20 - listSafeAreaInsets.leading, 0) + 16 }
+    private var headerTrailingPadding: CGFloat { max(20 - listSafeAreaInsets.trailing, 0) + 16 }
 
     private var trackableHabits: [Habit] { viewModel.trackableHabits(from: habits) }
 
     var body: some View {
         NavigationStack {
             List {
-                // Progress section
-                Section {
-                    progressRow
-                }
-
-                // Habits section
                 if trackableHabits.isEmpty {
                     Section {
                         emptyContent
                     }
                 } else {
                     Section {
-                        // Day letters above the grid columns. A clear row with
-                        // the same insets as the habit rows, so the letters sit
-                        // exactly over the squares.
-                        if !dynamicTypeSize.isAccessibilitySize {
-                            weekdayHeader
-                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                                .accessibilityHidden(true)
-                        }
-
                         // One habit per row folded, two per row unfolded / iPad
                         // (see `PairedRows`, bt-0009).
                         PairedRows(items: trackableHabits) { habit in
@@ -72,7 +65,39 @@ struct TodayView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .background {
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear { listSafeAreaInsets = geo.safeAreaInsets }
+                        .onChange(of: geo.safeAreaInsets) { _, new in listSafeAreaInsets = new }
+                }
+            }
+            // Weekday letters pinned under the navigation bar; the list scrolls
+            // beneath them with the system scroll-edge treatment.
+            .safeAreaBar(edge: .top) {
+                if !trackableHabits.isEmpty {
+                    Group {
+                        if dynamicTypeSize.isAccessibilitySize {
+                            // Large text: summary only (the grid has no letters row).
+                            summaryLabel
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            weekdayHeader
+                        }
+                    }
+                    .padding(.leading, headerLeadingPadding)
+                    .padding(.trailing, headerTrailingPadding)
+                    .padding(.bottom, 4)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             .navigationTitle(viewModel.dateDisplayString)
+            // Inline title: compact above the pinned header, matches the Journal
+            // tab. The day summary lives in the pinned header (not a nav
+            // subtitle) because iPadOS puts the top tab bar in the nav bar and
+            // iOS 27 minimises the bar on scroll — the header is always there.
+            .navigationBarTitleDisplayMode(.inline)
+            .keepNavigationBarVisible()
             // System toolbar groups (HIG → Toolbars). Each button is a titled
             // `Button(_:systemImage:)`, so the bar shows the symbol and VoiceOver
             // reads the title; the system handles sizing, spacing, glass and the
@@ -103,8 +128,6 @@ struct TodayView: View {
             .sheet(isPresented: $viewModel.showingAddHabitSheet) {
                 AddHabitView()
             }
-            // Editing lives on the row now (tap name / context menu / swipe) —
-            // the old `selectedHabit` sheet here was never triggered (bt-0012).
             .alert(
                 Text("Delete \u{201C}\(habitToDelete?.name ?? "this habit")\u{201D}?"),
                 isPresented: isConfirmingDelete,
@@ -148,25 +171,43 @@ struct TodayView: View {
             }
         }
         .fixedSize()
+        .accessibilityHidden(true) // each square already speaks its weekday
+    }
+
+    /// "5 of 8 done · 3 clean" — slips read as a warning.
+    private var summaryLabel: some View {
+        Text(viewModel.summaryText(from: habits))
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(viewModel.hasSlips(from: habits) ? AnyShapeStyle(AppTheme.failed) : AnyShapeStyle(.secondary))
+            .lineLimit(1)
+            .accessibilityHidden(false)
     }
 
     /// Mirrors `PairedRows` geometry in regular width (two columns, 16pt gap,
-    /// divider) so each column's letters line up with its own grid.
+    /// divider) so each column's letters line up with its own grid. The day
+    /// summary sits at the leading edge of the first column.
     @ViewBuilder
     private var weekdayHeader: some View {
         if horizontalSizeClass == .regular {
             HStack(spacing: 16) {
-                weekdayLetterStrip
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                Divider().hidden()
+                HStack {
+                    summaryLabel
+                    Spacer(minLength: 8)
+                    weekdayLetterStrip
+                }
+                // Stand-in for PairedRows' Divider (same ~hairline width). A
+                // real Divider here proposes infinite height and the pinned
+                // bar would fill the screen.
+                Color.clear.frame(width: 1 / 3, height: 1)
                 weekdayLetterStrip
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .padding(.bottom, 2)
         } else {
-            weekdayLetterStrip
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.bottom, 2)
+            HStack {
+                summaryLabel
+                Spacer(minLength: 8)
+                weekdayLetterStrip
+            }
         }
     }
 
@@ -186,61 +227,6 @@ struct TodayView: View {
             debugLog("TodayView: delete failed — \(error.localizedDescription)")
         }
         habitToDelete = nil
-    }
-
-    // MARK: - Progress Row
-
-    private var progressRow: some View {
-        let completedCount = viewModel.completedCount(from: habits)
-        let totalCount = viewModel.totalCount(from: habits)
-        let progress = viewModel.completionProgress(from: habits)
-
-        // Ring beside the text normally; stacked at accessibility text sizes
-        // so neither gets squeezed (Dynamic Type layout adaptation).
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-            : AnyLayout(HStackLayout(spacing: 16))
-
-        return layout {
-            // Progress ring
-            // Slimmer ring (bt-0012): the count lives in the text beside it.
-            ZStack {
-                Circle()
-                    .stroke(Color.accentColor.opacity(0.15), lineWidth: 6)
-                    .frame(width: ringSize, height: ringSize)
-
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(
-                        progress >= 1.0 ? AppTheme.success : Color.accentColor,
-                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
-                    )
-                    .frame(width: ringSize, height: ringSize)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: progress)
-            }
-            .accessibilityHidden(true) // the text beside it says the same thing
-
-            VStack(alignment: .leading, spacing: 4) {
-                // One Text (concatenated) so it wraps as a sentence at large
-                // sizes instead of the number drifting away from its words.
-                (Text("\(completedCount)").fontDesign(.rounded).bold()
-                 + Text(" of \(totalCount) complete"))
-                    .font(.headline)
-                    .contentTransition(.numericText())
-                    .animation(.default, value: completedCount)
-
-                Text(viewModel.progressMessage(from: habits))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            if !dynamicTypeSize.isAccessibilitySize {
-                Spacer()
-            }
-        }
-        .padding(.vertical, 2)
-        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Empty Content

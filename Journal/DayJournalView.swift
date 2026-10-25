@@ -37,17 +37,21 @@ struct DayJournalView: View {
                         quickAddNoteRow
                     }
 
-                    // Binary habits (compact completed icons)
-                    if !viewModel.binaryHabits.isEmpty {
-                        Section("Completed") {
-                            FlowLayout(spacing: 12) {
-                                ForEach(viewModel.binaryHabits) { entry in
-                                    BinaryHabitIcon(entry: entry)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                        }
+                    // Binary habits (compact icons). Avoidance entries mean a
+                    // slip, so they get their own section instead of "Completed".
+                    // Same win rule as Today: success / partial = completed,
+                    // a multi-state "Tried" is its own section.
+                    let completedIcons = viewModel.binaryHabits.filter { !$0.isNegativeHabit && $0.completionState != 3 }
+                    let triedIcons = viewModel.binaryHabits.filter { !$0.isNegativeHabit && $0.completionState == 3 }
+                    let slippedIcons = viewModel.binaryHabits.filter { $0.isNegativeHabit }
+                    if !completedIcons.isEmpty {
+                        iconSection("Completed", entries: completedIcons)
+                    }
+                    if !triedIcons.isEmpty {
+                        iconSection("Tried", entries: triedIcons)
+                    }
+                    if !slippedIcons.isEmpty {
+                        iconSection("Slipped", entries: slippedIcons)
                     }
 
                     // Habits with data (workout, diet, etc.)
@@ -137,6 +141,20 @@ struct DayJournalView: View {
                     viewModel.loadData()
                 }
             }
+        }
+    }
+
+    // MARK: - Icon Section
+
+    private func iconSection(_ title: String, entries: [JournalHabitEntry]) -> some View {
+        Section(title) {
+            FlowLayout(spacing: 12) {
+                ForEach(entries) { entry in
+                    BinaryHabitIcon(entry: entry)
+                }
+            }
+            .padding(.vertical, 4)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         }
     }
 
@@ -424,14 +442,23 @@ struct BinaryHabitIcon: View {
         if entry.isNegativeHabit {
             return "\(entry.habitName), \(entry.completionState > 0 ? "slipped" : "avoided")"
         }
-        return "\(entry.habitName), completed"
+        switch entry.completionState {
+        case 2: return "\(entry.habitName), partial"
+        case 3: return "\(entry.habitName), tried"
+        default: return "\(entry.habitName), completed"
+        }
     }
 
+    /// Brand state colours, same as the Today squares.
     private var iconColor: Color {
         if entry.isNegativeHabit {
-            return entry.completionState > 0 ? .red : .green
+            return entry.completionState > 0 ? AppTheme.failed : AppTheme.success
         }
-        return .green
+        switch entry.completionState {
+        case 2: return AppTheme.partial
+        case 3: return AppTheme.failed
+        default: return AppTheme.success
+        }
     }
 }
 
@@ -659,9 +686,12 @@ class DayJournalViewModel {
 
         // Full fetch + in-Swift filter (Wave 3a pattern; see file header).
         let allEntries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
+        // Logged days AND note-only days (bt-0014: Log Details → Done can save
+        // notes against a day that isn't marked).
         let entries = allEntries
             .filter { entry in
-                entry.date >= startOfDay && entry.date < endOfDay && entry.effectiveCompletionState != .notDone
+                entry.date >= startOfDay && entry.date < endOfDay
+                    && (entry.effectiveCompletionState != .notDone || entry.details != nil)
             }
             .sorted { ($0.habit?.order ?? 0) < ($1.habit?.order ?? 0) }
 
@@ -686,7 +716,7 @@ class DayJournalViewModel {
 
             if journalEntry.hasData {
                 withData.append(journalEntry)
-            } else {
+            } else if entry.effectiveCompletionState != .notDone {
                 binary.append(journalEntry)
             }
         }

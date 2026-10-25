@@ -71,6 +71,17 @@ enum HabitStore {
         return HabitCompletionState(isCompleted: entry.effectiveCompletionState != .notDone, state: state, hasDetails: hasDetails)
     }
 
+    /// Whether `date` counts as a win for `habit` given its entry (or none) —
+    /// the style-aware rule (`HabitWinRule`), not "an entry exists".
+    static func isWin(for habit: Habit, entry: HabitEntry?, on date: Date) -> Bool {
+        let isFuture = calendar.startOfDay(for: date) > calendar.startOfDay(for: Date())
+        return HabitWinRule.isWin(
+            style: habit.completionStyle,
+            state: entry?.effectiveCompletionState,
+            isFuture: isFuture
+        )
+    }
+
     /// All of a habit's entries in `[startDate, endDate]`, keyed by start-of-day.
     static func entriesByDay(for habit: Habit, from startDate: Date, to endDate: Date) -> [Date: HabitEntry] {
         guard let context = habit.modelContext, let habitID = habit.id else { return [:] }

@@ -261,10 +261,13 @@ struct TodayHabitRowView: View {
         let dayState = state(on: day)
         let isSelected = calendar.isDate(day, inSameDayAs: date)
 
+        // Avoidance: a past tracked day with no slip is a win → filled.
+        let isCleanAvoidanceWin = isNegativeHabit && dayState == 0 && !isSelected && isEditable(day)
+
         return Button {
             toggle(on: day)
         } label: {
-            dayCell(state: dayState, isSelected: isSelected)
+            dayCell(state: dayState, isSelected: isSelected, isCleanAvoidanceWin: isCleanAvoidanceWin)
                 .opacity(isEditable(day) ? 1 : 0.35)
                 .frame(width: metrics.slotWidth, height: WeekGridMetrics.hitHeight)
                 .contentShape(Rectangle())
@@ -277,11 +280,15 @@ struct TodayHabitRowView: View {
     }
 
     @ViewBuilder
-    private func dayCell(state dayState: Int, isSelected: Bool) -> some View {
+    private func dayCell(state dayState: Int, isSelected: Bool, isCleanAvoidanceWin: Bool) -> some View {
         let size = metrics.cellSize
         let shape = RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
 
-        if dayState != 0 {
+        if isCleanAvoidanceWin {
+            shape
+                .fill(habitColor)
+                .frame(width: size, height: size)
+        } else if dayState != 0 {
             shape
                 .fill(color(forState: dayState))
                 .frame(width: size, height: size)
@@ -318,7 +325,10 @@ struct TodayHabitRowView: View {
         feedbackTick += 1
 
         if current == 0 {
-            HabitStore.setCompletion(for: habit, on: day, state: 1, in: modelContext)
+            // Avoidance writes `.failure` (the model's documented "slipped"
+            // shape); everything else starts at `.success`.
+            let firstState = isNegativeHabit ? 3 : 1
+            HabitStore.setCompletion(for: habit, on: day, state: firstState, in: modelContext)
             if shouldTrackDetails {
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(400))
@@ -380,6 +390,11 @@ struct TodayHabitRowView: View {
 
     /// Spoken value for the name button.
     private var accessibilityValueText: String {
-        "\(accessibilityStateText(for: state(on: date))). \(completedDaysOfSeven) of the last 7 days."
+        if isNegativeHabit {
+            let slips = weekDays.filter { state(on: $0) != 0 }.count
+            let todayText = state(on: date) != 0 ? "Slipped" : "Clean so far"
+            return "\(todayText). \(slips) slip\(slips == 1 ? "" : "s") in the last 7 days."
+        }
+        return "\(accessibilityStateText(for: state(on: date))). \(completedDaysOfSeven) of the last 7 days."
     }
 }

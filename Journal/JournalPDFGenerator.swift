@@ -351,11 +351,10 @@ struct JournalPDFGenerator {
         let allHabits = ((try? modelContext.fetch(FetchDescriptor<Habit>(sortBy: [SortDescriptor(\.order), SortDescriptor(\.name)]))) ?? [])
         let totalHabits = allHabits.count
 
-        let allEntriesEver = (try? modelContext.fetch(FetchDescriptor<HabitEntry>())) ?? []
-        let entriesInRange = allEntriesEver.filter { entry in
-            entry.date >= startDate && entry.date < endOfRange && entry.effectiveCompletionState != .notDone
-        }
-        let totalCompletions = entriesInRange.count
+        // Wins per habit via the shared rule (bt-0014) — avoidance days count
+        // when *nothing* was logged, so this can't come from raw entry counts.
+        let entriesByHabit = HabitStore.allEntriesByDay(for: allHabits, from: startDate, to: endDate)
+        let service = HabitCalculationService.shared
 
         let allNotes = (try? modelContext.fetch(FetchDescriptor<Note>())) ?? []
         let totalNotes = allNotes.filter { note in
@@ -370,17 +369,15 @@ struct JournalPDFGenerator {
         for habit in allHabits {
             guard let habitId = habit.id else { continue }
 
-            var expected = 0
-            var currentDate = startDate
-            while currentDate <= endDate {
-                if shouldPerformHabit(habit, on: currentDate) {
-                    expected += 1
-                }
-                currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? endDate.addingTimeInterval(86400)
-            }
-
-            let completed = entriesInRange.filter { $0.habit?.id == habitId }.count
-            let completionRate = expected > 0 ? Double(completed) / Double(expected) : 0
+            let result = service.calculateCompletionRate(
+                for: habit,
+                using: entriesByHabit[habitId] ?? [:],
+                from: startDate,
+                to: endDate
+            )
+            let expected = result.expected
+            let completed = result.completed
+            let completionRate = result.rate
 
             if expected > 0 {
                 habitStats.append(HabitStat(
@@ -397,6 +394,7 @@ struct JournalPDFGenerator {
         }
 
         let overallCompletionRate = totalExpected > 0 ? Double(totalActual) / Double(totalExpected) : 0
+        let totalCompletions = totalActual
 
         // Streak data: entries from the relationship, last 365 days.
         let today = calendar.startOfDay(for: Date())

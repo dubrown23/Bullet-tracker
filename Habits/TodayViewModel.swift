@@ -49,29 +49,60 @@ class TodayViewModel {
         habits.filter { HabitFrequencyHelper.shouldTrack($0, on: selectedDate) }
     }
 
-    func completedCount(from habits: [Habit]) -> Int {
-        trackableHabits(from: habits).filter {
-            HabitStore.completionState(for: $0, on: selectedDate).isCompleted
-        }.count
+    // MARK: - Day Summary (bt-0014)
+    //
+    // Positive habits (simple + multi-state) and avoidance habits are different
+    // kinds of thing, so the header never folds them into one number.
+    // "5 of 8 done · 3 clean"  /  "5 of 8 done · 1 slip"  /  "All 8 done".
+
+    struct DaySummary {
+        let positiveDone: Int
+        let positiveTotal: Int
+        let avoidanceTotal: Int
+        let slips: Int
+
+        var clean: Int { avoidanceTotal - slips }
     }
 
-    func totalCount(from habits: [Habit]) -> Int {
-        trackableHabits(from: habits).count
+    func summary(from habits: [Habit]) -> DaySummary {
+        var positiveDone = 0, positiveTotal = 0, avoidanceTotal = 0, slips = 0
+
+        for habit in trackableHabits(from: habits) {
+            let entry = HabitStore.entry(for: habit, on: selectedDate)
+            if habit.completionStyle == .avoidance {
+                avoidanceTotal += 1
+                if HabitWinRule.isLogged(state: entry?.effectiveCompletionState) { slips += 1 }
+            } else {
+                positiveTotal += 1
+                if HabitStore.isWin(for: habit, entry: entry, on: selectedDate) { positiveDone += 1 }
+            }
+        }
+
+        return DaySummary(positiveDone: positiveDone, positiveTotal: positiveTotal,
+                          avoidanceTotal: avoidanceTotal, slips: slips)
     }
 
-    func completionProgress(from habits: [Habit]) -> Double {
-        let total = totalCount(from: habits)
-        guard total > 0 else { return 0 }
-        return Double(completedCount(from: habits)) / Double(total)
+    func summaryText(from habits: [Habit]) -> String {
+        let s = summary(from: habits)
+        if s.positiveTotal == 0 && s.avoidanceTotal == 0 { return "No habits scheduled" }
+
+        var parts: [String] = []
+        if s.positiveTotal > 0 {
+            parts.append(s.positiveDone == s.positiveTotal
+                         ? "All \(s.positiveTotal) done"
+                         : "\(s.positiveDone) of \(s.positiveTotal) done")
+        }
+        if s.avoidanceTotal > 0 {
+            parts.append(s.slips == 0
+                         ? "\(s.clean) clean"
+                         : "\(s.slips) slip\(s.slips == 1 ? "" : "s")")
+        }
+        return parts.joined(separator: " · ")
     }
 
-    func progressMessage(from habits: [Habit]) -> String {
-        let total = totalCount(from: habits)
-        if total == 0 { return "No habits scheduled" }
-        let completed = completedCount(from: habits)
-        if completed == total { return "All done! Great job!" }
-        let remaining = total - completed
-        return "\(remaining) habit\(remaining == 1 ? "" : "s") remaining"
+    /// True when the header should read as a warning (someone slipped today).
+    func hasSlips(from habits: [Habit]) -> Bool {
+        summary(from: habits).slips > 0
     }
 
     func currentStreak(for habit: Habit) -> Int {
