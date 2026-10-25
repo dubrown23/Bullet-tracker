@@ -338,7 +338,7 @@ struct HabitWidgetView: View {
                 case .systemLarge:
                     HabitGridWidget(entry: entry, maxRows: 8, showsSummary: true)
                 default:
-                    HabitGridWidget(entry: entry, maxRows: 3, showsSummary: false)
+                    HabitGridWidget(entry: entry, maxRows: 4, showsSummary: false)
                 }
             }
         }
