@@ -78,6 +78,39 @@ enum CompletionState: Int16, Codable {
     case failure = 3
 }
 
+// MARK: - Win Rule (bt-0014; moved here in bt-0011 so the widget shares it)
+//
+// The ONE definition of "this tracked day counts" — used by the Today header,
+// streaks, completion rates, the heatmap, the PDF summary and the widget.
+// Before this, every site checked "an entry exists with state ≠ notDone",
+// which for an avoidance habit means *you slipped*, so slipping counted as
+// completing.
+//
+//   simple      → checked
+//   multiState  → success or partial ("Tried" is an honest miss, not a win)
+//   avoidance   → no slip that day; today counts as clean so far; future days
+//                 can't be wins yet
+
+enum HabitWinRule {
+    static func isWin(style: CompletionStyle, state: CompletionState?, isFuture: Bool) -> Bool {
+        switch style {
+        case .simple:
+            return state != nil && state != .notDone
+        case .multiState:
+            return state == .success || state == .partial
+        case .avoidance:
+            return !isFuture && (state == nil || state == .notDone)
+        }
+    }
+
+    /// Whether the entry (or its absence) means the person *logged* something
+    /// that day — a check, a partial, a miss, or a slip. Drives row visuals,
+    /// not scores.
+    static func isLogged(state: CompletionState?) -> Bool {
+        state != nil && state != .notDone
+    }
+}
+
 // MARK: - HabitEntryDetails (HabitEntry payload)
 //
 // Replaces the old `details: String` JSON blob on `HabitEntry`. Discriminated
