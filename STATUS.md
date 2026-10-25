@@ -18,7 +18,7 @@ Fast-changing state. For the "why" behind any decision, see `ARCHITECTURE.md`.
 ### Queued (backlog)
 
 - **Page-by-page reassessment** (Dustin, 2026-10-25): revisit Dashboard, habit detail, Journal, Settings/Backup/forms, Log Details the way Today was done — job first, then design. One page per conversation turn.
-- Lock Screen / StandBy widget families — not started; the Home Screen widget is done (v2 tiles, `bt-0016`). Dustin to confirm the tile grid on his Duo Home Screen (remove + re-add the widget if the old layout is cached).
+- Lock Screen / StandBy widget families — not started; the Home Screen widget is done (v2 tiles, `bt-0016`; Dustin confirmed the tile grid on his Duo Home Screen 2026-10-25).
 
 ## Next (1–3 items)
 
