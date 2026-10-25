@@ -30,6 +30,7 @@ struct AddHabitView: View {
             }
             .navigationTitle("New Habit")
             .navigationBarTitleDisplayMode(.inline)
+            .keepNavigationBarVisible()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

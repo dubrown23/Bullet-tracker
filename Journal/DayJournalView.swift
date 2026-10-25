@@ -26,12 +26,10 @@ struct DayJournalView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Date selector (custom header; bt-0010 moves it onto glass)
-                dateSelector
-
-                // Main content
-                List {
+            // The date strip is a `safeAreaBar`: a custom bar the system treats like
+            // its own — pinned below the nav bar, list scrolls under it with the
+            // standard scroll-edge blur. Replaces a VStack + `.ultraThinMaterial`.
+            List {
                     // Quick add note — a list row, Reminders-style, so it gets
                     // the system insets and sits inside the grouped list instead
                     // of straddling the header seam (bt-0009).
@@ -88,13 +86,15 @@ struct DayJournalView: View {
                             .listRowBackground(Color.clear)
                         }
                     }
-                }
-                .listStyle(.insetGrouped)
+            }
+            .listStyle(.insetGrouped)
+            .safeAreaBar(edge: .top) {
+                dateSelector
             }
             .navigationTitle("Journal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button(action: { showingExportView = true }) {
                             Label("Export Journal...", systemImage: "square.and.arrow.up")
@@ -113,7 +113,7 @@ struct DayJournalView: View {
                             Label("Quick Export This Month", systemImage: "calendar")
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Label("More", systemImage: "ellipsis.circle")
                     }
                 }
             }
@@ -146,16 +146,18 @@ struct DayJournalView: View {
         VStack(spacing: 6) {
             // Month/Year header with navigation
             HStack {
-                Button(action: { viewModel.goToPreviousWeek() }) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 32, height: 32)
+                Button("Previous week", systemImage: "chevron.left") {
+                    viewModel.goToPreviousWeek()
                 }
+                .labelStyle(.iconOnly)
+                .font(.footnote.weight(.semibold))
+                .frame(minWidth: 32, minHeight: 32)
 
                 Spacer()
 
                 Text(viewModel.monthYearString)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Spacer()
 
@@ -163,16 +165,16 @@ struct DayJournalView: View {
                     viewModel.goToToday()
                 }
                 .font(.caption)
-                .frame(width: 50)
                 .opacity(viewModel.isToday ? 0 : 1)
                 .disabled(viewModel.isToday)
+                .accessibilityHidden(viewModel.isToday)
 
-                Button(action: { viewModel.goToNextWeek() }) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(viewModel.isToday ? Color.secondary : Color.accentColor)
-                        .frame(width: 32, height: 32)
+                Button("Next week", systemImage: "chevron.right") {
+                    viewModel.goToNextWeek()
                 }
+                .labelStyle(.iconOnly)
+                .font(.footnote.weight(.semibold))
+                .frame(minWidth: 32, minHeight: 32)
                 .disabled(viewModel.isToday)
             }
             .padding(.horizontal, 8)
@@ -208,7 +210,6 @@ struct DayJournalView: View {
             }
         }
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
     }
 
     private var calendar: Calendar { Calendar.current }
@@ -228,12 +229,11 @@ struct DayJournalView: View {
                 }
 
             if !newNoteText.isEmpty {
-                Button(action: saveQuickNote) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(Color.accentColor)
-                }
-                .buttonStyle(.borderless)
+                Button("Add note", systemImage: "arrow.up.circle.fill", action: saveQuickNote)
+                    .labelStyle(.iconOnly)
+                    .font(.title2)
+                    .foregroundStyle(Color.accentColor)
+                    .buttonStyle(.borderless)
             }
         }
     }
@@ -272,11 +272,11 @@ struct DayCell: View {
         Button(action: onTap) {
             VStack(spacing: 4) {
                 Text(dayNumber)
-                    .font(.system(size: 18, weight: isSelected ? .bold : .semibold))
+                    .font(.title3.weight(isSelected ? .bold : .semibold))
                     .foregroundStyle(textColor)
 
                 Text(dayOfWeek)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.caption2.weight(.medium))
                     .foregroundStyle(isSelected ? .white.opacity(0.9) : .secondary)
             }
             .frame(minWidth: 44, minHeight: 56)
@@ -285,6 +285,15 @@ struct DayCell: View {
         .buttonStyle(.plain)
         .disabled(isFuture)
         .opacity(isFuture ? 0.4 : 1.0)
+        // Label replaces the "24, SAT" text; the Button itself is the element.
+        .accessibilityLabel(accessibilityDateLabel)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// "Saturday, October 24" (+ "Today" when it is).
+    private var accessibilityDateLabel: String {
+        let base = date.formatted(.dateTime.weekday(.wide).month(.wide).day())
+        return isToday ? "\(base), Today" : base
     }
 
     private var textColor: Color {
@@ -331,6 +340,7 @@ struct DataHabitRow: View {
                     .frame(width: 28, height: 28)
                     .background(Color(hex: entry.color).opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .accessibilityHidden(true)
 
                 Text(entry.habitName)
                     .font(.body)
@@ -390,15 +400,25 @@ struct BinaryHabitIcon: View {
     var body: some View {
         VStack(spacing: 2) {
             Image(systemName: entry.icon)
-                .font(.system(size: 20))
+                .font(.title3)
                 .foregroundStyle(iconColor)
 
             Text(entry.habitName)
-                .font(.system(size: 8))
+                .font(.caption2)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
         }
-        .frame(width: 44)
+        .frame(minWidth: 44, maxWidth: 72)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabelText)
+    }
+
+    private var accessibilityLabelText: String {
+        if entry.isNegativeHabit {
+            return "\(entry.habitName), \(entry.completionState > 0 ? "slipped" : "avoided")"
+        }
+        return "\(entry.habitName), completed"
     }
 
     private var iconColor: Color {
@@ -431,7 +451,8 @@ struct NoteRow: View {
                 Text(timeString)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                    .frame(width: 60, alignment: .leading)
+                    .fixedSize()
+                    .frame(minWidth: 60, alignment: .leading)
 
                 Text(note.content ?? "")
                     .font(.body)

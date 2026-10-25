@@ -88,6 +88,11 @@ struct HabitFormView: View {
     @Binding var completionStyle: CompletionStyle
     @Binding var showingIconSheet: Bool
 
+    /// Swatch / icon tiles scale with the user's text size (Dynamic Type).
+    @ScaledMetric(relativeTo: .body) private var swatchSize: CGFloat = 28
+    @ScaledMetric(relativeTo: .body) private var quickIconSize: CGFloat = 30
+    @ScaledMetric(relativeTo: .title3) private var iconTileSize: CGFloat = 36
+
     // MARK: - Body
 
     var body: some View {
@@ -107,36 +112,44 @@ struct HabitFormView: View {
             TextField("Habit Name", text: $name)
 
             // Icon row — shows current icon with change button
-            HStack {
-                Text("Icon")
-                Spacer()
-                Image(systemName: selectedIcon)
-                    .font(.title3)
-                    .foregroundStyle(Color(hex: selectedColor))
-                    .frame(width: 36, height: 36)
-                    .background(Color(hex: selectedColor).opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            LabeledContent("Icon") {
+                HStack(spacing: 12) {
+                    Image(systemName: selectedIcon)
+                        .font(.title3)
+                        .foregroundStyle(Color(hex: selectedColor))
+                        .frame(width: iconTileSize, height: iconTileSize)
+                        .background(Color(hex: selectedColor).opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .accessibilityLabel(selectedIcon.symbolDisplayName)
 
-                Button("Change") {
-                    showingIconSheet = true
+                    Button("Change") {
+                        showingIconSheet = true
+                    }
+                    .font(.subheadline)
+                    .buttonStyle(.borderless)
                 }
-                .font(.subheadline)
             }
 
-            // Quick icon row
+            // Quick icon row — real Buttons (were Images with tap gestures), each
+            // named for VoiceOver and marked selected when it's the current icon.
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(HabitConstants.quickIconOptions, id: \.self) { icon in
-                        Image(systemName: icon)
-                            .foregroundStyle(Color(hex: selectedColor))
-                            .frame(width: 30, height: 30)
-                            .background(
-                                Circle()
-                                    .fill(selectedIcon == icon ? Color(.systemGray4) : Color.clear)
-                            )
-                            .onTapGesture {
-                                selectedIcon = icon
-                            }
+                        let isSelected = selectedIcon == icon
+                        Button {
+                            selectedIcon = icon
+                        } label: {
+                            Image(systemName: icon)
+                                .foregroundStyle(Color(hex: selectedColor))
+                                .frame(width: quickIconSize, height: quickIconSize)
+                                .background(
+                                    Circle()
+                                        .fill(isSelected ? Color(.systemGray4) : Color.clear)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(icon.symbolDisplayName)
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
                     }
                 }
             }
@@ -149,18 +162,23 @@ struct HabitFormView: View {
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(HabitConstants.colorOptions, id: \.self) { color in
-                            Circle()
-                                .fill(Color(hex: color))
-                                .frame(width: 28, height: 28)
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.primary, lineWidth: selectedColor == color ? 2.5 : 0)
-                                        .padding(1)
-                                )
-                                .onTapGesture {
-                                    selectedColor = color
-                                }
+                        ForEach(Array(HabitConstants.colorOptions.enumerated()), id: \.element) { index, color in
+                            let isSelected = selectedColor == color
+                            Button {
+                                selectedColor = color
+                            } label: {
+                                Circle()
+                                    .fill(Color(hex: color))
+                                    .frame(width: swatchSize, height: swatchSize)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.primary, lineWidth: isSelected ? 2.5 : 0)
+                                            .padding(1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Color \(index + 1) of \(HabitConstants.colorOptions.count)")
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
                         }
                     }
                     .padding(.vertical, 2)
@@ -181,17 +199,20 @@ struct HabitFormView: View {
 
             if selectedFrequency == HabitFrequency.custom.rawValue {
                 ForEach(Array(HabitConstants.daysOfWeek.enumerated()), id: \.offset) { _, day in
+                    let isOn = customDays.contains(day.0)
                     Button(action: { toggleCustomDay(day.0) }) {
                         HStack {
                             Text(day.1)
                             Spacer()
-                            if customDays.contains(day.0) {
+                            if isOn {
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(Color.accentColor)
+                                    .accessibilityHidden(true)
                             }
                         }
                     }
                     .foregroundStyle(.primary)
+                    .accessibilityAddTraits(isOn ? .isSelected : [])
                 }
             }
         }
@@ -293,7 +314,7 @@ struct HabitFormView: View {
     private var notesSection: some View {
         Section("Notes") {
             TextEditor(text: $notes)
-                .frame(height: 80)
+                .frame(minHeight: 80)
         }
     }
 
@@ -305,6 +326,43 @@ struct HabitFormView: View {
         } else {
             customDays.append(day)
         }
+    }
+}
+
+// MARK: - Toolbar visibility for form sheets
+
+/// On the Duo simulator the New Habit sheet's Cancel/Save vanished once the
+/// form was scrolled to the bottom (iOS 27 bar minimisation). The habit forms
+/// are short and the actions must always be reachable, so opt the sheet's
+/// navigation bar out of minimising. Gated: the modifier is iOS 27+.
+struct KeepNavigationBarVisible: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 27, *) {
+            content.toolbarMinimizationBehavior(.never, for: .navigationBar)
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func keepNavigationBarVisible() -> some View {
+        modifier(KeepNavigationBarVisible())
+    }
+}
+
+// MARK: - SF Symbol display names
+
+extension String {
+    /// "figure.strengthtraining.traditional" → "Figure strengthtraining traditional";
+    /// "heart.fill" → "Heart". Good enough for VoiceOver to say something human.
+    var symbolDisplayName: String {
+        let words = self
+            .replacingOccurrences(of: ".fill", with: "")
+            .replacingOccurrences(of: ".circle", with: "")
+            .split(separator: ".")
+            .map(String.init)
+        return words.joined(separator: " ").capitalized
     }
 }
 

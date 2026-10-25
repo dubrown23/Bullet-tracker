@@ -15,6 +15,7 @@ struct HabitDashboardView: View {
     @State private var viewModel = HabitDashboardViewModel()
     @State private var selectedHabit: Habit?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         NavigationStack {
@@ -42,7 +43,12 @@ struct HabitDashboardView: View {
                 } else {
                     // Overall summary
                     Section("Overall Progress") {
-                        HStack(spacing: 0) {
+                        // Three tiles across normally; stacked at accessibility
+                        // text sizes (Dynamic Type layout adaptation).
+                        let statsLayout = dynamicTypeSize.isAccessibilitySize
+                            ? AnyLayout(VStackLayout(spacing: 12))
+                            : AnyLayout(HStackLayout(spacing: 0))
+                        statsLayout {
                             summaryStatView(
                                 icon: "chart.bar.fill",
                                 value: "\(viewModel.overallCompletionRate)%",
@@ -92,11 +98,12 @@ struct HabitDashboardView: View {
     private func summaryStatView(icon: String, value: String, label: String, color: Color) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 14))
+                .font(.subheadline)
                 .foregroundStyle(color)
+                .accessibilityHidden(true)
 
             Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.system(.title2, design: .rounded, weight: .bold))
                 .foregroundStyle(color)
                 .contentTransition(.numericText())
 
@@ -105,6 +112,7 @@ struct HabitDashboardView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Habit Cell
@@ -144,6 +152,7 @@ struct HabitDashboardView: View {
                     .frame(width: 28, height: 28)
                     .background(Color(hex: stat.color).opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .accessibilityHidden(true)
 
                 Text(stat.name)
                     .font(.body)
@@ -161,21 +170,14 @@ struct HabitDashboardView: View {
                 }
             }
 
-            // Progress bar
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Color(.systemGray5))
-                        .frame(height: 6)
-
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Color(hex: stat.color))
-                        .frame(width: geometry.size.width * CGFloat(stat.completionRate) / 100, height: 6)
-                }
-            }
-            .frame(height: 6)
+            // Progress bar — the system control, tinted with the habit colour
+            // (replaces a hand-drawn GeometryReader bar).
+            ProgressView(value: Double(stat.completionRate), total: 100)
+                .tint(Color(hex: stat.color))
+                .accessibilityHidden(true) // the "NN%" text already says it
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 }
 

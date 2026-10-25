@@ -81,9 +81,13 @@ struct IconSelectorView: View {
         return Self.allIcons.filter { $0.localizedCaseInsensitiveContains(searchText) }
     }
 
-    /// Adaptive columns: as many 44pt cells as fit the current width, so the
-    /// grid fills a folded phone, an unfolded Duo and an iPad alike (bt-0009).
-    private let columns = [GridItem(.adaptive(minimum: 44), spacing: 12)]
+    /// Cell size follows Dynamic Type; the adaptive grid fits as many as the
+    /// width allows (folded phone, unfolded Duo, iPad) — bt-0009 / bt-0010.
+    @ScaledMetric(relativeTo: .title3) private var cellSize: CGFloat = 44
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: cellSize), spacing: 12)]
+    }
 
     // MARK: - Body
 
@@ -136,24 +140,27 @@ struct IconSelectorView: View {
     private func iconGrid(icons: [String]) -> some View {
         LazyVGrid(columns: columns, spacing: 12) {
             ForEach(icons, id: \.self) { icon in
+                let isSelected = selectedIcon == icon
                 Button {
                     selectedIcon = icon
                     dismiss()
                 } label: {
                     Image(systemName: icon)
-                        .font(.system(size: 20))
+                        .font(.title3)
                         .foregroundStyle(Color(hex: selectedColor))
-                        .frame(width: 44, height: 44)
+                        .frame(width: cellSize, height: cellSize)
                         .background(
                             Circle()
-                                .fill(selectedIcon == icon ? Color(hex: selectedColor).opacity(0.2) : Color(.systemGray6))
+                                .fill(isSelected ? Color(hex: selectedColor).opacity(0.2) : Color(.systemGray6))
                         )
                         .overlay(
                             Circle()
-                                .stroke(selectedIcon == icon ? Color(hex: selectedColor) : Color.clear, lineWidth: 2)
+                                .stroke(isSelected ? Color(hex: selectedColor) : Color.clear, lineWidth: 2)
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(icon.symbolDisplayName)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
         .padding(.vertical, 8)

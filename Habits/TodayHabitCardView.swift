@@ -15,9 +15,16 @@ struct TodayHabitRowView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.calendar) private var calendar
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var showingDetailView = false
-    @State private var checkScale: CGFloat = 1.0
+    /// Bumped on every check / uncheck / cycle so `.sensoryFeedback` fires
+    /// exactly once per user action (and not when the row re-renders).
+    @State private var feedbackTick = 0
+
+    /// Icon tile and checkbox scale with the user's text size (Dynamic Type).
+    @ScaledMetric(relativeTo: .body) private var iconTileSize: CGFloat = 32
+    @ScaledMetric(relativeTo: .body) private var dotSize: CGFloat = 6
 
     /// Wave 4.5 prefetch: one indexed range fetch returning up to 7 entries
     /// for this habit's last 7 days. Both `completionState` (today's render)
@@ -44,7 +51,7 @@ struct TodayHabitRowView: View {
     private var isNegativeHabit: Bool { habit.completionStyle == .avoidance }
 
     private var isFutureDate: Bool {
-        Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: Date())
+        calendar.startOfDay(for: date) > calendar.startOfDay(for: Date())
     }
 
     /// Last 7 days completion for mini dots — derived from `entriesLast7Days`
@@ -60,63 +67,116 @@ struct TodayHabitRowView: View {
     }
 
     var body: some View {
-        HStack(spacing: 14) {
-            // Checkbox
-            checkboxView
-                .onTapGesture { handleCheckboxTap() }
-
-            // Habit icon
-            Image(systemName: habit.icon ?? "circle")
-                .font(.system(size: 14))
-                .foregroundStyle(habitColor)
-                .frame(width: 32, height: 32)
-                .background(habitColor.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            // Habit info
-            VStack(alignment: .leading, spacing: 4) {
-                Text(habit.name ?? "")
-                    .font(.body)
-                    .foregroundStyle(isChecked ? .secondary : .primary)
-
-                HStack(spacing: 6) {
-                    // Last 7 days mini dots
-                    HStack(spacing: 3) {
-                        ForEach(0..<7, id: \.self) { index in
-                            Circle()
-                                .fill(last7Days[index] ? habitColor : Color(.systemGray4))
-                                .frame(width: 6, height: 6)
-                        }
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // Accessibility text sizes: stack so nothing is squeezed off the
+                // card (Dynamic Type layout adaptation).
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 14) {
+                        checkboxButton
+                        iconTile
+                        nameText
                     }
-
-                    if streak > 0 {
-                        HStack(spacing: 2) {
-                            Image(systemName: "flame.fill")
-                                .font(.system(size: 10))
-                            Text("\(streak)")
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        }
-                        .foregroundStyle(isChecked ? Color.secondary : Color.orange)
+                    HStack(spacing: 10) {
+                        historyRow
+                        Spacer()
+                        detailsButton
                     }
                 }
-            }
+            } else {
+                HStack(spacing: 14) {
+                    checkboxButton
+                    iconTile
 
-            Spacer()
+                    VStack(alignment: .leading, spacing: 4) {
+                        nameText
+                        historyRow
+                    }
 
-            // Detail disclosure
-            if shouldTrackDetails {
-                Button(action: { showingDetailView = true }) {
-                    Image(systemName: "info.circle")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
+                    Spacer()
+
+                    detailsButton
                 }
-                .buttonStyle(.plain)
             }
         }
         .sheet(isPresented: $showingDetailView) {
             HabitCompletionDetailView(habit: habit, date: date)
         }
         .animation(.default, value: isChecked)
+        .sensoryFeedback(.impact(weight: .light), trigger: feedbackTick)
+    }
+
+    // MARK: - Pieces
+
+    /// A real Button so VoiceOver gets a name, a value and the toggle trait
+    /// (it used to be an Image with a tap gesture).
+    private var checkboxButton: some View {
+        Button(action: handleCheckboxTap) {
+            checkboxView
+        }
+        .buttonStyle(.plain)
+        .disabled(isFutureDate)
+        .accessibilityLabel(habit.name ?? "Habit")
+        .accessibilityValue(accessibilityStateDescription)
+        .accessibilityAddTraits(.isToggle)
+    }
+
+    /// Habit icon — decorative, the name is right next to it.
+    private var iconTile: some View {
+        Image(systemName: habit.icon ?? "circle")
+            .font(.subheadline)
+            .foregroundStyle(habitColor)
+            .frame(width: iconTileSize, height: iconTileSize)
+            .background(habitColor.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .accessibilityHidden(true)
+    }
+
+    private var nameText: some View {
+        Text(habit.name ?? "")
+            .font(.body)
+            .foregroundStyle(isChecked ? .secondary : .primary)
+    }
+
+    /// Last-7-days dots + streak badge.
+    private var historyRow: some View {
+        HStack(spacing: 6) {
+            HStack(spacing: 3) {
+                ForEach(0..<7, id: \.self) { index in
+                    Circle()
+                        .fill(last7Days[index] ? habitColor : Color(.systemGray4))
+                        .frame(width: dotSize, height: dotSize)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Last 7 days: \(last7Days.filter { $0 }.count) of 7 completed")
+
+            if streak > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "flame.fill")
+                        .font(.caption2)
+                    Text("\(streak)")
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                }
+                .fixedSize()
+                .foregroundStyle(isChecked ? Color.secondary : Color.orange)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(streak) day streak")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var detailsButton: some View {
+        if shouldTrackDetails {
+            Button("Log details", systemImage: "info.circle") {
+                showingDetailView = true
+            }
+            .labelStyle(.iconOnly)
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .buttonStyle(.plain)
+        }
     }
 
     // MARK: - Checkbox
@@ -125,17 +185,16 @@ struct TodayHabitRowView: View {
         ZStack {
             if isChecked {
                 Image(systemName: stateIconFilled)
-                    .font(.system(size: 26))
+                    .font(.title)
                     .foregroundStyle(stateColor)
                     .symbolEffect(.bounce, value: isChecked)
             } else {
                 Image(systemName: "circle")
-                    .font(.system(size: 26))
+                    .font(.title)
                     .foregroundStyle(habitColor.opacity(0.4))
             }
         }
-        .scaleEffect(checkScale)
-        .frame(width: 32, height: 32)
+        .frame(width: iconTileSize, height: iconTileSize)
         .contentShape(Rectangle())
     }
 
@@ -156,7 +215,7 @@ struct TodayHabitRowView: View {
     }
 
     private func performCheck() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        feedbackTick += 1
         HabitStore.setCompletion(for: habit, on: date, state: 1, in: modelContext)
 
         if shouldTrackDetails {
@@ -168,7 +227,7 @@ struct TodayHabitRowView: View {
     }
 
     private func performUncheck() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        feedbackTick += 1
         HabitStore.removeEntry(for: habit, on: date, in: modelContext)
     }
 
@@ -182,7 +241,7 @@ struct TodayHabitRowView: View {
         default: nextState = 1
         }
 
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        feedbackTick += 1
         HabitStore.setCompletion(for: habit, on: date, state: nextState, in: modelContext)
     }
 
@@ -205,6 +264,17 @@ struct TodayHabitRowView: View {
         case 2: return "circle.lefthalf.filled"
         case 3: return "xmark.circle.fill"
         default: return "checkmark.circle.fill"
+        }
+    }
+
+    /// Spoken value for the checkbox.
+    private var accessibilityStateDescription: String {
+        if !isChecked { return "Not done" }
+        if isNegativeHabit { return "Slipped" }
+        switch completionState.state {
+        case 2: return "Partial"
+        case 3: return "Tried"
+        default: return "Done"
         }
     }
 }

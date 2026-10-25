@@ -108,10 +108,10 @@ struct JournalExportView: View {
             // Show selected range
             HStack {
                 Image(systemName: "calendar")
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 Text(viewModel.dateRangeDescription)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
         } header: {
             Text("Date Range")
@@ -121,34 +121,22 @@ struct JournalExportView: View {
     // MARK: - Format Section
 
     private var formatSection: some View {
-        Section {
-            ForEach(ExportFormat.allCases, id: \.self) { format in
-                HStack {
+        // A system inline Picker instead of a hand-built radio list: the row
+        // checkmark, selection state and VoiceOver "selected" all come for free.
+        Section("Format") {
+            Picker("Format", selection: $viewModel.selectedFormat) {
+                ForEach(ExportFormat.allCases, id: \.self) { format in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(format.title)
-                            .font(.body)
                         Text(format.description)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
-
-                    Spacer()
-
-                    if viewModel.selectedFormat == format {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.blue)
-                    } else {
-                        Image(systemName: "circle")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    viewModel.selectedFormat = format
+                    .tag(format)
                 }
             }
-        } header: {
-            Text("Format")
+            .pickerStyle(.inline)
+            .labelsHidden()
         }
     }
 
@@ -163,7 +151,7 @@ struct JournalExportView: View {
                             .font(.body)
                         Text("Adds overview page with stats & analytics")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -201,11 +189,11 @@ struct JournalExportView: View {
                         Label("Summary dashboard", systemImage: "chart.bar.fill")
                         Spacer()
                     }
-                    .foregroundColor(.blue)
+                    .foregroundStyle(Color.accentColor)
                 }
             }
             .font(.subheadline)
-            .foregroundColor(.secondary)
+            .foregroundStyle(.secondary)
         } header: {
             Text("Export Preview")
         } footer: {

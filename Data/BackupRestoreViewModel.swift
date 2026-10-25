@@ -286,21 +286,22 @@ struct BackupRestoreView: View {
     // MARK: - Body
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                backupSection
-                restoreSection
-                helpSection
-            }
-            .padding(.vertical)
+        // A standard Form, like the Settings screen it's reached from (HIG →
+        // Settings / Lists). Replaces hand-padded GroupBoxes in a ScrollView.
+        Form {
+            backupSection
+            restoreSection
+            helpSection
         }
         .navigationTitle("Backup & Restore")
-        .alert(item: $viewModel.currentAlert) { alertType in
-            Alert(
-                title: Text(alertType.title),
-                message: Text(alertType.message),
-                dismissButton: .default(Text("OK"))
-            )
+        .alert(
+            Text(viewModel.currentAlert?.title ?? ""),
+            isPresented: isShowingAlert,
+            presenting: viewModel.currentAlert
+        ) { _ in
+            Button("OK") { }
+        } message: { alertType in
+            Text(alertType.message)
         }
         .sheet(isPresented: $viewModel.showImportPicker) {
             importPickerSheet
@@ -312,150 +313,81 @@ struct BackupRestoreView: View {
         }
     }
     
+    private var isShowingAlert: Binding<Bool> {
+        Binding(
+            get: { viewModel.currentAlert != nil },
+            set: { if !$0 { viewModel.currentAlert = nil } }
+        )
+    }
+
     // MARK: - View Components
-    
+
     private var backupSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 15) {
-                backupDescription
-                
-                if viewModel.isCreatingBackup {
-                    backupProgressView
+        Section {
+            if viewModel.isCreatingBackup {
+                ProgressView(value: viewModel.backupProgress, total: 1.0)
+            }
+
+            Button("Create Backup File", systemImage: "doc.badge.plus") {
+                viewModel.createBackup()
+            }
+            .disabled(viewModel.isCreatingBackup)
+
+            // Shown once a backup file exists. `ShareLink` presents the share
+            // sheet from this view's own window and anchors itself.
+            if let url = viewModel.backupFileURL, !viewModel.isCreatingBackup {
+                ShareLink(item: url) {
+                    Label("Share Backup File", systemImage: "square.and.arrow.up")
                 }
-
-                createBackupButton
-
+            }
+        } header: {
+            Text("Create Backup")
+        } footer: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Create a complete backup of your journal data that you can save to Files, send via email, or store in cloud storage.")
                 if let url = viewModel.backupFileURL, !viewModel.isCreatingBackup {
-                    shareBackupLink(for: url)
+                    Text("Ready: \(url.lastPathComponent)")
                 }
             }
-            .padding(.vertical, 5)
-        } label: {
-            Label("Create Backup", systemImage: "arrow.up.doc.fill")
-                .font(.headline)
         }
-        .padding(.horizontal)
-    }
-    
-    private var backupDescription: some View {
-        Text("Create a complete backup of your journal data that you can save to Files, send via email, or store in cloud storage.")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-    }
-    
-    private var backupProgressView: some View {
-        ProgressView(value: viewModel.backupProgress, total: 1.0)
-            .progressViewStyle(.linear)
-            .padding(.vertical, 5)
-    }
-    
-    private var createBackupButton: some View {
-        Button {
-            viewModel.createBackup()
-        } label: {
-            Label("Create Backup File", systemImage: "doc.badge.plus")
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.blue)
-                .foregroundStyle(.white)
-                .cornerRadius(10)
-        }
-        .disabled(viewModel.isCreatingBackup)
     }
 
-    /// Shown once a backup file exists. `ShareLink` presents the share sheet
-    /// from this view's own window and anchors itself.
-    private func shareBackupLink(for url: URL) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ShareLink(item: url) {
-                Label("Share Backup File", systemImage: "square.and.arrow.up")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.green)
-                    .foregroundStyle(.white)
-                    .cornerRadius(10)
-            }
-            Text("Ready: \(url.lastPathComponent)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-    
     private var restoreSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 15) {
-                restoreDescription
-                restoreWarning
-                
-                if viewModel.isRestoringBackup {
-                    restoreProgressView
+        Section {
+            if viewModel.isRestoringBackup {
+                ProgressView(value: viewModel.restoreProgress, total: 1.0)
+            }
+
+            Button("Select Backup File", systemImage: "square.and.arrow.down") {
+                viewModel.selectBackupFile()
+            }
+            .disabled(viewModel.isRestoringBackup)
+        } header: {
+            Text("Restore From Backup")
+        } footer: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Restore your journal data from a previously created backup file.")
+                Label {
+                    Text("Restoring replaces all current data in the app. Back up anything you want to keep first.")
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
                 }
-                
-                selectBackupButton
-            }
-            .padding(.vertical, 5)
-        } label: {
-            Label("Restore From Backup", systemImage: "arrow.down.doc.fill")
-                .font(.headline)
-        }
-        .padding(.horizontal)
-    }
-    
-    private var restoreDescription: some View {
-        Text("Restore your journal data from a previously created backup file. This will replace your current data.")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-    }
-    
-    private var restoreWarning: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("⚠️ Warning:")
-                .fontWeight(.bold)
-            Text("Restoring from a backup will replace all current data in the app. Make sure to back up any current data you want to keep.")
-                .font(.subheadline)
                 .foregroundStyle(.orange)
-        }
-        .padding(.vertical, 5)
-    }
-    
-    private var restoreProgressView: some View {
-        ProgressView(value: viewModel.restoreProgress, total: 1.0)
-            .progressViewStyle(.linear)
-            .padding(.vertical, 5)
-    }
-    
-    private var selectBackupButton: some View {
-        Button {
-            viewModel.selectBackupFile()
-        } label: {
-            Label("Select Backup File", systemImage: "square.and.arrow.down")
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.blue)
-                .foregroundStyle(.white)
-                .cornerRadius(10)
-        }
-        .disabled(viewModel.isRestoringBackup)
-    }
-    
-    private var helpSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 15) {
-                helpItem("Create a backup before changing phones or updating the app")
-                helpItem("Store your backup files in a safe place like cloud storage")
-                helpItem("Backup files include all your habits, journal entries, and settings")
-                helpItem("After restoring, restart the app to ensure all data is loaded properly")
             }
-            .padding(.vertical, 5)
-        } label: {
-            Label("Help", systemImage: "questionmark.circle.fill")
-                .font(.headline)
         }
-        .padding(.horizontal)
     }
-    
+
+    private var helpSection: some View {
+        Section("Help") {
+            helpItem("Create a backup before changing phones or updating the app")
+            helpItem("Store your backup files in a safe place like cloud storage")
+            helpItem("Backup files include all your habits, journal entries, and settings")
+            helpItem("After restoring, restart the app to ensure all data is loaded properly")
+        }
+    }
+
     private func helpItem(_ text: String) -> some View {
-        Text("• \(text)")
+        Text(text)
             .font(.subheadline)
     }
     

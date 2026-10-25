@@ -158,6 +158,7 @@ struct EditHabitView: View {
             }
             .navigationTitle("Edit Habit")
             .navigationBarTitleDisplayMode(.inline)
+            .keepNavigationBarVisible()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

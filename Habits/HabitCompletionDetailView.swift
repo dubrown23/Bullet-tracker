@@ -64,6 +64,7 @@ struct HabitCompletionDetailView: View {
                         Image(systemName: habit.icon ?? "circle.fill")
                             .font(.title3)
                             .foregroundStyle(habitColor)
+                            .accessibilityHidden(true)
 
                         VStack(alignment: .leading) {
                             Text(habit.name ?? "Habit")
@@ -156,6 +157,7 @@ struct HabitCompletionDetailView: View {
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
             .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
@@ -178,6 +180,8 @@ struct HabitCompletionDetailView: View {
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("\(mins) minutes")
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
             .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))

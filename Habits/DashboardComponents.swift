@@ -167,7 +167,15 @@ struct ContributionHeatmapView: View {
                     }
                 }
             }
+            // One VoiceOver element with a useful summary instead of ~90 unlabeled squares.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Activity heatmap")
+            .accessibilityValue("\(completedDayCount) of \(dates.count) days completed")
         }
+    }
+
+    private var completedDayCount: Int {
+        completionData.values.filter { $0 >= 1.0 }.count
     }
 
     // MARK: - Subviews
@@ -187,7 +195,7 @@ struct ContributionHeatmapView: View {
                 .frame(height: monthLabelHeight)
             ForEach(0..<7, id: \.self) { row in
                 Text(dayLabel(for: row))
-                    .font(.system(size: 9))
+                    .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .frame(width: dayLabelWidth, height: cellSize)
             }

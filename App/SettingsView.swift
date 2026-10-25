@@ -180,10 +180,32 @@ struct SettingsView: View {
             .sheet(isPresented: $viewModel.showingExportJournal) {
                 JournalExportView()
             }
-            .alert(item: $viewModel.alertConfig) { config in
-                createAlert(from: config)
+            // Current alert API (the `Alert` struct + `.alert(item:)` are deprecated).
+            .alert(
+                Text(viewModel.alertConfig?.title ?? ""),
+                isPresented: isShowingAlert,
+                presenting: viewModel.alertConfig
+            ) { config in
+                if let primary = config.primaryButton {
+                    Button(primary.title, role: primary.role, action: primary.action)
+                }
+                if let secondary = config.secondaryButton {
+                    Button(secondary.title, role: secondary.role, action: secondary.action)
+                }
+                if config.primaryButton == nil && config.secondaryButton == nil {
+                    Button("OK") { }
+                }
+            } message: { config in
+                Text(config.message)
             }
         }
+    }
+
+    private var isShowingAlert: Binding<Bool> {
+        Binding(
+            get: { viewModel.alertConfig != nil },
+            set: { if !$0 { viewModel.alertConfig = nil } }
+        )
     }
 
     // MARK: - Sections
@@ -193,12 +215,13 @@ struct SettingsView: View {
             Toggle("iCloud Sync", isOn: $viewModel.iCloudSyncEnabled)
 
             if viewModel.iCloudSyncEnabled {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                Label {
                     Text("Syncing with iCloud")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
                 }
             }
         }
@@ -248,43 +271,6 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Alert Builder
-
-    private func createAlert(from config: SettingsViewModel.AlertConfig) -> Alert {
-        if let primary = config.primaryButton, let secondary = config.secondaryButton {
-            return Alert(
-                title: Text(config.title),
-                message: Text(config.message),
-                primaryButton: .init(primary.role, action: primary.action) { Text(primary.title) },
-                secondaryButton: .init(secondary.role, action: secondary.action) { Text(secondary.title) }
-            )
-        } else {
-            return Alert(
-                title: Text(config.title),
-                message: Text(config.message),
-                dismissButton: .default(Text("OK"))
-            )
-        }
-    }
-}
-
-// MARK: - Alert Button Extension
-
-private extension Alert.Button {
-    init(_ role: ButtonRole?, action: @escaping () -> Void, @ViewBuilder label: () -> Text) {
-        guard let role = role else {
-            self = .default(label(), action: action)
-            return
-        }
-
-        if role == .destructive {
-            self = .destructive(label(), action: action)
-        } else if role == .cancel {
-            self = .cancel(label(), action: action)
-        } else {
-            self = .default(label(), action: action)
-        }
-    }
 }
 
 // MARK: - Help View

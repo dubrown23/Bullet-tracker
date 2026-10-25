@@ -14,8 +14,12 @@ struct TodayView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var viewModel = TodayViewModel()
+
+    /// Progress ring scales with the user's text size (Dynamic Type).
+    @ScaledMetric(relativeTo: .title2) private var ringSize: CGFloat = 64
 
     private var trackableHabits: [Habit] { viewModel.trackableHabits(from: habits) }
 
@@ -49,35 +53,30 @@ struct TodayView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle(viewModel.dateDisplayString)
+            // System toolbar groups (HIG → Toolbars). Each button is a titled
+            // `Button(_:systemImage:)`, so the bar shows the symbol and VoiceOver
+            // reads the title; the system handles sizing, spacing, glass and the
+            // disabled look — no hand-built HStacks, 44pt frames or opacity.
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    HStack(spacing: 16) {
-                        Button(action: { viewModel.goToPreviousDay() }) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
-                        }
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button("Previous day", systemImage: "chevron.left") {
+                        viewModel.goToPreviousDay()
+                    }
+                    Button("Next day", systemImage: "chevron.right") {
+                        viewModel.goToNextDay()
+                    }
+                    .disabled(viewModel.isToday)
+                }
 
-                        Button(action: { viewModel.goToNextDay() }) {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
-                        }
-                        .disabled(viewModel.isToday)
-                        .opacity(viewModel.isToday ? 0.3 : 1.0)
+                if !viewModel.isToday {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Today") { viewModel.goToToday() }
                     }
                 }
 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 16) {
-                        if !viewModel.isToday {
-                            Button("Today") { viewModel.goToToday() }
-                        }
-                        Button(action: { viewModel.showingAddHabitSheet = true }) {
-                            Image(systemName: "plus")
-                        }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Add Habit", systemImage: "plus") {
+                        viewModel.showingAddHabitSheet = true
                     }
                 }
             }
@@ -105,12 +104,18 @@ struct TodayView: View {
         let totalCount = viewModel.totalCount(from: habits)
         let progress = viewModel.completionProgress(from: habits)
 
-        return HStack(spacing: 16) {
+        // Ring beside the text normally; stacked at accessibility text sizes
+        // so neither gets squeezed (Dynamic Type layout adaptation).
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 16))
+
+        return layout {
             // Progress ring
             ZStack {
                 Circle()
                     .stroke(Color.accentColor.opacity(0.15), lineWidth: 8)
-                    .frame(width: 64, height: 64)
+                    .frame(width: ringSize, height: ringSize)
 
                 Circle()
                     .trim(from: 0, to: progress)
@@ -118,34 +123,37 @@ struct TodayView: View {
                         progress >= 1.0 ? Color.green : Color.accentColor,
                         style: StrokeStyle(lineWidth: 8, lineCap: .round)
                     )
-                    .frame(width: 64, height: 64)
+                    .frame(width: ringSize, height: ringSize)
                     .rotationEffect(.degrees(-90))
                     .animation(.spring(response: 0.5, dampingFraction: 0.8), value: progress)
 
                 Text("\(completedCount)")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.system(.title2, design: .rounded, weight: .bold))
                     .contentTransition(.numericText())
                     .animation(.default, value: completedCount)
             }
+            .accessibilityHidden(true) // the text beside it says the same thing
 
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 0) {
-                    Text("\(completedCount)")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                        .contentTransition(.numericText())
-                    Text(" of \(totalCount) complete")
-                        .font(.headline)
-                }
-                .animation(.default, value: completedCount)
+                // One Text (concatenated) so it wraps as a sentence at large
+                // sizes instead of the number drifting away from its words.
+                (Text("\(completedCount)").fontDesign(.rounded).bold()
+                 + Text(" of \(totalCount) complete"))
+                    .font(.headline)
+                    .contentTransition(.numericText())
+                    .animation(.default, value: completedCount)
 
                 Text(viewModel.progressMessage(from: habits))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
-            Spacer()
+            if !dynamicTypeSize.isAccessibilitySize {
+                Spacer()
+            }
         }
         .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Empty Content

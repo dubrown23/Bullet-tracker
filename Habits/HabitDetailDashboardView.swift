@@ -36,6 +36,12 @@ struct HabitDetailDashboardView: View {
         rangeEnd >= calendar.startOfDay(for: Date())
     }
 
+    /// Falls back to the app accent (not iOS blue) when a habit has no colour.
+    private var habitColor: Color {
+        if let hex = habit?.color { return Color(hex: hex) }
+        return AppTheme.accent
+    }
+
     var body: some View {
         Group {
             if let habit = habit {
@@ -44,10 +50,11 @@ struct HabitDetailDashboardView: View {
                         HStack(spacing: 14) {
                             Image(systemName: habit.icon ?? "circle")
                                 .font(.title2)
-                                .foregroundStyle(Color(hex: habit.color ?? "#007AFF"))
+                                .foregroundStyle(habitColor)
                                 .frame(width: 44, height: 44)
-                                .background(Color(hex: habit.color ?? "#007AFF").opacity(0.12))
+                                .background(habitColor.opacity(0.12))
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .accessibilityHidden(true)
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(habit.name ?? "")
@@ -64,7 +71,7 @@ struct HabitDetailDashboardView: View {
                         LabeledContent("Completion Rate") {
                             Text("\(viewModel.completionRate)%")
                                 .font(.system(.body, design: .rounded, weight: .bold))
-                                .foregroundStyle(Color(hex: habit.color ?? "#007AFF"))
+                                .foregroundStyle(habitColor)
                         }
                         LabeledContent("Days Completed") {
                             Text("\(viewModel.completedDays) of \(viewModel.totalDays)")
@@ -114,12 +121,11 @@ struct HabitDetailDashboardView: View {
                     Section("Activity") {
                         // Navigation + month picker
                         HStack {
-                            Button {
+                            Button("Earlier", systemImage: "chevron.left") {
                                 rangeStart = calendar.date(byAdding: .day, value: -7, to: rangeStart)!
                                 rangeEnd = calendar.date(byAdding: .day, value: -7, to: rangeEnd)!
-                            } label: {
-                                Image(systemName: "chevron.left")
                             }
+                            .labelStyle(.iconOnly)
                             .buttonStyle(.borderless)
 
                             Spacer()
@@ -146,14 +152,13 @@ struct HabitDetailDashboardView: View {
 
                             Spacer()
 
-                            Button {
+                            Button("Later", systemImage: "chevron.right") {
                                 let today = calendar.startOfDay(for: Date())
                                 let newEnd = min(calendar.date(byAdding: .day, value: 7, to: rangeEnd)!, today)
                                 rangeStart = calendar.date(byAdding: .day, value: 7, to: rangeStart)!
                                 rangeEnd = newEnd
-                            } label: {
-                                Image(systemName: "chevron.right")
                             }
+                            .labelStyle(.iconOnly)
                             .buttonStyle(.borderless)
                             .disabled(isAtToday)
                         }
@@ -173,7 +178,7 @@ struct HabitDetailDashboardView: View {
                         ContributionHeatmapView(
                             dates: viewModel.heatmapDates,
                             completionData: viewModel.dailyCompletion,
-                            habitColor: Color(hex: habit.color ?? "#007AFF")
+                            habitColor: habitColor
                         )
                         .padding(.vertical, 4)
                     }
