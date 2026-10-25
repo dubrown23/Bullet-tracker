@@ -37,7 +37,11 @@ struct WeekGridMetrics {
     ///   - scaledBase: a `@ScaledMetric` base (24 at default text size).
     ///   - isRegularWidth: unfolded Duo / iPad → slightly larger squares.
     init(scaledBase: CGFloat, isRegularWidth: Bool) {
-        let size = isRegularWidth ? scaledBase * 1.2 : scaledBase
+        // Cap the Dynamic Type growth: at accessibility sizes the base would
+        // reach ~58pt and seven cells no longer fit a folded-phone card (the
+        // name moves above the grid at those sizes anyway).
+        let base = min(scaledBase, 32)
+        let size = isRegularWidth ? base * 1.2 : base
         cellSize = size
         slotWidth = size + (isRegularWidth ? 8 : 6)
     }
@@ -136,6 +140,17 @@ struct TodayHabitRowView: View {
         calendar.startOfDay(for: day) > calendar.startOfDay(for: Date())
     }
 
+    /// Days before the habit existed can't be logged (matches `shouldTrack`,
+    /// which hides the habit on those days when you navigate to them).
+    private func isBeforeStart(_ day: Date) -> Bool {
+        guard let start = habit.startDate else { return false }
+        return calendar.startOfDay(for: day) < calendar.startOfDay(for: start)
+    }
+
+    private func isEditable(_ day: Date) -> Bool {
+        !isFuture(day) && !isBeforeStart(day)
+    }
+
     private var completedDaysOfSeven: Int {
         weekDays.filter { state(on: $0) != 0 }.count
     }
@@ -225,7 +240,7 @@ struct TodayHabitRowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(isFuture(date))
+        .disabled(!isEditable(date))
         .accessibilityLabel(habit.name ?? "Habit")
         .accessibilityValue(accessibilityValueText)
         .accessibilityAddTraits(.isToggle)
@@ -250,11 +265,12 @@ struct TodayHabitRowView: View {
             toggle(on: day)
         } label: {
             dayCell(state: dayState, isSelected: isSelected)
+                .opacity(isEditable(day) ? 1 : 0.35)
                 .frame(width: metrics.slotWidth, height: WeekGridMetrics.hitHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(isFuture(day))
+        .disabled(!isEditable(day))
         .accessibilityLabel(day.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
         .accessibilityValue(accessibilityStateText(for: dayState))
         .accessibilityAddTraits(isSelected ? [.isToggle, .isSelected] : .isToggle)
@@ -281,8 +297,11 @@ struct TodayHabitRowView: View {
                 .strokeBorder(habitColor, lineWidth: 2)
                 .frame(width: size, height: size)
         } else {
+            // Empty day: a light fill plus a hairline edge so the slot reads in
+            // dark mode too (a bare systemGray5 fill was ~1.2:1 on the card).
             shape
                 .fill(Color(.systemGray5))
+                .overlay(shape.strokeBorder(Color(.systemGray3), lineWidth: 1))
                 .frame(width: size, height: size)
         }
     }
@@ -293,7 +312,7 @@ struct TodayHabitRowView: View {
     /// multi-state cycles done → partial → tried → clear, avoidance toggles
     /// "slipped".
     private func toggle(on day: Date) {
-        guard !isFuture(day) else { return }
+        guard isEditable(day) else { return }
         let current = state(on: day)
 
         feedbackTick += 1
