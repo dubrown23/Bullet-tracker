@@ -4,16 +4,21 @@
 //
 //  Native iOS list row for habit tracking in the Today view.
 //
-//  bt-0012 row design — one shape per row (the Reminders pattern):
+//  bt-0013 PROTOTYPE — week-grid row (the Everyday / Loop / HabitNow pattern):
 //
-//      [tile]  Workout                 🔥3  ⓘ  ▪▪▫▪▪▫▫
+//      🏃 Workout  🔥3            ▪ ▪ ▫ ▪ ▪ ▫ ◻
+//                                 ──────────┬─
+//                                        today (outlined until done)
 //
-//  • The icon tile IS the button (44pt). Not done → tinted tile with the
-//    habit's icon. Done → tile fills with the state colour and a state symbol
-//    (✓ / ◐ / ✕) replaces the icon.
-//  • The last-7-days strip is the trailing-most element, so every row's strip
-//    lines up and the list reads as a 7-day grid.
-//  • Numbers are primary text; colour lives in icons (contrast audit).
+//  • The whole row is the button (44pt+ target, HIG). Tap = complete today
+//    (or cycle a multi-state habit). Logging and glancing are the same
+//    gesture on the same pixels.
+//  • Seven real-sized cells, newest on the right, coloured by that day's
+//    state. Today's cell is outlined in the habit colour until it's done.
+//  • Icon is a plain coloured glyph next to the name — identity only.
+//  • Edit / Delete / Log Details live on long-press and swipe.
+//  • One line (name truncates first); at accessibility text sizes the name
+//    sits above the grid.
 //
 
 import SwiftUI
@@ -38,16 +43,15 @@ struct TodayHabitRowView: View {
     /// exactly once per user action (and not when the row re-renders).
     @State private var feedbackTick = 0
 
-    /// Tile and strip scale with the user's text size (Dynamic Type).
-    @ScaledMetric(relativeTo: .body) private var tileSize: CGFloat = 44
-    @ScaledMetric(relativeTo: .body) private var daySquare: CGFloat = 8
+    /// Grid cell and glyph sizes scale with the user's text size (Dynamic Type).
+    @ScaledMetric(relativeTo: .body) private var cellSize: CGFloat = 24
+    @ScaledMetric(relativeTo: .body) private var cellSpacing: CGFloat = 5
+    @ScaledMetric(relativeTo: .body) private var glyphWidth: CGFloat = 24
 
     // MARK: - Data
 
-    /// Wave 4.5 prefetch: one indexed range fetch returning up to 7 entries
-    /// for this habit's last 7 days. Both `completionState` (today's render)
-    /// and `last7Days` (strip) read from this dict instead of issuing
-    /// per-day single-row queries.
+    /// One indexed range fetch for the last 7 days (incl. today); every per-day
+    /// read below comes from this dictionary.
     private var entriesLast7Days: [Date: HabitEntry] {
         let today = calendar.startOfDay(for: Date())
         guard let weekAgo = calendar.date(byAdding: .day, value: -6, to: today) else { return [:] }
@@ -72,49 +76,58 @@ struct TodayHabitRowView: View {
         calendar.startOfDay(for: date) > calendar.startOfDay(for: Date())
     }
 
-    /// Last 7 days completion for the strip — derived from `entriesLast7Days`.
-    private var last7Days: [Bool] {
+    /// The seven days ending today, oldest first.
+    private var weekDays: [Date] {
         let today = calendar.startOfDay(for: Date())
-        return (0..<7).reversed().map { daysAgo in
-            guard let d = calendar.date(byAdding: .day, value: -daysAgo, to: today) else { return false }
-            let dayStart = calendar.startOfDay(for: d)
-            guard let entry = entriesLast7Days[dayStart] else { return false }
-            return entry.effectiveCompletionState != .notDone
-        }
+        return (0..<7).reversed().compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }
+    }
+
+    /// Raw completion state (0 = not done, 1 / 2 / 3) for a day in the window.
+    private func state(on day: Date) -> Int {
+        guard let entry = entriesLast7Days[calendar.startOfDay(for: day)] else { return 0 }
+        return Int(entry.effectiveCompletionState.rawValue)
+    }
+
+    private var completedDaysOfSeven: Int {
+        weekDays.filter { state(on: $0) != 0 }.count
     }
 
     // MARK: - Body
 
     var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                // Accessibility text sizes: stack so nothing is squeezed off the card.
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 14) {
-                        tileButton
-                        nameText
+        Button(action: handleTap) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    // Large text: name above the grid.
+                    VStack(alignment: .leading, spacing: 8) {
+                        identity
+                        weekGrid
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
+                } else {
+                    // One line; the name truncates before the grid ever moves,
+                    // so every row in the card has the same shape.
                     HStack(spacing: 12) {
-                        streakBadge
-                        detailsButton
-                        Spacer()
-                        weekStrip
+                        identity
+                        Spacer(minLength: 12)
+                        weekGrid
                     }
-                }
-            } else {
-                HStack(spacing: 14) {
-                    tileButton
-                    nameText   // expands to fill; no separate Spacer needed
-                    streakBadge
-                    detailsButton
-                    weekStrip
                 }
             }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
-        // Edit / delete (bt-0012): before this there was no way to reach
-        // EditHabitView from the UI at all. Three standard routes — tap the
-        // name, long-press for a context menu, or swipe (compact width).
+        .buttonStyle(.plain)
+        .disabled(isFutureDate)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(habit.name ?? "Habit")
+        .accessibilityValue(accessibilityValueText)
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityHint("Double-tap to mark today")
         .contextMenu {
+            if shouldTrackDetails {
+                Button("Log Details", systemImage: "info.circle") { showingDetailView = true }
+            }
             Button("Edit Habit", systemImage: "pencil") { showingEditSheet = true }
             Button("Delete Habit", systemImage: "trash", role: .destructive, action: onRequestDelete)
         }
@@ -122,7 +135,7 @@ struct TodayHabitRowView: View {
             Button(role: .destructive, action: onRequestDelete) {
                 Label("Delete", systemImage: "trash")
             }
-            .tint(.red) // the app-wide accent tint otherwise overrides the destructive red
+            .tint(.red)
             Button {
                 showingEditSheet = true
             } label: {
@@ -142,99 +155,73 @@ struct TodayHabitRowView: View {
 
     // MARK: - Pieces
 
-    /// The tile is the control: a real Button with a name, a value and the
-    /// toggle trait for VoiceOver.
-    private var tileButton: some View {
-        Button(action: handleTileTap) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isChecked ? stateColor : habitColor.opacity(0.16))
+    /// Coloured glyph + name + streak. Identity only, no background shape.
+    private var identity: some View {
+        HStack(spacing: 10) {
+            Image(systemName: habit.icon ?? "circle")
+                .font(.body)
+                .foregroundStyle(habitColor)
+                .frame(width: glyphWidth)
 
-                if isChecked {
-                    Image(systemName: stateSymbol)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(AppTheme.readableForeground(onHex: stateColorHex))
-                        .symbolEffect(.bounce, value: isChecked)
-                } else {
-                    Image(systemName: habit.icon ?? "circle")
-                        .font(.title3)
-                        .foregroundStyle(habitColor)
-                }
-            }
-            .frame(width: tileSize, height: tileSize)
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .disabled(isFutureDate)
-        .accessibilityLabel(habit.name ?? "Habit")
-        .accessibilityValue(accessibilityStateDescription)
-        .accessibilityAddTraits(.isToggle)
-    }
-
-    /// Tapping the name opens the habit's settings (edit / delete).
-    private var nameText: some View {
-        Button {
-            showingEditSheet = true
-        } label: {
             Text(habit.name ?? "")
                 .font(.body)
                 .foregroundStyle(isChecked ? .secondary : .primary)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+                .lineLimit(1)
+                .layoutPriority(-1) // give way to the grid, never push it
+
+            if streak > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "flame.fill")
+                        .foregroundStyle(.orange)
+                    Text("\(streak)")
+                }
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityHint("Opens habit settings")
     }
 
-    /// Flame icon in orange, count in primary text (icon carries the colour,
-    /// text carries the contrast).
+    /// Last 7 days, oldest → newest. Today is the rightmost cell.
+    private var weekGrid: some View {
+        HStack(spacing: cellSpacing) {
+            ForEach(weekDays, id: \.self) { day in
+                dayCell(for: day, isToday: calendar.isDateInToday(day))
+            }
+        }
+        .fixedSize()
+    }
+
     @ViewBuilder
-    private var streakBadge: some View {
-        if streak > 0 {
-            HStack(spacing: 3) {
-                Image(systemName: "flame.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-                Text("\(streak)")
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-            }
-            .fixedSize()
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(streak) day streak")
-        }
-    }
+    private func dayCell(for day: Date, isToday: Bool) -> some View {
+        let dayState = state(on: day)
+        let shape = RoundedRectangle(cornerRadius: cellSize * 0.22, style: .continuous)
 
-    @ViewBuilder
-    private var detailsButton: some View {
-        if shouldTrackDetails {
-            Button("Log details", systemImage: "info.circle") {
-                showingDetailView = true
-            }
-            .labelStyle(.iconOnly)
-            .font(.body)
-            .foregroundStyle(.secondary)
-            .buttonStyle(.plain)
+        if dayState != 0 {
+            shape
+                .fill(color(forState: dayState))
+                .frame(width: cellSize, height: cellSize)
+                .overlay {
+                    if isToday {
+                        Image(systemName: symbol(forState: dayState))
+                            .font(.system(size: cellSize * 0.55, weight: .bold))
+                            .foregroundStyle(AppTheme.readableForeground(onHex: hex(forState: dayState)))
+                    }
+                }
+        } else if isToday {
+            shape
+                .strokeBorder(habitColor, lineWidth: 2)
+                .frame(width: cellSize, height: cellSize)
+        } else {
+            shape
+                .fill(Color(.systemGray5))
+                .frame(width: cellSize, height: cellSize)
         }
-    }
-
-    /// Last 7 days, oldest → newest, as small squares. Trailing-most element so
-    /// every row's strip is right-aligned into a grid.
-    private var weekStrip: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<7, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(last7Days[index] ? habitColor : Color(.systemGray4))
-                    .frame(width: daySquare, height: daySquare)
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Last 7 days: \(last7Days.filter { $0 }.count) of 7 completed")
     }
 
     // MARK: - Actions
 
-    private func handleTileTap() {
+    private func handleTap() {
         guard !isFutureDate else { return }
 
         if isChecked {
@@ -281,38 +268,42 @@ struct TodayHabitRowView: View {
 
     // MARK: - State appearance
 
-    /// Fill colour of a completed tile. Simple habits use their own colour;
+    /// Cell colour for a day's state. Simple habits use their own colour;
     /// multi-state uses the brand success / partial / failed colours;
-    /// avoidance (checked = slipped) uses failed.
-    private var stateColorHex: String {
+    /// avoidance (any state = slipped) uses failed.
+    private func hex(forState state: Int) -> String {
         if isNegativeHabit { return AppTheme.failedHex }
         if !useMultipleStates { return habitColorHex }
-        switch completionState.state {
+        switch state {
         case 2: return AppTheme.partialHex
         case 3: return AppTheme.failedHex
         default: return AppTheme.successHex
         }
     }
 
-    private var stateColor: Color { Color(hex: stateColorHex) }
+    private func color(forState state: Int) -> Color { Color(hex: hex(forState: state)) }
 
-    private var stateSymbol: String {
+    private func symbol(forState state: Int) -> String {
         if isNegativeHabit { return "xmark" }
-        switch completionState.state {
+        switch state {
         case 2: return "circle.lefthalf.filled"
         case 3: return "xmark"
         default: return "checkmark"
         }
     }
 
-    /// Spoken value for the tile.
-    private var accessibilityStateDescription: String {
-        if !isChecked { return "Not done" }
-        if isNegativeHabit { return "Slipped" }
-        switch completionState.state {
-        case 2: return "Partial"
-        case 3: return "Tried"
-        default: return "Done"
+    /// Spoken value for the row.
+    private var accessibilityValueText: String {
+        let today: String
+        if !isChecked { today = "Not done today" }
+        else if isNegativeHabit { today = "Slipped today" }
+        else {
+            switch completionState.state {
+            case 2: today = "Partial today"
+            case 3: today = "Tried today"
+            default: today = "Done today"
+            }
         }
+        return "\(today). \(completedDaysOfSeven) of the last 7 days."
     }
 }

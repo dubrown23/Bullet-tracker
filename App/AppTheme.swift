@@ -38,8 +38,11 @@ enum AppTheme {
     /// Black or white, whichever reads better on a surface filled with `hex`.
     /// Uses WCAG relative luminance (bt-0012 contrast audit): pale habit
     /// colours (yellows, pastels) get dark symbols, deep ones get white.
+    /// Threshold 0.45 keeps white on the orange accent and the greens (the
+    /// iOS convention for symbols on filled colour) and flips to black only
+    /// for genuinely pale fills.
     static func readableForeground(onHex hex: String) -> Color {
-        relativeLuminance(ofHex: hex) > 0.3 ? .black : .white
+        relativeLuminance(ofHex: hex) > 0.45 ? .black : .white
     }
 
     /// WCAG 2.1 relative luminance of an sRGB hex colour ("#RRGGBB" or "RRGGBB").
