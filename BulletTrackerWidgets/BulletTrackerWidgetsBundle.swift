@@ -11,11 +11,11 @@
 //  load. CloudKit mirroring lives inside `DataStore.shared`'s `ModelContainer`,
 //  so no explicit `CloudKit` import is needed here.
 //
-//  bt-0011: the widget mirrors the app's Today row — `[tile] name ▪▪▫▪▪▫◻` —
-//  using the shared `DaySquare` / `HabitIconTile` / `AppTheme`, scores with
-//  `HabitWinRule` (a slip is not a win), uses text styles + `@ScaledMetric`,
-//  and marks its coloured parts `.widgetAccentable()` for the tinted / clear
-//  Home Screen styles.
+//  bt-0016: the widget's one job is *log today without opening the app*.
+//  Medium = 8 big tappable tiles, large = 12 + the day summary, small = ring.
+//  Every habit visible, nothing scrolls, 56pt targets. Scored with
+//  `HabitWinRule`; same `AppShape` / `AppTheme` as the app; text styles and
+//  `.widgetAccentable()` for the tinted / clear Home Screen styles.
 //
 
 import WidgetKit
@@ -27,8 +27,6 @@ import AppIntents
 
 struct HabitWidgetEntry: TimelineEntry {
     let date: Date
-    /// The seven days ending today, oldest first.
-    let days: [Date]
     let habits: [WidgetHabit]
     let positiveDone: Int
     let positiveTotal: Int
@@ -65,13 +63,11 @@ struct WidgetHabit: Identifiable {
     let icon: String
     let color: String
     let style: CompletionStyle
-    /// Raw completion state per day in `HabitWidgetEntry.days` (0 = not logged).
-    let weekStates: [Int]
-    /// Whether that day may be logged (after the habit's start date).
-    let weekEditable: [Bool]
+    /// Today's raw completion state (0 = not logged, 1 / 2 / 3).
+    let todayState: Int
 
-    var todayState: Int { weekStates.last ?? 0 }
     var isNegativeHabit: Bool { style == .avoidance }
+    var isLogged: Bool { todayState != 0 }
 }
 
 // MARK: - Complete Habit Intent
@@ -170,24 +166,26 @@ struct HabitWidgetProvider: TimelineProvider {
         Self.sampleEntry()
     }
 
-    /// Sample data for the gallery placeholder and the previews.
+    /// Sample data for the gallery placeholder and the previews — Dustin's
+    /// real eleven so the previews show the real density.
     static func sampleEntry() -> HabitWidgetEntry {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let days = (0..<7).reversed().compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }
-        return HabitWidgetEntry(
-            date: Date(),
-            days: days,
-            habits: [
-                WidgetHabit(id: UUID(), name: "Workout", icon: "figure.run", color: AppTheme.accentHex, style: .simple,
-                            weekStates: [1, 1, 0, 1, 1, 0, 1], weekEditable: Array(repeating: true, count: 7)),
-                WidgetHabit(id: UUID(), name: "Read", icon: "book.fill", color: "#5856D6", style: .simple,
-                            weekStates: [1, 1, 1, 1, 1, 1, 0], weekEditable: Array(repeating: true, count: 7)),
-                WidgetHabit(id: UUID(), name: "Alcohol", icon: "wineglass.fill", color: "#FF2D55", style: .avoidance,
-                            weekStates: [0, 0, 3, 0, 0, 0, 0], weekEditable: Array(repeating: true, count: 7))
-            ],
-            positiveDone: 1, positiveTotal: 2, avoidanceTotal: 1, slips: 0
-        )
+        func h(_ name: String, _ icon: String, _ color: String, _ style: CompletionStyle = .simple, _ state: Int = 0) -> WidgetHabit {
+            WidgetHabit(id: UUID(), name: name, icon: icon, color: color, style: style, todayState: state)
+        }
+        let habits = [
+            h("Diet", "fork.knife", "#FFCC00", .multiState, 1),
+            h("Workout", "figure.run", "#007AFF", .simple, 1),
+            h("Sauna", "flame.fill", "#FF2D55"),
+            h("Pills", "pills.fill", "#5AC8FA", .simple, 1),
+            h("Joovv", "light.strip.2", "#FF2D55"),
+            h("Cold Tub", "thermometer.snowflake", "#004080"),
+            h("Read", "book.fill", "#53433D"),
+            h("Alcohol", "wineglass.fill", "#5856D6", .avoidance),
+            h("Weed", "leaf.fill", "#34C759", .avoidance),
+            h("Stretch", "figure.cooldown", AppTheme.accentHex),
+            h("Sleep", "bed.double.fill", "#2E2B6B")
+        ]
+        return HabitWidgetEntry(date: Date(), habits: habits, positiveDone: 3, positiveTotal: 9, avoidanceTotal: 2, slips: 0)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (HabitWidgetEntry) -> ()) {
@@ -223,38 +221,27 @@ struct HabitWidgetProvider: TimelineProvider {
 
     // MARK: Data
 
-    /// The seven days ending today, oldest first.
-    private func weekDays() -> [Date] {
-        let today = calendar.startOfDay(for: Date())
-        return (0..<7).reversed().compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }
-    }
-
     private func loadEntry() -> HabitWidgetEntry {
         // Per-load context tied to this thread — SwiftData doesn't need the old
         // `context.perform { ... }` queue confinement Core Data required.
         let context = ModelContext(DataStore.shared)
-        let days = weekDays()
-        let today = days.last ?? calendar.startOfDay(for: Date())
+        let today = calendar.startOfDay(for: Date())
         let habits = fetchTodaysHabits(in: context, today: today)
-        let statesByHabit = fetchWeekStates(for: habits, days: days, in: context)
+        let todayStates = fetchTodayStates(for: habits, today: today, in: context)
 
         var positiveDone = 0, positiveTotal = 0, avoidanceTotal = 0, slips = 0
 
         let widgetHabits: [WidgetHabit] = habits.map { habit in
             let id = habit.id ?? UUID()
-            let states = statesByHabit[id] ?? Array(repeating: 0, count: days.count)
-            let editable = days.map { day in
-                guard let start = habit.startDate else { return true }
-                return calendar.startOfDay(for: day) >= calendar.startOfDay(for: start)
-            }
+            let state = todayStates[id] ?? 0
+            let typed = CompletionState(rawValue: Int16(state))
 
-            let todayState = CompletionState(rawValue: Int16(states.last ?? 0))
             if habit.completionStyle == .avoidance {
                 avoidanceTotal += 1
-                if HabitWinRule.isLogged(state: todayState) { slips += 1 }
+                if HabitWinRule.isLogged(state: typed) { slips += 1 }
             } else {
                 positiveTotal += 1
-                if HabitWinRule.isWin(style: habit.completionStyle, state: todayState, isFuture: false) { positiveDone += 1 }
+                if HabitWinRule.isWin(style: habit.completionStyle, state: typed, isFuture: false) { positiveDone += 1 }
             }
 
             return WidgetHabit(
@@ -263,14 +250,12 @@ struct HabitWidgetProvider: TimelineProvider {
                 icon: habit.icon ?? "circle",
                 color: habit.color ?? AppTheme.accentHex,
                 style: habit.completionStyle,
-                weekStates: states,
-                weekEditable: editable
+                todayState: state
             )
         }
 
         return HabitWidgetEntry(
             date: Date(),
-            days: days,
             habits: widgetHabits,
             positiveDone: positiveDone,
             positiveTotal: positiveTotal,
@@ -294,28 +279,18 @@ struct HabitWidgetProvider: TimelineProvider {
         }
     }
 
-    /// One indexed fetch over the 7-day window, partitioned by habit in Swift
-    /// (same shape as the app's `HabitStore.allEntriesByDay`).
-    private func fetchWeekStates(for habits: [Habit], days: [Date], in context: ModelContext) -> [UUID: [Int]] {
-        guard let first = days.first, let last = days.last,
-              let end = calendar.date(byAdding: .day, value: 1, to: last) else { return [:] }
-
+    /// One indexed fetch over today's entries, keyed by habit id.
+    private func fetchTodayStates(for habits: [Habit], today: Date, in context: ModelContext) -> [UUID: Int] {
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) else { return [:] }
         let descriptor = FetchDescriptor<HabitEntry>(
-            predicate: #Predicate { entry in entry.date >= first && entry.date < end }
+            predicate: #Predicate { entry in entry.date >= today && entry.date < tomorrow }
         )
         let entries = (try? context.fetch(descriptor)) ?? []
         let wanted = Set(habits.compactMap { $0.id })
-
-        var byHabitAndDay: [UUID: [Date: Int]] = [:]
+        var result: [UUID: Int] = [:]
         for entry in entries {
             guard let id = entry.habit?.id, wanted.contains(id) else { continue }
-            byHabitAndDay[id, default: [:]][calendar.startOfDay(for: entry.date)] = Int(entry.effectiveCompletionState.rawValue)
-        }
-
-        var result: [UUID: [Int]] = [:]
-        for id in wanted {
-            let perDay = byHabitAndDay[id] ?? [:]
-            result[id] = days.map { perDay[calendar.startOfDay(for: $0)] ?? 0 }
+            result[id] = Int(entry.effectiveCompletionState.rawValue)
         }
         return result
     }
@@ -336,9 +311,9 @@ struct HabitWidgetView: View {
                 case .systemSmall:
                     SmallHabitWidget(entry: entry)
                 case .systemLarge:
-                    HabitGridWidget(entry: entry, maxRows: 8, showsSummary: true)
+                    HabitTileGridWidget(entry: entry, maxTiles: 12, showsSummary: true)
                 default:
-                    HabitGridWidget(entry: entry, maxRows: 4, showsSummary: false)
+                    HabitTileGridWidget(entry: entry, maxTiles: 8, showsSummary: false)
                 }
             }
         }
@@ -410,150 +385,163 @@ struct SmallHabitWidget: View {
     }
 }
 
-// MARK: - Medium / Large: the Today rows
+// MARK: - Medium / Large: tile grid
 
-struct HabitGridWidget: View {
+struct HabitTileGridWidget: View {
     let entry: HabitWidgetEntry
-    let maxRows: Int
+    let maxTiles: Int
     let showsSummary: Bool
 
-    @ScaledMetric(relativeTo: .caption) private var squareSize: CGFloat = 16
-    @ScaledMetric(relativeTo: .caption) private var tileSize: CGFloat = 22
+    @ScaledMetric(relativeTo: .caption2) private var labelHeight: CGFloat = 15
+    @ScaledMetric(relativeTo: .headline) private var headerHeight: CGFloat = 22
 
-    private var slotWidth: CGFloat { squareSize + 5 }
+    private let spacing: CGFloat = 8
+    private let columnCount = 4
+
+    /// When there are more habits than cells, the last cell becomes a "+N" tile
+    /// (the Photos / Mail widget pattern) so the grid never needs a footer.
+    private var overflow: Int { max(0, entry.habits.count - maxTiles) }
+    private var shownHabits: ArraySlice<WidgetHabit> {
+        entry.habits.prefix(overflow > 0 ? maxTiles - 1 : maxTiles)
+    }
+    private var cellCount: Int { shownHabits.count + (overflow > 0 ? 1 : 0) }
+    private var rowCount: Int { max(1, (cellCount + columnCount - 1) / columnCount) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if showsSummary {
-                Text(entry.summaryText)
-                    .font(.headline)
-                    .padding(.bottom, 2)
-            }
+        GeometryReader { geo in
+            let tile = tileSize(in: geo.size)
+            let columns = Array(repeating: GridItem(.flexible(), spacing: spacing), count: columnCount)
 
-            // Weekday letters over the squares.
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                ForEach(entry.days, id: \.self) { day in
-                    Text(day.formatted(.dateTime.weekday(.narrow)))
-                        .font(.caption2)
-                        .textCase(.uppercase)
-                        .foregroundStyle(.secondary)
-                        .frame(width: slotWidth)
+            VStack(alignment: .leading, spacing: spacing) {
+                if showsSummary {
+                    Text(entry.summaryText)
+                        .font(.headline)
+                        .foregroundStyle(entry.slips > 0 ? AnyShapeStyle(AppTheme.failed) : AnyShapeStyle(.primary))
                 }
-            }
-            .accessibilityHidden(true)
 
-            ForEach(entry.habits.prefix(maxRows)) { habit in
-                WidgetHabitRow(habit: habit, days: entry.days, squareSize: squareSize, slotWidth: slotWidth, tileSize: tileSize)
-            }
+                LazyVGrid(columns: columns, spacing: spacing) {
+                    ForEach(shownHabits) { habit in
+                        HabitTileButton(habit: habit, tileSize: tile)
+                    }
+                    if overflow > 0 {
+                        OverflowTile(count: overflow, tileSize: tile)
+                    }
+                }
 
-            if entry.habits.count > maxRows {
-                Text("+\(entry.habits.count - maxRows) more")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
-
-            Spacer(minLength: 0)
         }
+    }
+
+    /// Fit the tile to the family: the grid (tiles + name labels + gaps) must
+    /// fill the widget without clipping, capped so a two-row medium and a
+    /// three-row large both read as the same component.
+    private func tileSize(in size: CGSize) -> CGFloat {
+        let header = showsSummary ? headerHeight + spacing : 0
+        let gridHeight = size.height - header - spacing * CGFloat(rowCount - 1)
+        let byHeight = gridHeight / CGFloat(rowCount) - labelHeight - 4
+        let byWidth = (size.width - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount)
+        return max(36, min(64, byHeight, byWidth))
     }
 }
 
-// MARK: - Row
+/// "+N" cell for habits that didn't fit. Tapping it opens the app (default
+/// widget tap), which is where the rest of the list lives.
+struct OverflowTile: View {
+    let count: Int
+    let tileSize: CGFloat
 
-struct WidgetHabitRow: View {
+    var body: some View {
+        VStack(spacing: 4) {
+            AppShape.rounded(tileSize)
+                .fill(Color(.tertiarySystemFill))
+                .frame(width: tileSize, height: tileSize)
+                .overlay {
+                    Text("+\(count)")
+                        .font(.system(size: tileSize * 0.36, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
+            Text("More")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(count) more habits, open the app")
+    }
+}
+
+// MARK: - Tile
+
+/// One habit, one big tap. Not logged: icon on a tint of the habit colour.
+/// Logged: solid state colour, white icon, a small state badge in the corner.
+struct HabitTileButton: View {
     let habit: WidgetHabit
-    let days: [Date]
-    let squareSize: CGFloat
-    let slotWidth: CGFloat
     let tileSize: CGFloat
 
     private var habitColor: Color { Color(hex: habit.color) }
-    private var isTodayLogged: Bool { habit.todayState != 0 }
 
     var body: some View {
-        HStack(spacing: 8) {
-            HabitIconTile(systemImage: habit.icon, colorHex: habit.color, size: tileSize, font: .caption)
+        Button(intent: CompleteHabitIntent(habitID: habit.id.uuidString, habitName: habit.name)) {
+            VStack(spacing: 4) {
+                ZStack(alignment: .bottomTrailing) {
+                    AppShape.rounded(tileSize)
+                        .fill(habit.isLogged ? fillColor : habitColor.opacity(0.14))
+                        .frame(width: tileSize, height: tileSize)
+
+                    // Icon scales with the tile so medium and large read the same.
+                    Image(systemName: habit.icon)
+                        .font(.system(size: tileSize * 0.42, weight: .medium))
+                        .foregroundStyle(habit.isLogged ? AppTheme.readableForeground(onHex: fillHex) : habitColor)
+                        .frame(width: tileSize, height: tileSize)
+
+                    if habit.isLogged {
+                        Image(systemName: badgeSymbol)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(fillColor)
+                            .padding(3)
+                            .background(Circle().fill(Color(.systemBackground)))
+                            .offset(x: 4, y: 4)
+                    }
+                }
                 .widgetAccentable()
 
-            Text(habit.name)
-                .font(.caption)
-                .foregroundStyle(isTodayLogged && !habit.isNegativeHabit ? .secondary : .primary)
-                .lineLimit(1)
-
-            Spacer(minLength: 4)
-
-            HStack(spacing: 0) {
-                ForEach(Array(days.enumerated()), id: \.offset) { index, _ in
-                    let isToday = index == days.count - 1
-                    if isToday {
-                        Button(intent: CompleteHabitIntent(habitID: habit.id.uuidString, habitName: habit.name)) {
-                            square(at: index, isToday: true)
-                                .frame(width: slotWidth, height: slotWidth)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(habit.name)
-                        .accessibilityValue(todayAccessibilityValue)
-                    } else {
-                        square(at: index, isToday: false)
-                            .frame(width: slotWidth)
-                    }
-                }
+                Text(habit.name)
+                    .font(.caption2)
+                    .lineLimit(1)
             }
-            .accessibilityElement(children: .contain)
+            .frame(maxWidth: .infinity)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(habit.name)
+        .accessibilityValue(accessibilityValue)
+        .accessibilityAddTraits(.isToggle)
     }
 
-    @ViewBuilder
-    private func square(at index: Int, isToday: Bool) -> some View {
-        let state = habit.weekStates[index]
-        let editable = habit.weekEditable[index]
-        let isCleanAvoidanceWin = habit.isNegativeHabit && state == 0 && !isToday && editable
-
-        Group {
-            if isCleanAvoidanceWin {
-                DaySquare(size: squareSize, style: .filled(habitColor))
-            } else if state != 0 {
-                DaySquare(size: squareSize, style: .filled(color(forState: state))) {
-                    if isToday {
-                        Image(systemName: symbol(forState: state))
-                            .font(.system(size: squareSize * 0.55, weight: .bold))
-                            .foregroundStyle(AppTheme.readableForeground(onHex: hex(forState: state)))
-                    }
-                }
-            } else if isToday {
-                DaySquare(size: squareSize, style: .outlined(habitColor))
-            } else {
-                DaySquare(size: squareSize, style: .empty)
-            }
-        }
-        .opacity(editable ? 1 : 0.35)
-        .widgetAccentable(state != 0 || isCleanAvoidanceWin)
-    }
-
-    private func hex(forState state: Int) -> String {
+    private var fillHex: String {
         if habit.isNegativeHabit { return AppTheme.failedHex }
         if habit.style != .multiState { return habit.color }
-        switch state {
+        switch habit.todayState {
         case 2: return AppTheme.partialHex
         case 3: return AppTheme.failedHex
         default: return AppTheme.successHex
         }
     }
 
-    private func color(forState state: Int) -> Color { Color(hex: hex(forState: state)) }
+    private var fillColor: Color { Color(hex: fillHex) }
 
-    private func symbol(forState state: Int) -> String {
-        if habit.isNegativeHabit { return "xmark" }
-        switch state {
+    private var badgeSymbol: String {
+        if habit.isNegativeHabit { return "xmark.circle.fill" }
+        switch habit.todayState {
         case 2: return "circle.lefthalf.filled"
-        case 3: return "xmark"
-        default: return "checkmark"
+        case 3: return "xmark.circle.fill"
+        default: return "checkmark.circle.fill"
         }
     }
 
-    private var todayAccessibilityValue: String {
-        if habit.isNegativeHabit { return isTodayLogged ? "Slipped today" : "Clean so far" }
+    private var accessibilityValue: String {
+        if habit.isNegativeHabit { return habit.isLogged ? "Slipped today" : "Clean so far" }
         switch habit.todayState {
         case 0: return "Not done"
         case 2: return "Partial"
@@ -573,7 +561,7 @@ struct HabitTrackerWidget: Widget {
             HabitWidgetView(entry: entry)
         }
         .configurationDisplayName("Today's Habits")
-        .description("Your week at a glance. Tap today's square to log a habit.")
+        .description("Tap a habit to log it for today.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
