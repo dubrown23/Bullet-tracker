@@ -140,9 +140,9 @@ struct TodayHabitRowView: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             } else {
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     identityButton
-                    Spacer(minLength: 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     weekGrid
                 }
             }
@@ -192,11 +192,12 @@ struct TodayHabitRowView: View {
                     .foregroundStyle(habitColor)
                     .frame(width: glyphWidth)
 
+                // The grid is `fixedSize`, so the name takes whatever is left
+                // and truncates only when there genuinely isn't room.
                 Text(habit.name ?? "")
                     .font(.body)
                     .foregroundStyle(isSelectedDayDone ? .secondary : .primary)
                     .lineLimit(1)
-                    .layoutPriority(-1) // give way to the grid, never push it
 
                 if streak > 0 {
                     HStack(spacing: 2) {
@@ -209,7 +210,7 @@ struct TodayHabitRowView: View {
                     .fixedSize()
                 }
             }
-            .frame(minHeight: WeekGridMetrics.hitHeight)
+            .frame(maxWidth: .infinity, minHeight: WeekGridMetrics.hitHeight, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
