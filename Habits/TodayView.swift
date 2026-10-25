@@ -74,29 +74,25 @@ struct TodayView: View {
             }
             // Weekday letters pinned under the navigation bar; the list scrolls
             // beneath them with the system scroll-edge treatment.
+            // Weekday letters: a thin pinned strip right over the squares, like
+            // a table's column header. Just the letters — the summary is the
+            // navigation subtitle, where Apple puts that line.
             .safeAreaBar(edge: .top) {
-                if !trackableHabits.isEmpty {
-                    Group {
-                        if dynamicTypeSize.isAccessibilitySize {
-                            // Large text: summary only (the grid has no letters row).
-                            summaryLabel
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            weekdayHeader
-                        }
-                    }
-                    .padding(.leading, headerLeadingPadding)
-                    .padding(.trailing, headerTrailingPadding)
-                    .padding(.bottom, 4)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !trackableHabits.isEmpty && !dynamicTypeSize.isAccessibilitySize {
+                    weekdayHeader
+                        .padding(.leading, headerLeadingPadding)
+                        .padding(.trailing, headerTrailingPadding)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            // Pull the first card up under the letters (the grouped list's
+            // default top gap is sized for a section header we don't have).
+            .contentMargins(.top, 6, for: .scrollContent)
             .navigationTitle(viewModel.dateDisplayString)
-            // Inline title: compact above the pinned header, matches the Journal
-            // tab. The day summary lives in the pinned header (not a nav
-            // subtitle) because iPadOS puts the top tab bar in the nav bar and
-            // iOS 27 minimises the bar on scroll — the header is always there.
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationSubtitle(viewModel.summaryText(from: habits))
+            // Large title + subtitle is the standard tab-root header; the bar is
+            // told not to minimise on scroll (it used to vanish instead of
+            // collapsing to inline when a safeAreaBar sat under it).
             .keepNavigationBarVisible()
             // System toolbar groups (HIG → Toolbars). Each button is a titled
             // `Button(_:systemImage:)`, so the bar shows the symbol and VoiceOver
@@ -174,27 +170,14 @@ struct TodayView: View {
         .accessibilityHidden(true) // each square already speaks its weekday
     }
 
-    /// "5 of 8 done · 3 clean" — slips read as a warning.
-    private var summaryLabel: some View {
-        Text(viewModel.summaryText(from: habits))
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(viewModel.hasSlips(from: habits) ? AnyShapeStyle(AppTheme.failed) : AnyShapeStyle(.secondary))
-            .lineLimit(1)
-            .accessibilityHidden(false)
-    }
-
     /// Mirrors `PairedRows` geometry in regular width (two columns, 16pt gap,
-    /// divider) so each column's letters line up with its own grid. The day
-    /// summary sits at the leading edge of the first column.
+    /// divider) so each column's letters line up with its own grid.
     @ViewBuilder
     private var weekdayHeader: some View {
         if horizontalSizeClass == .regular {
             HStack(spacing: 16) {
-                HStack {
-                    summaryLabel
-                    Spacer(minLength: 8)
-                    weekdayLetterStrip
-                }
+                weekdayLetterStrip
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 // Stand-in for PairedRows' Divider (same ~hairline width). A
                 // real Divider here proposes infinite height and the pinned
                 // bar would fill the screen.
@@ -203,11 +186,8 @@ struct TodayView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
         } else {
-            HStack {
-                summaryLabel
-                Spacer(minLength: 8)
-                weekdayLetterStrip
-            }
+            weekdayLetterStrip
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
