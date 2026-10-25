@@ -277,7 +277,7 @@ struct DayCell: View {
 
                 Text(dayOfWeek)
                     .font(.caption2.weight(.medium))
-                    .foregroundStyle(isSelected ? .white.opacity(0.9) : .secondary)
+                    .foregroundStyle(isSelected ? selectedForeground.opacity(0.85) : .secondary)
             }
             .frame(minWidth: 44, minHeight: 56)
             .background(backgroundView)
@@ -296,9 +296,15 @@ struct DayCell: View {
         return isToday ? "\(base), Today" : base
     }
 
+    /// Black or white, whichever reads on the accent fill (contrast audit:
+    /// white on the orange accent is ~2.3:1).
+    private var selectedForeground: Color {
+        AppTheme.readableForeground(onHex: AppTheme.accentHex)
+    }
+
     private var textColor: Color {
         if isSelected {
-            return .white
+            return selectedForeground
         } else if isToday {
             return .accentColor
         } else {
@@ -450,7 +456,7 @@ struct NoteRow: View {
             HStack(alignment: .top, spacing: 10) {
                 Text(timeString)
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary) // .tertiary is ~2.2:1 on white
                     .fixedSize()
                     .frame(minWidth: 60, alignment: .leading)
 

@@ -42,6 +42,8 @@ struct PairedRows<Item: Identifiable, Content: View>: View {
                         // visible half navigates. (List still reports the lone
                         // button's accessibility frame as the whole row; that's
                         // List's own behaviour, not a hit-testing problem.)
+                        Divider()
+                            .hidden() // same width as a real pair → columns stay aligned
                         content(pair.first)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .hidden()

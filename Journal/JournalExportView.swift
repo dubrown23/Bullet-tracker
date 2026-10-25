@@ -30,6 +30,7 @@ struct JournalExportView: View {
             }
             .navigationTitle("Export Journal")
             .navigationBarTitleDisplayMode(.inline)
+            .keepNavigationBarVisible() // Cancel / Export scrolled away (dark-mode audit)
             .onAppear {
                 viewModel.modelContext = modelContext
                 viewModel.updatePreview()

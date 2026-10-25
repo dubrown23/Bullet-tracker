@@ -71,7 +71,6 @@ struct HabitDetailDashboardView: View {
                         LabeledContent("Completion Rate") {
                             Text("\(viewModel.completionRate)%")
                                 .font(.system(.body, design: .rounded, weight: .bold))
-                                .foregroundStyle(habitColor)
                         }
                         LabeledContent("Days Completed") {
                             Text("\(viewModel.completedDays) of \(viewModel.totalDays)")
@@ -145,9 +144,10 @@ struct HabitDetailDashboardView: View {
                                     }
                                 }
                             } label: {
+                                // Plain menu label; the old conditional tint made
+                                // it look disabled in dark mode (bt-0012 audit).
                                 Text(dateRangeText)
                                     .font(.subheadline)
-                                    .foregroundStyle(isAtToday ? .secondary : .primary)
                             }
 
                             Spacer()

@@ -196,7 +196,7 @@ struct ContributionHeatmapView: View {
             ForEach(0..<7, id: \.self) { row in
                 Text(dayLabel(for: row))
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary) // .tertiary is ~2.2:1 on white
                     .frame(width: dayLabelWidth, height: cellSize)
             }
         }

@@ -42,7 +42,10 @@ struct HabitCompletionDetailView: View {
 
     // MARK: - Computed
 
-    private var habitColor: Color { Color(hex: habit.color ?? "#FF8C42") }
+    private var habitColorHex: String { habit.color ?? AppTheme.accentHex }
+    private var habitColor: Color { Color(hex: habitColorHex) }
+    /// Text colour on a chip filled with the habit colour (contrast audit).
+    private var onHabitColor: Color { AppTheme.readableForeground(onHex: habitColorHex) }
 
     private var useMultipleStates: Bool {
         habit.completionStyle == .multiState
@@ -153,7 +156,7 @@ struct HabitCompletionDetailView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                             .background(isSelected ? habitColor : Color(.systemGray5))
-                            .foregroundStyle(isSelected ? .white : .primary)
+                            .foregroundStyle(isSelected ? onHabitColor : .primary)
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -176,7 +179,7 @@ struct HabitCompletionDetailView: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
                             .background(isSelected ? habitColor : Color(.systemGray5))
-                            .foregroundStyle(isSelected ? .white : .primary)
+                            .foregroundStyle(isSelected ? onHabitColor : .primary)
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)

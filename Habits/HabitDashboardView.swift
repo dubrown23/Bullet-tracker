@@ -20,7 +20,8 @@ struct HabitDashboardView: View {
     var body: some View {
         NavigationStack {
             List {
-                // Time period selector
+                // Time period selector — a bare control above the content
+                // cards, not a card itself (bt-0012).
                 Section {
                     Picker("Period", selection: $viewModel.selectedPeriod) {
                         ForEach(DashboardTimePeriod.allCases) { period in
@@ -28,7 +29,8 @@ struct HabitDashboardView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
                 }
 
                 if habits.isEmpty {
@@ -102,9 +104,10 @@ struct HabitDashboardView: View {
                 .foregroundStyle(color)
                 .accessibilityHidden(true)
 
+            // Numbers in primary text, colour on the icon only (contrast audit:
+            // orange / green text on white is ~2.2:1).
             Text(value)
                 .font(.system(.title2, design: .rounded, weight: .bold))
-                .foregroundStyle(color)
                 .contentTransition(.numericText())
 
             Text(label)

@@ -112,23 +112,28 @@ struct HabitFormView: View {
             TextField("Habit Name", text: $name)
 
             // Icon row — shows current icon with change button
-            LabeledContent("Icon") {
-                HStack(spacing: 12) {
-                    Image(systemName: selectedIcon)
-                        .font(.title3)
-                        .foregroundStyle(Color(hex: selectedColor))
-                        .frame(width: iconTileSize, height: iconTileSize)
-                        .background(Color(hex: selectedColor).opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .accessibilityLabel(selectedIcon.symbolDisplayName)
-
-                    Button("Change") {
-                        showingIconSheet = true
+            // The tile itself opens the picker (bt-0012: one control, not three).
+            Button {
+                showingIconSheet = true
+            } label: {
+                LabeledContent("Icon") {
+                    HStack(spacing: 8) {
+                        Image(systemName: selectedIcon)
+                            .font(.title3)
+                            .foregroundStyle(Color(hex: selectedColor))
+                            .frame(width: iconTileSize, height: iconTileSize)
+                            .background(Color(hex: selectedColor).opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        Image(systemName: "chevron.forward")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
                     }
-                    .font(.subheadline)
-                    .buttonStyle(.borderless)
                 }
+                .contentShape(Rectangle()) // whole row tappable, not just the tile
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Icon, \(selectedIcon.symbolDisplayName)")
+            .accessibilityHint("Opens the icon picker")
 
             // Quick icon row — real Buttons (were Images with tap gestures), each
             // named for VoiceOver and marked selected when it's the current icon.
