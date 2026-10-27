@@ -174,6 +174,9 @@ struct SettingsView: View {
                 remindersSection
                 dataManagementSection
                 aboutSection
+                #if DEBUG
+                developerSection
+                #endif
             }
             .navigationTitle("Settings")
             .onAppear { viewModel.modelContext = modelContext }
@@ -256,6 +259,19 @@ struct SettingsView: View {
             }
         }
     }
+
+    #if DEBUG
+    /// bt-0017 — Step 0 sync proof. Debug builds only; release has no section.
+    private var developerSection: some View {
+        Section("Developer") {
+            NavigationLink {
+                DeveloperSyncView()
+            } label: {
+                Label("Sync proof (fake dh)", systemImage: "hammer")
+            }
+        }
+    }
+    #endif
 
     private var aboutSection: some View {
         Section("About") {

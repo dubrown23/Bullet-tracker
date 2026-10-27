@@ -31,6 +31,11 @@
 		77A9E57B308EBE72000C0F07 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77A9E565308EAC81000C0F07 /* DesignSystem.swift */; };
 		77B535972DD62DAE008BBCD8 /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535962DD62DAE008BBCD8 /* BackupManager.swift */; };
 		77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */; };
+		77BE079E308FFF2100A3E8D7 /* DeveloperSyncView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BE079D308FFF2100A3E8D7 /* DeveloperSyncView.swift */; };
+		77BE07A0308FFF2100A3E8D7 /* HabitFactsSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BE0799308FFE9D00A3E8D7 /* HabitFactsSource.swift */; };
+		77BE07A1308FFF2100A3E8D7 /* HabitGrading.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BE079A308FFEA600A3E8D7 /* HabitGrading.swift */; };
+		77BE07A2308FFF2100A3E8D7 /* HealthSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BE079B308FFEAE00A3E8D7 /* HealthSteps.swift */; };
+		77BE07A3308FFF2100A3E8D7 /* HabitSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BE079C308FFED300A3E8D7 /* HabitSyncEngine.swift */; };
 		77D9A51F2F294BBB0019C64C /* HabitDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A51E2F294BBB0019C64C /* HabitDashboardView.swift */; };
 		77D9A5272F2952730019C64C /* DayJournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A5262F2952730019C64C /* DayJournalView.swift */; };
 		77D9A5292F29A1B60019C64C /* HabitCalculations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A5282F29A1B60019C64C /* HabitCalculations.swift */; };
@@ -110,6 +115,11 @@
 		77A9E565308EAC81000C0F07 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		77B535962DD62DAE008BBCD8 /* BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManager.swift; sourceTree = "<group>"; };
 		77B535982DD62DB6008BBCD8 /* BackupRestoreViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRestoreViewModel.swift; sourceTree = "<group>"; };
+		77BE0799308FFE9D00A3E8D7 /* HabitFactsSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitFactsSource.swift; sourceTree = "<group>"; };
+		77BE079A308FFEA600A3E8D7 /* HabitGrading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitGrading.swift; sourceTree = "<group>"; };
+		77BE079B308FFEAE00A3E8D7 /* HealthSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSteps.swift; sourceTree = "<group>"; };
+		77BE079C308FFED300A3E8D7 /* HabitSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitSyncEngine.swift; sourceTree = "<group>"; };
+		77BE079D308FFF2100A3E8D7 /* DeveloperSyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperSyncView.swift; sourceTree = "<group>"; };
 		77D9A51E2F294BBB0019C64C /* HabitDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitDashboardView.swift; sourceTree = "<group>"; };
 		77D9A5262F2952730019C64C /* DayJournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayJournalView.swift; sourceTree = "<group>"; };
 		77D9A5282F29A1B60019C64C /* HabitCalculations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitCalculations.swift; sourceTree = "<group>"; };
@@ -265,6 +275,7 @@
 				772D05872EB3A2DC00186D04 /* BulletTrackerWidgets */,
 				772D05822EB3A2DC00186D04 /* Frameworks */,
 				7783B25C2DD2894B0008E0F3 /* Products */,
+				77BE0798308FFE8900A3E8D7 /* Sync */,
 			);
 			sourceTree = "<group>";
 		};
@@ -277,6 +288,17 @@
 				772D05812EB3A2DC00186D04 /* BulletTrackerWidgetsExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		77BE0798308FFE8900A3E8D7 /* Sync */ = {
+			isa = PBXGroup;
+			children = (
+				77BE0799308FFE9D00A3E8D7 /* HabitFactsSource.swift */,
+				77BE079A308FFEA600A3E8D7 /* HabitGrading.swift */,
+				77BE079B308FFEAE00A3E8D7 /* HealthSteps.swift */,
+				77BE079C308FFED300A3E8D7 /* HabitSyncEngine.swift */,
+			);
+			path = Sync;
 			sourceTree = "<group>";
 		};
 		77D9A5212F294D660019C64C /* Notes */ = {
@@ -294,6 +316,7 @@
 				77DB37AF2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift */,
 				77DB37C72DEBFBB4004E2ED9 /* SettingsView.swift */,
 				77DB37B42DEBFBB4004E2ED9 /* ContentView.swift */,
+				77BE079D308FFF2100A3E8D7 /* DeveloperSyncView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -482,6 +505,11 @@
 				77DB37DA2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift in Sources */,
 				77D9A52D2F2A5AAF0019C64C /* HabitDashboardViewModel.swift in Sources */,
 				770AC4D62FB3E4BC00E99F98 /* DataStore.swift in Sources */,
+				77BE079E308FFF2100A3E8D7 /* DeveloperSyncView.swift in Sources */,
+				77BE07A0308FFF2100A3E8D7 /* HabitFactsSource.swift in Sources */,
+				77BE07A1308FFF2100A3E8D7 /* HabitGrading.swift in Sources */,
+				77BE07A2308FFF2100A3E8D7 /* HealthSteps.swift in Sources */,
+				77BE07A3308FFF2100A3E8D7 /* HabitSyncEngine.swift in Sources */,
 				772F012A2F903D6900AA7F11 /* TodayView.swift in Sources */,
 				77D9A52E2F2A5AAF0019C64C /* DashboardComponents.swift in Sources */,
 				77D9A5332F2D112C0019C64C /* AppTheme.swift in Sources */,
@@ -729,6 +757,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Bullet-Tracker-Info.plist";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Bullet Tracker reads your step count to grade the Workout habit.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -760,6 +789,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Bullet-Tracker-Info.plist";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Bullet Tracker reads your step count to grade the Workout habit.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

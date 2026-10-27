@@ -104,6 +104,29 @@ enum HabitStore {
         return result
     }
 
+    /// EVERY entry for a habit on a given day — no fetch limit. Normally one;
+    /// two or more means two devices wrote the same day before CloudKit
+    /// merged (bt-0017). Sorted by id string so callers see the same order
+    /// on every device.
+    static func entries(for habit: Habit, on date: Date) -> [HabitEntry] {
+        guard let context = habit.modelContext, let habitID = habit.id else { return [] }
+        let dayStart = calendar.startOfDay(for: date)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let descriptor = FetchDescriptor<HabitEntry>(
+            predicate: #Predicate { entry in
+                entry.habit?.id == habitID && entry.date >= dayStart && entry.date < dayEnd
+            }
+        )
+        let rows = (try? context.fetch(descriptor)) ?? []
+        return rows.sorted { dedupeKey($0) < dedupeKey($1) }
+    }
+
+    /// Raw row count for a habit on a day. The Today row can't show this
+    /// (one tick looks the same over one row or two); the Developer screen does.
+    static func entryCount(for habit: Habit, on date: Date) -> Int {
+        entries(for: habit, on: date).count
+    }
+
     /// `entriesByDay` for many habits at once, keyed by habit id.
     ///
     /// One indexed fetch over the date range, then partition by habit in Swift
@@ -181,6 +204,38 @@ enum HabitStore {
         reloadWidgetIfToday(dayStart)
     }
 
+    /// Cleanup pass (bt-0017): collapses duplicate rows for one habit + day
+    /// down to one. Returns how many rows were deleted.
+    ///
+    /// CloudKit can't enforce "one entry per habit per day", so two devices
+    /// writing the same day offline each create a row. The rule here is
+    /// built so every device picks the SAME survivor and no sequence of
+    /// devices can reach zero rows:
+    ///   • A device that sees fewer than two rows deletes nothing.
+    ///   • The survivor is the row with the smallest `id.uuidString`
+    ///     (plain string order — identical on every device).
+    ///   • Rows with a `nil` id never win against a row with an id and are
+    ///     never deleted (we can't order them deterministically). In
+    ///     practice every row has an id; this is belt-and-braces.
+    /// Deliberately NOT "latest edit wins": `HabitEntry` has no edit time,
+    /// and a rule that could differ between devices could delete both rows.
+    @discardableResult
+    static func dedupeEntries(for habit: Habit, on date: Date, in context: ModelContext) -> Int {
+        let rows = entries(for: habit, on: date)
+        guard rows.count > 1, let winner = rows.first, winner.id != nil else { return 0 }
+
+        var removed = 0
+        for row in rows.dropFirst() where row.id != nil {
+            context.delete(row)
+            removed += 1
+        }
+        if removed > 0 {
+            save(context)
+            reloadWidgetIfToday(calendar.startOfDay(for: date))
+        }
+        return removed
+    }
+
     /// Persists a new ordering for the habit list (called from `onMove`).
     static func reorderHabits(_ habits: [Habit], from source: IndexSet, to destination: Int, in context: ModelContext) {
         var reordered = habits
@@ -197,6 +252,12 @@ enum HabitStore {
         do { try context.save() } catch {
             debugLog("HabitStore: save failed — \(error.localizedDescription)")
         }
+    }
+
+    /// Sort key for `entries(for:on:)` / `dedupeEntries`. Rows without an id
+    /// sort after every row with one ("~" is above hex digits in ASCII).
+    private static func dedupeKey(_ entry: HabitEntry) -> String {
+        entry.id?.uuidString ?? "~"
     }
 
     private static func reloadWidgetIfToday(_ dayStart: Date) {

@@ -15,6 +15,7 @@ struct ContentView: View {
     // MARK: - Environment
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var modelContext
 
     // MARK: - Tabs
 
@@ -53,6 +54,11 @@ struct ContentView: View {
             // Refresh data when app becomes active
             if newPhase == .active {
                 NotificationCenter.default.post(name: .appBecameActive, object: nil)
+                #if DEBUG
+                // bt-0017 — "sync is automatic when the app opens". Step 0
+                // runs the fake source when the Developer switch is on.
+                Task { await HabitSyncEngine.shared.runSimulationIfEnabled(in: modelContext) }
+                #endif
             }
         }
     }

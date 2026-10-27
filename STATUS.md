@@ -1,6 +1,6 @@
 # Project Status
 
-**Last updated:** 2026-10-25
+**Last updated:** 2026-10-26
 
 Fast-changing state, written as a story for re-entry. Mechanical facts (bead counts, what's shipped vs. queued) live in `.beads/` and `bead-doctor`; the "why" behind decisions and the full record of every shipped bead live in `ARCHITECTURE.md` → Build Log.
 
@@ -8,29 +8,34 @@ Fast-changing state, written as a story for re-entry. Mechanical facts (bead cou
 
 ## Where we are
 
-Bullet Tracker is a working personal habit app on SwiftData + CloudKit, and as of 2026-10-25 it has been brought up to the iPhone Duo and Apple's current (iOS 26/27) design language end to end. Dustin got a Duo on 2026-10-24; over two days and nine beads (`bt-0008` → `bt-0016`) we: raised the deployment target to iOS 26 and removed the last legacy APIs; made the layout size-class aware (two habits per row when unfolded); moved every piece of chrome onto system components (toolbars, `safeAreaBar`, text styles, VoiceOver from zero); redesigned the Today row into a **week grid** (glyph, name, streak, seven tappable squares) after Dustin found the icon-as-checkbox "dated"; fixed a real scoring bug with one **win rule** everywhere (avoidance habits no longer count a slip as "done", "Tried" is a miss); ran a consistency pass so the palette, shape, seven-day squares and chips are one family app-wide; and replaced the Home Screen widget twice, landing on a **tappable tile grid** (medium 8, large 12 + day summary, small ring) that Dustin confirmed on his Duo.
+Bullet Tracker is a working personal habit app on SwiftData + CloudKit, brought up to the iPhone Duo and Apple's current design language over 2026-10-24/25 (`bt-0008` → `bt-0016`): iOS 26 target, size-class-aware layout, system chrome everywhere, the **week-grid** Today row, one **win rule**, a consistency pass, and a **tappable tile-grid widget** Dustin confirmed on his Duo.
 
-Standing rule for all of this, in Dustin's words: **use Apple's guidelines whenever possible.** No one-offs: fix the pattern, not the instance.
+On 2026-10-26 the long-planned merge with **Dustin's Health** started. The design, settled in a dustin-system session (shared note `~/Desktop/Personal/dustin-system/memory/in_flight/habits-voice-dh-bullet-2026-10-26.md`): Dustin talks to Claude on his iPhone; voice lands in dustin-health (dh) as day facts + an inbox of actions; **Bullet pulls and grades everything itself** (the app holds every rule, dh only reports facts). `bt-0017` was Step 0, the proof with fake data and no server: a `Sync/` layer (facts protocol with a fake source, pure grading rules, a sync engine that writes through the same path a tap uses, steps from HealthKit) plus a debug-only Developer screen in Settings. **Passed on iPhone + iPad + widget**, including the hard part: two devices holding two rows for the same habit-day, merged back to one by a deterministic cleanup pass (smallest id wins; a device never deletes unless it sees two or more rows, so zero is unreachable). dh's Step 1 is unblocked.
 
-Harness facts worth knowing: Xcode 27 has no Simulator.app, the Duo simulator only shows the folded 466×678 pt panel, so regular-width checks run on the iPad Air sim and the unfolded look is checked on Dustin's device (`DBd`). One device-interaction session at a time. The tab bar on the Duo is a system right-hand rail in both postures; not ours to change.
+Standing rule, in Dustin's words: **use Apple's guidelines whenever possible.** No one-offs: fix the pattern, not the instance. Pass tests force the failure state; they don't wait for it to happen by luck.
+
+Harness facts worth knowing: Xcode 27 has no Simulator.app, the Duo simulator only shows the folded panel, so regular-width checks run on the iPad Air sim and the real look is checked on Dustin's devices (`DBd` iPhone, `Dustin's iPad (3)` now paired). One device-interaction session at a time. The app target's folders are plain Xcode groups, not synchronized ones: a new folder needs Sources entries added by hand (`bt-0017` did it in `project.pbxproj`).
 
 ## Next (1–3)
 
-1. **Page-by-page reassessment, starting with the Dashboard.** Do what we did for Today: job first, then design. The open question for the Dashboard is whether a separate analytics tab still earns its place now that Today shows the week. Then habit detail, Journal, Settings / Backup / forms, Log Details. One page per turn; Dustin wants to see renders before approving.
-2. **Lock Screen / StandBy widget families.** Home Screen widget is done (`bt-0016`); accessory families not started.
-3. **Known small defect:** iPad landscape with the sidebar shown puts the left column's weekday letters ~10 pt off the squares (`bt-0014`). Cosmetic, regular-width only.
+1. **`bt-0018` — Step 2 of the voice design, independent of dh.** Rest grade, targets as settings, Today in progress, back to auto (needs an additive source marker + edit time on entries). Queued, design pass when picked up.
+2. **Step 3 — the real sync.** Point `HabitSyncEngine` at dh once dh ships Step 1 (inbox, six voice tools, day facts, changed-days list, habits/targets upload). Needs the app's own key to dh. Not a bead yet; shape it when dh is ready.
+3. **Page-by-page reassessment, starting with the Dashboard.** Still the design thread from 2026-10-25: job first, then design; one page per turn, renders before approval. Then habit detail, Journal, Settings / forms, Log Details.
 
 ## Open threads
 
-- Cross-device iPad CloudKit check of the Phase-2 schema: watch-item only, flag if anything looks inconsistent when the iPad is next used.
-- `'NSKeyedUnarchiveFromData' should not be used…` deprecation warning in the console since `bt-0007`: unrelated to sync, park until Apple removes it or a bead touches that code.
-- Accent orange used as a control tint (selected states, progress fill) sits below WCAG text contrast; Apple ships system orange the same way. Brand call for Dustin, deliberately left in `bt-0012`.
+- The Settings **"iCloud Sync" toggle is cosmetic**: it saves a preference and posts a notification nothing listens to; `DataStore` always syncs. Remove or wire it when Settings gets its reassessment pass.
+- The **widget keeps its own copy of the tick logic** (`CompleteHabitIntent` in `BulletTrackerWidgetsBundle.swift`), not `HabitStore.setCompletion`. Fine today; must share the write path before the widget writes anything the sync relies on.
+- Lock Screen / StandBy widget families not started (`bt-0016` did the Home Screen).
+- iPad landscape with the sidebar shown puts the weekday letters ~10 pt off the squares (`bt-0014`). Cosmetic.
+- Accent orange as a control tint sits below WCAG text contrast; Apple ships system orange the same way. Brand call, left in `bt-0012`.
+- `'NSKeyedUnarchiveFromData' should not be used…` console deprecation since `bt-0007`: park.
 
 ## Recent
 
-- **2026-10-25 (long session, `bt-0010` → `bt-0016`).** Design language wave shipped, then a run of design corrections driven by Dustin using the app on the Duo: a design sweep (`bt-0012`, which also surfaced that habits could not be edited or deleted from the UI at all), the week-grid Today row prototyped and promoted (`bt-0013`), the win rule + honest header + pinned weekday letters (`bt-0014`), the five-rule consistency pass with `Utilities/DesignSystem.swift` (`bt-0015`), the widget mirroring the row (`bt-0011`) and, after Dustin judged that "not super usable" with eleven habits, the tile-grid widget (`bt-0016`). Dustin ticked widget-target membership for three shared files in Xcode, the only project-file action of the series. Everything merged to `main`.
-- **2026-10-24 (`bt-0008`, `bt-0009`).** Duo arrives. Two audits (resizability, design language) → four-bead plan. Foundation: deployment target 26, `UIScreen.main` gone, three share sheets → `ShareLink`, `Tab` API, dead Notes tab removed, `AppTheme` trimmed; bonus bug fix (new habit hidden until tomorrow). Duo layout: `PairedRows` two-per-row in regular width, adaptive icon grid, Dashboard double-navigation bug found and fixed.
-- **2026-05-14 (`bt-0005`, `bt-0006`, `bt-0007`).** Repo hygiene (two piles) and the CloudKit data-integrity cleanup via a Development-environment reset, after a first attempt that relaxed the schema broke sync entirely (lesson in `feedback_ios_real_fix`).
+- **2026-10-26 (`bt-0017`).** Dustin arrived with the settled voice design and asked for Step 0 first. Plan reviewed and corrected by Dustin before building: the duplicate-cleanup rule must pick the same row on every device (no edit time exists, so by id), and the pass test must force the duplicate. Built in one sitting, iPhone half passed, then the iPad arrived: paired to the Mac for the first time, and two rounds of the airplane-mode protocol produced no duplicate because the iPad already held the iPhone's row and updated it in place. Replaced with an on-screen row-id readout and an "add a duplicate row" button that creates the two-device state deliberately; that round passed (2 → 1 → 1, same id on both, never 0). Steps matched Health. Test habits removed on both devices.
+- **2026-10-25 (long session, `bt-0010` → `bt-0016`).** Design language wave, then a run of corrections driven by Dustin using the app on the Duo: design sweep (`bt-0012`), week-grid Today row (`bt-0013`), win rule + honest header (`bt-0014`), consistency pass (`bt-0015`), widget mirroring the row (`bt-0011`) and the tile-grid widget (`bt-0016`).
+- **2026-10-24 (`bt-0008`, `bt-0009`).** Duo arrives. Two audits → four-bead plan. Foundation (iOS 26 target, legacy APIs out, `Tab` API) and Duo layout (two-per-row in regular width).
 
 ## Where things live
 
@@ -38,8 +43,10 @@ Harness facts worth knowing: Xcode 27 has no Simulator.app, the Duo simulator on
 |------|-------|
 | How we work, conventions | `CLAUDE.md` |
 | Vision, founding decisions, every shipped bead's Why + Decision log | `ARCHITECTURE.md` |
-| Active beads (`bt-NNNN`) | `.beads/active/` (none open right now) |
+| Active beads (`bt-NNNN`) | `.beads/active/` |
+| Voice / dh design (shared contract, three parts) | `~/Desktop/Personal/dustin-system/memory/in_flight/habits-voice-dh-bullet-2026-10-26.md` |
+| Sync layer | `Sync/` — `HabitFactsSource` (protocol + fake), `HabitGrading` (rules + targets), `HabitSyncEngine`, `HealthSteps`; `HabitStore.dedupeEntries` in `Habits/HabitDataRepository.swift` |
+| Developer screen (debug builds) | Settings → Developer → `App/DeveloperSyncView.swift` |
 | Design rules in code | `Utilities/DesignSystem.swift`, `App/AppTheme.swift`, `HabitWinRule` in `Data/Models.swift` |
 | Widget | `BulletTrackerWidgets/BulletTrackerWidgetsBundle.swift` |
-| Historical architecture audit (closed) | `memory/in_flight/patchwork-flags-review.md` |
-| Project memory for Claude | Xcode CodingAssistant auto-memory (`feedback_apple_guidelines_first`, `feedback_one_device_session_at_a_time`) |
+| Project memory for Claude | Xcode CodingAssistant auto-memory |
