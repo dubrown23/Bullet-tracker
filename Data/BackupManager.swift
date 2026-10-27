@@ -168,7 +168,14 @@ class BackupManager {
                 trackDetails: trackDetails,
                 detailType: detailType,
                 useMultipleStates: useMultipleStates,
-                isNegativeHabit: isNegativeHabit
+                isNegativeHabit: isNegativeHabit,
+                gradingKind: habit.gradingKindRaw,
+                gradingSince: habit.gradingSince,
+                targetProteinGrams: habit.targetProteinGrams,
+                targetCalorieLow: habit.targetCalorieLow,
+                targetCalorieHigh: habit.targetCalorieHigh,
+                targetWorkoutMinutes: habit.targetWorkoutMinutes,
+                targetSteps: habit.targetSteps
             )
         }
     }
@@ -187,7 +194,9 @@ class BackupManager {
                 completed: entry.effectiveCompletionState != .notDone,
                 details: detailsJSONString,
                 habitID: entry.habit?.id?.uuidString ?? "",
-                completionState: Int(entry.effectiveCompletionState.rawValue)
+                completionState: Int(entry.effectiveCompletionState.rawValue),
+                source: entry.sourceRaw,
+                editedAt: entry.editedAt
             )
         }
     }
@@ -314,6 +323,14 @@ class BackupManager {
                 completionStyle: completionStyle,
                 detailKind: detailKind
             )
+            // bt-0018 grading settings (absent in older backups → nil = off / defaults).
+            habit.gradingKindRaw = habitData.gradingKind
+            habit.gradingSince = habitData.gradingSince
+            habit.targetProteinGrams = habitData.targetProteinGrams
+            habit.targetCalorieLow = habitData.targetCalorieLow
+            habit.targetCalorieHigh = habitData.targetCalorieHigh
+            habit.targetWorkoutMinutes = habitData.targetWorkoutMinutes
+            habit.targetSteps = habitData.targetSteps
             context.insert(habit)
             habitMap[habitData.id] = habit
         }
@@ -343,7 +360,9 @@ class BackupManager {
                 date: entryData.date,
                 completionState: typedState,
                 details: typedDetails,
-                habit: habit
+                habit: habit,
+                source: entryData.source.flatMap(EntrySource.init(rawValue:)),
+                editedAt: entryData.editedAt
             )
             context.insert(entry)
         }
@@ -445,6 +464,15 @@ struct HabitData: Codable {
     let detailType: String
     let useMultipleStates: Bool
     let isNegativeHabit: Bool
+    // bt-0018 — grading settings. Optional on the wire: older backups don't
+    // carry them (→ nil), older builds ignore them.
+    let gradingKind: String?
+    let gradingSince: Date?
+    let targetProteinGrams: Double?
+    let targetCalorieLow: Double?
+    let targetCalorieHigh: Double?
+    let targetWorkoutMinutes: Double?
+    let targetSteps: Double?
 
     // Support older backups that don't have all fields
     init(from decoder: Decoder) throws {
@@ -462,10 +490,18 @@ struct HabitData: Codable {
         detailType = try container.decodeIfPresent(String.self, forKey: .detailType) ?? "general"
         useMultipleStates = try container.decodeIfPresent(Bool.self, forKey: .useMultipleStates) ?? false
         isNegativeHabit = try container.decodeIfPresent(Bool.self, forKey: .isNegativeHabit) ?? false
+        gradingKind = try container.decodeIfPresent(String.self, forKey: .gradingKind)
+        gradingSince = try container.decodeIfPresent(Date.self, forKey: .gradingSince)
+        targetProteinGrams = try container.decodeIfPresent(Double.self, forKey: .targetProteinGrams)
+        targetCalorieLow = try container.decodeIfPresent(Double.self, forKey: .targetCalorieLow)
+        targetCalorieHigh = try container.decodeIfPresent(Double.self, forKey: .targetCalorieHigh)
+        targetWorkoutMinutes = try container.decodeIfPresent(Double.self, forKey: .targetWorkoutMinutes)
+        targetSteps = try container.decodeIfPresent(Double.self, forKey: .targetSteps)
     }
 
     // Standard initializer for creating backups
-    init(id: String, name: String, icon: String, color: String, frequency: String, customDays: String, startDate: Date, notes: String, order: Int, trackDetails: Bool, detailType: String, useMultipleStates: Bool, isNegativeHabit: Bool) {
+    init(id: String, name: String, icon: String, color: String, frequency: String, customDays: String, startDate: Date, notes: String, order: Int, trackDetails: Bool, detailType: String, useMultipleStates: Bool, isNegativeHabit: Bool,
+         gradingKind: String? = nil, gradingSince: Date? = nil, targetProteinGrams: Double? = nil, targetCalorieLow: Double? = nil, targetCalorieHigh: Double? = nil, targetWorkoutMinutes: Double? = nil, targetSteps: Double? = nil) {
         self.id = id
         self.name = name
         self.icon = icon
@@ -479,6 +515,13 @@ struct HabitData: Codable {
         self.detailType = detailType
         self.useMultipleStates = useMultipleStates
         self.isNegativeHabit = isNegativeHabit
+        self.gradingKind = gradingKind
+        self.gradingSince = gradingSince
+        self.targetProteinGrams = targetProteinGrams
+        self.targetCalorieLow = targetCalorieLow
+        self.targetCalorieHigh = targetCalorieHigh
+        self.targetWorkoutMinutes = targetWorkoutMinutes
+        self.targetSteps = targetSteps
     }
 }
 
@@ -489,6 +532,10 @@ struct HabitEntryData: Codable {
     let details: String
     let habitID: String
     let completionState: Int
+    // bt-0018 — optional on the wire; synthesized Codable decodes a missing
+    // key as nil, so old backups still restore.
+    var source: String? = nil
+    var editedAt: Date? = nil
 }
 
 struct NoteData: Codable {

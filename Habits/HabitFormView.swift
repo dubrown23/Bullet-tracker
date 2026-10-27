@@ -88,6 +88,16 @@ struct HabitFormView: View {
     @Binding var completionStyle: CompletionStyle
     @Binding var showingIconSheet: Bool
 
+    // bt-0018 — automatic grading. `nil` kind = off; `nil` target = default.
+    @Binding var gradingKind: GradingKind?
+    @Binding var targetProteinGrams: Double?
+    @Binding var targetCalorieLow: Double?
+    @Binding var targetCalorieHigh: Double?
+    @Binding var targetWorkoutMinutes: Double?
+    @Binding var targetSteps: Double?
+    /// The habit's current go-live day, for the footer ("since Oct 27").
+    var gradingSince: Date? = nil
+
     /// Swatch / icon tiles scale with the user's text size (Dynamic Type).
     @ScaledMetric(relativeTo: .body) private var swatchSize: CGFloat = 28
     @ScaledMetric(relativeTo: .body) private var quickIconSize: CGFloat = 30
@@ -100,9 +110,65 @@ struct HabitFormView: View {
             nameAndAppearanceSection
             scheduleSection
             completionStyleSection
+            if completionStyle == .multiState {
+                gradingSection
+            }
             detailLoggingSection
             notesSection
         }
+    }
+
+    // MARK: - Section 3b: Automatic Grading (bt-0018)
+
+    private var gradingSection: some View {
+        Section {
+            Picker("Graded by", selection: $gradingKind) {
+                Text("Off").tag(GradingKind?.none)
+                Text("Diet").tag(GradingKind?.some(.diet))
+                Text("Workout").tag(GradingKind?.some(.workout))
+            }
+
+            switch gradingKind {
+            case .diet?:
+                targetRow("Protein at least", value: $targetProteinGrams, unit: "g", placeholder: GradingTargets.defaults.proteinFloorGrams)
+                targetRow("Calories from", value: $targetCalorieLow, unit: "cal", placeholder: GradingTargets.defaults.calorieFloor)
+                targetRow("Calories to", value: $targetCalorieHigh, unit: "cal", placeholder: GradingTargets.defaults.calorieCeiling)
+            case .workout?:
+                targetRow("Workout minutes", value: $targetWorkoutMinutes, unit: "min", placeholder: GradingTargets.defaults.workoutMinutes)
+                targetRow("Steps for partial", value: $targetSteps, unit: "steps", placeholder: GradingTargets.defaults.steps)
+            case nil:
+                EmptyView()
+            }
+        } header: {
+            Text("Automatic Grading")
+        } footer: {
+            switch gradingKind {
+            case nil:
+                Text("Diet is graded from protein and calories; Workout from minutes and steps. Only the iPhone writes grades.")
+            case .some:
+                if let gradingSince {
+                    Text("Grading since \(gradingSince.formatted(.dateTime.month(.abbreviated).day())). Earlier days stay as you set them. Blank = the default shown.")
+                } else {
+                    Text("Grading starts today. Earlier days stay as you set them. Blank = the default shown.")
+                }
+            }
+        }
+    }
+
+    /// A number field with its unit, right-aligned like Settings. A blank
+    /// field means the default, which is shown as the placeholder.
+    private func targetRow(_ title: String, value: Binding<Double?>, unit: String, placeholder: Double) -> some View {
+        LabeledContent(title) {
+            HStack(spacing: 4) {
+                TextField(placeholder.formatted(.number.grouping(.never)), value: value, format: .number.grouping(.never))
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 90)
+                Text(unit)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Section 1: Name & Appearance

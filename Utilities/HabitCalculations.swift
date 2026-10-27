@@ -158,6 +158,20 @@ final class HabitCalculationService {
         return count
     }
 
+    /// Expected days minus the neutral (Rest) days in the range (bt-0018), so a
+    /// rest day drops out of the denominator as well as the numerator.
+    func calculateExpectedDays(for habit: Habit, using entries: [Date: HabitEntry], from startDate: Date, to endDate: Date) -> Int {
+        let expected = calculateExpectedDays(for: habit, from: startDate, to: endDate)
+        let lo = calendar.startOfDay(for: startDate)
+        let hi = calendar.startOfDay(for: endDate)
+        let neutral = entries.filter { day, entry in
+            day >= lo && day <= hi
+                && HabitWinRule.isNeutral(state: entry.effectiveCompletionState)
+                && shouldTrackHabit(habit, on: day)
+        }.count
+        return max(0, expected - neutral)
+    }
+
     // MARK: - Win Checking (Entry-Aware)
 
     /// Whether `date` counts as a win for `habit`, per `HabitWinRule` — O(1)
@@ -172,16 +186,27 @@ final class HabitCalculationService {
         )
     }
 
+    /// Whether `date` is a neutral day for `habit` (a Rest day, bt-0018).
+    func isNeutral(for habit: Habit, in entries: [Date: HabitEntry], on date: Date) -> Bool {
+        HabitWinRule.isNeutral(state: entries[calendar.startOfDay(for: date)]?.effectiveCompletionState)
+    }
+
+    /// A day that takes part in scoring: scheduled, and not a Rest day.
+    private func isScored(_ habit: Habit, in entries: [Date: HabitEntry], on date: Date) -> Bool {
+        shouldTrackHabit(habit, on: date) && !isNeutral(for: habit, in: entries, on: date)
+    }
+
     // MARK: - Streak Calculations (Entry-Aware)
 
-    /// Calculates current streak using pre-fetched entries — no persistence access
+    /// Calculates current streak using pre-fetched entries — no persistence access.
+    /// Unscheduled days and Rest days are skipped, not broken on.
     func calculateCurrentStreak(for habit: Habit, using entries: [Date: HabitEntry]) -> Int {
         var streak = 0
         var currentDate = calendar.startOfDay(for: Date())
         let maxDays = 365
 
         for _ in 0..<maxDays {
-            if !shouldTrackHabit(habit, on: currentDate) {
+            if !isScored(habit, in: entries, on: currentDate) {
                 guard let previousDay = calendar.date(byAdding: .day, value: -1, to: currentDate) else { break }
                 currentDate = previousDay
                 continue
@@ -206,7 +231,7 @@ final class HabitCalculationService {
         var currentDate = startDate
 
         while currentDate <= endDate {
-            if shouldTrackHabit(habit, on: currentDate) {
+            if isScored(habit, in: entries, on: currentDate) {
                 if isWin(for: habit, in: entries, on: currentDate) {
                     currentStreak += 1
                     bestStreak = max(bestStreak, currentStreak)
@@ -234,9 +259,9 @@ final class HabitCalculationService {
             var anyTracked = false
 
             for habit in habits {
-                if shouldTrackHabit(habit, on: currentDate) {
+                let entries = allEntries[habit.id ?? UUID()] ?? [:]
+                if isScored(habit, in: entries, on: currentDate) {
                     anyTracked = true
-                    let entries = allEntries[habit.id ?? UUID()] ?? [:]
                     if !isWin(for: habit, in: entries, on: currentDate) {
                         allCompleted = false
                         break
@@ -260,14 +285,14 @@ final class HabitCalculationService {
 
     /// Calculates completion rate using pre-fetched entries — no persistence access
     func calculateCompletionRate(for habit: Habit, using entries: [Date: HabitEntry], from startDate: Date, to endDate: Date) -> (completed: Int, expected: Int, rate: Double) {
-        let expected = calculateExpectedDays(for: habit, from: startDate, to: endDate)
+        let expected = calculateExpectedDays(for: habit, using: entries, from: startDate, to: endDate)
         guard expected > 0 else { return (0, 0, 0) }
 
         var completed = 0
         var currentDate = startDate
 
         while currentDate <= endDate {
-            if shouldTrackHabit(habit, on: currentDate) && isWin(for: habit, in: entries, on: currentDate) {
+            if isScored(habit, in: entries, on: currentDate) && isWin(for: habit, in: entries, on: currentDate) {
                 completed += 1
             }
             guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
@@ -302,14 +327,14 @@ final class HabitCalculationService {
             var completedDays = 0
             var currentDate = startDate
             while currentDate <= endDate {
-                if shouldTrackHabit(habit, on: currentDate) && isWin(for: habit, in: entriesForHabit, on: currentDate) {
+                if isScored(habit, in: entriesForHabit, on: currentDate) && isWin(for: habit, in: entriesForHabit, on: currentDate) {
                     completedDays += 1
                 }
                 guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
                 currentDate = nextDate
             }
 
-            let expectedDays = calculateExpectedDays(for: habit, from: startDate, to: endDate)
+            let expectedDays = calculateExpectedDays(for: habit, using: entriesForHabit, from: startDate, to: endDate)
             let rate = expectedDays > 0 ? Int((Double(completedDays) / Double(expectedDays)) * 100) : 0
             let streak = calculateCurrentStreak(for: habit, using: entriesForHabit)
             maxStreak = max(maxStreak, streak)
@@ -345,9 +370,9 @@ final class HabitCalculationService {
             var total = 0
 
             for habit in habits {
-                if shouldTrackHabit(habit, on: currentDate) {
+                let entries = allEntries[habit.id ?? UUID()] ?? [:]
+                if isScored(habit, in: entries, on: currentDate) {
                     total += 1
-                    let entries = allEntries[habit.id ?? UUID()] ?? [:]
                     if isWin(for: habit, in: entries, on: currentDate) {
                         completed += 1
                     }

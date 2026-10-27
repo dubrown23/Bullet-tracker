@@ -76,6 +76,36 @@ enum CompletionState: Int16, Codable {
     case success = 1
     case partial = 2
     case failure = 3
+    /// bt-0018 — a planned day off (Workout only, only when Dustin calls it).
+    /// Neutral: not a win, not a miss; streaks carry through. Additive raw
+    /// value — the older columns and values are untouched.
+    case rest = 4
+}
+
+// MARK: - EntrySource (HabitEntry-level, bt-0018)
+//
+// Who wrote the entry. Stored as a raw `String?` on `HabitEntry` (additive,
+// CloudKit-safe); `nil` = written before bt-0018 = treated as hand, so
+// history is never re-graded. "Overrides win": the automatic grader only
+// ever rewrites an entry it wrote itself.
+
+enum EntrySource: String, Codable {
+    case auto
+    case hand
+    case voice
+}
+
+// MARK: - GradingKind (Habit-level, bt-0018)
+//
+// Which rulebook (and which targets) a habit carries. Stored as a raw
+// `String?` on `Habit`; `nil` = not graded automatically. Also the "kind" the
+// app sends dustin-health in Step 3.
+
+enum GradingKind: String, Codable, CaseIterable, Identifiable {
+    case diet
+    case workout
+
+    var id: String { rawValue }
 }
 
 // MARK: - Win Rule (bt-0014; moved here in bt-0011 so the widget shares it)
@@ -87,7 +117,8 @@ enum CompletionState: Int16, Codable {
 // completing.
 //
 //   simple      → checked
-//   multiState  → success or partial ("Tried" is an honest miss, not a win)
+//   multiState  → success or partial ("Tried" is an honest miss, not a win);
+//                 a Rest day is neutral — see `isNeutral` (bt-0018)
 //   avoidance   → no slip that day; today counts as clean so far; future days
 //                 can't be wins yet
 
@@ -103,9 +134,16 @@ enum HabitWinRule {
         }
     }
 
+    /// bt-0018 — a day that counts as neither win nor miss. Streaks skip it
+    /// the way they skip an unscheduled day; rates and the heatmap drop it
+    /// from both sides of the fraction; the day summary leaves the habit out.
+    static func isNeutral(state: CompletionState?) -> Bool {
+        state == .rest
+    }
+
     /// Whether the entry (or its absence) means the person *logged* something
-    /// that day — a check, a partial, a miss, or a slip. Drives row visuals,
-    /// not scores.
+    /// that day — a check, a partial, a miss, a slip, or a rest day. Drives
+    /// row visuals, not scores.
     static func isLogged(state: CompletionState?) -> Bool {
         state != nil && state != .notDone
     }
@@ -153,6 +191,24 @@ final class Habit {
     /// Detail-capture kind — replaces `trackDetails: Bool` + `detailType: String?`
     /// pair (Call B (c) collapse, Wave 2). `nil` = no detail capture.
     var detailKind: DetailKind?
+
+    // MARK: bt-0018 — automatic grading (all additive, all optional)
+    //
+    // Raw storage below; typed access through the extension at the bottom of
+    // this file. `nil` everywhere = the habit is not graded automatically and
+    // the built-in targets apply, so no existing row needs migrating.
+
+    /// `GradingKind.rawValue` — "diet" / "workout"; `nil` = off.
+    var gradingKindRaw: String?
+    /// Go-live day (start of day). Automatic grades and "Back to Automatic"
+    /// apply from this day forward only; days before it are never touched.
+    var gradingSince: Date?
+    /// Targets. `nil` = built-in default (`GradingTargets.defaults`).
+    var targetProteinGrams: Double?
+    var targetCalorieLow: Double?
+    var targetCalorieHigh: Double?
+    var targetWorkoutMinutes: Double?
+    var targetSteps: Double?
 
     @Relationship(deleteRule: .cascade, inverse: \HabitEntry.habit)
     var entries: [HabitEntry]?
@@ -254,19 +310,40 @@ final class HabitEntry {
 
     var habit: Habit?
 
+    // MARK: bt-0018 — who wrote this row, and when (additive, optional)
+
+    /// `EntrySource.rawValue`. `nil` = written before bt-0018 → hand.
+    var sourceRaw: String?
+    /// Last write through `HabitStore`. `nil` on rows from before bt-0018.
+    var editedAt: Date?
+
     init(
         id: UUID? = UUID(),
         date: Date,
         completionState: CompletionState = .notDone,
         details: HabitEntryDetails? = nil,
-        habit: Habit? = nil
+        habit: Habit? = nil,
+        source: EntrySource? = nil,
+        editedAt: Date? = nil
     ) {
         self.id = id
         self.date = date
         self.completionState = completionState
         self.detailsJSON = details.flatMap { Self.encodeDetails($0) }
         self.habit = habit
+        self.sourceRaw = source?.rawValue
+        self.editedAt = editedAt
     }
+
+    /// Typed source. A row with no marker is a hand row: it predates the
+    /// grader, and history is never re-graded.
+    var source: EntrySource {
+        get { sourceRaw.flatMap(EntrySource.init(rawValue:)) ?? .hand }
+        set { sourceRaw = newValue.rawValue }
+    }
+
+    /// True for rows the automatic grader may rewrite or remove.
+    var isAutomatic: Bool { source == .auto }
 
     // MARK: - HabitEntryDetails ⇄ JSON-string conversion
     //
@@ -320,6 +397,63 @@ final class HabitEntry {
             return .mood(mood: mood, notes: notes)
         }
         return .notes(notes: notes)
+    }
+}
+
+// MARK: - Grading targets (bt-0018)
+//
+// The numbers the Diet / Workout rules compare against. A plain value built
+// from a habit (blank field → built-in default) so the grading functions in
+// `Sync/HabitGrading.swift` stay pure and the widget target can read a
+// habit's kind without importing anything else.
+
+struct GradingTargets: Equatable, Sendable {
+    var proteinFloorGrams: Double
+    /// The floor is Dustin's ("yes keep 1900"): undereating is a miss.
+    var calorieFloor: Double
+    var calorieCeiling: Double
+    var workoutMinutes: Double
+    var steps: Double
+
+    static let defaults = GradingTargets(
+        proteinFloorGrams: 180,
+        calorieFloor: 1900,
+        calorieCeiling: 2200,
+        workoutMinutes: 30,
+        steps: 10_000
+    )
+}
+
+extension Habit {
+    /// Which rulebook this habit is graded by; `nil` = not graded.
+    var gradingKind: GradingKind? {
+        get { gradingKindRaw.flatMap(GradingKind.init(rawValue:)) }
+        set { gradingKindRaw = newValue?.rawValue }
+    }
+
+    /// True once grading has been switched on (go-live day stamped).
+    var isAutoGraded: Bool { gradingKind != nil && gradingSince != nil }
+
+    /// Whether `day` is on or after the go-live day. False when grading is
+    /// off. Automatic grades and "Back to Automatic" only exist on such days.
+    func isWithinGrading(_ day: Date, calendar: Calendar = .current) -> Bool {
+        guard gradingKind != nil, let since = gradingSince else { return false }
+        return calendar.startOfDay(for: day) >= calendar.startOfDay(for: since)
+    }
+
+    /// Whether Rest may be set on this habit (Workout only, by design).
+    var offersRest: Bool { gradingKind == .workout }
+
+    /// The habit's targets with blanks filled from the defaults.
+    var gradingTargets: GradingTargets {
+        let d = GradingTargets.defaults
+        return GradingTargets(
+            proteinFloorGrams: targetProteinGrams ?? d.proteinFloorGrams,
+            calorieFloor: targetCalorieLow ?? d.calorieFloor,
+            calorieCeiling: targetCalorieHigh ?? d.calorieCeiling,
+            workoutMinutes: targetWorkoutMinutes ?? d.workoutMinutes,
+            steps: targetSteps ?? d.steps
+        )
     }
 }
 

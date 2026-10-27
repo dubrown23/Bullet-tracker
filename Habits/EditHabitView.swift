@@ -31,6 +31,15 @@ class HabitFormViewModel {
     var isValid = false
     var isSaving = false
 
+    // bt-0018 — automatic grading settings (nil = off / default).
+    var gradingKind: GradingKind?
+    var gradingSince: Date?
+    var targetProteinGrams: Double?
+    var targetCalorieLow: Double?
+    var targetCalorieHigh: Double?
+    var targetWorkoutMinutes: Double?
+    var targetSteps: Double?
+
     // MARK: - Private Properties
 
     private var habit: Habit?
@@ -71,6 +80,14 @@ class HabitFormViewModel {
 
         detailKind = habit.detailKind
         completionStyle = habit.completionStyle
+
+        gradingKind = habit.gradingKind
+        gradingSince = habit.gradingSince
+        targetProteinGrams = habit.targetProteinGrams
+        targetCalorieLow = habit.targetCalorieLow
+        targetCalorieHigh = habit.targetCalorieHigh
+        targetWorkoutMinutes = habit.targetWorkoutMinutes
+        targetSteps = habit.targetSteps
     }
 
     // MARK: - Save Methods
@@ -102,6 +119,26 @@ class HabitFormViewModel {
         target.notes = notes
         target.completionStyle = completionStyle
         target.detailKind = detailKind
+
+        // bt-0018 — grading only exists on Multi-State habits. Switching it
+        // on stamps the go-live day (today); switching it off clears it;
+        // changing Diet ↔ Workout keeps it. Days before the go-live day are
+        // never graded.
+        let newKind: GradingKind? = completionStyle == .multiState ? gradingKind : nil
+        if newKind == nil {
+            target.gradingKindRaw = nil
+            target.gradingSince = nil
+        } else {
+            target.gradingKind = newKind
+            if target.gradingSince == nil {
+                target.gradingSince = Calendar.current.startOfDay(for: Date())
+            }
+        }
+        target.targetProteinGrams = targetProteinGrams
+        target.targetCalorieLow = targetCalorieLow
+        target.targetCalorieHigh = targetCalorieHigh
+        target.targetWorkoutMinutes = targetWorkoutMinutes
+        target.targetSteps = targetSteps
 
         save(context)
     }
@@ -147,7 +184,14 @@ struct EditHabitView: View {
                     notes: $viewModel.notes,
                     detailKind: $viewModel.detailKind,
                     completionStyle: $viewModel.completionStyle,
-                    showingIconSheet: $viewModel.showingIconSheet
+                    showingIconSheet: $viewModel.showingIconSheet,
+                    gradingKind: $viewModel.gradingKind,
+                    targetProteinGrams: $viewModel.targetProteinGrams,
+                    targetCalorieLow: $viewModel.targetCalorieLow,
+                    targetCalorieHigh: $viewModel.targetCalorieHigh,
+                    targetWorkoutMinutes: $viewModel.targetWorkoutMinutes,
+                    targetSteps: $viewModel.targetSteps,
+                    gradingSince: viewModel.gradingSince
                 )
 
                 Section {

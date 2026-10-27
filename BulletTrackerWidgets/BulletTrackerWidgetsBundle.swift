@@ -63,11 +63,12 @@ struct WidgetHabit: Identifiable {
     let icon: String
     let color: String
     let style: CompletionStyle
-    /// Today's raw completion state (0 = not logged, 1 / 2 / 3).
+    /// Today's raw completion state (0 = not logged, 1 / 2 / 3, 4 = rest).
     let todayState: Int
 
     var isNegativeHabit: Bool { style == .avoidance }
     var isLogged: Bool { todayState != 0 }
+    var isRest: Bool { todayState == Int(CompletionState.rest.rawValue) }
 }
 
 // MARK: - Complete Habit Intent
@@ -124,14 +125,19 @@ struct CompleteHabitIntent: AppIntent {
         let current = existingEntry.map { Int($0.effectiveCompletionState.rawValue) } ?? 0
         let next = nextState(after: current, style: habit.completionStyle)
 
+        // A widget tap is a hand write (bt-0018): stamp source + edit time so
+        // the automatic grader leaves it alone and the cleanup pass keeps it.
         if let entry = existingEntry {
             if next == 0 {
                 context.delete(entry)
             } else {
                 entry.completionState = CompletionState(rawValue: Int16(next)) ?? .success
+                entry.source = .hand
+                entry.editedAt = Date()
             }
         } else if next != 0 {
-            let newEntry = HabitEntry(date: today, completionState: CompletionState(rawValue: Int16(next)) ?? .success, habit: habit)
+            let newEntry = HabitEntry(date: today, completionState: CompletionState(rawValue: Int16(next)) ?? .success,
+                                      habit: habit, source: .hand, editedAt: Date())
             context.insert(newEntry)
         }
 
@@ -142,6 +148,7 @@ struct CompleteHabitIntent: AppIntent {
         WidgetCenter.shared.reloadTimelines(ofKind: "HabitTrackerWidget")
     }
 
+    /// Rest (4) is never reached by tapping; tapping a rest tile clears it.
     private func nextState(after current: Int, style: CompletionStyle) -> Int {
         switch style {
         case .avoidance: return current == 0 ? 3 : 0
@@ -239,6 +246,8 @@ struct HabitWidgetProvider: TimelineProvider {
             if habit.completionStyle == .avoidance {
                 avoidanceTotal += 1
                 if HabitWinRule.isLogged(state: typed) { slips += 1 }
+            } else if HabitWinRule.isNeutral(state: typed) {
+                // Rest day: left out of "N of M done", same as the app's header.
             } else {
                 positiveTotal += 1
                 if HabitWinRule.isWin(style: habit.completionStyle, state: typed, isFuture: false) { positiveDone += 1 }
@@ -521,6 +530,7 @@ struct HabitTileButton: View {
 
     private var fillHex: String {
         if habit.isNegativeHabit { return AppTheme.failedHex }
+        if habit.isRest { return AppTheme.restHex }
         if habit.style != .multiState { return habit.color }
         switch habit.todayState {
         case 2: return AppTheme.partialHex
@@ -536,6 +546,7 @@ struct HabitTileButton: View {
         switch habit.todayState {
         case 2: return "circle.lefthalf.filled"
         case 3: return "xmark.circle.fill"
+        case 4: return "zzz"
         default: return "checkmark.circle.fill"
         }
     }
@@ -546,6 +557,7 @@ struct HabitTileButton: View {
         case 0: return "Not done"
         case 2: return "Partial"
         case 3: return "Tried"
+        case 4: return "Rest day"
         default: return "Done"
         }
     }

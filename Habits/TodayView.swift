@@ -65,6 +65,10 @@ struct TodayView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            // bt-0018 — "pull down on Today to re-check": steps, facts, grades.
+            .refreshable {
+                await HabitSyncEngine.shared.refresh(in: modelContext)
+            }
             .background {
                 GeometryReader { geo in
                     Color.clear

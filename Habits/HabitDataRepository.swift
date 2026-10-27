@@ -38,18 +38,11 @@ enum HabitStore {
     // a habit that isn't yet attached to a context (placeholder / preview)
     // fall back to nil-or-empty cleanly.
 
-    /// The `HabitEntry` for a habit on a given day, if one exists.
+    /// The `HabitEntry` for a habit on a given day, if one exists. When two
+    /// devices have produced two rows, this is the one the cleanup pass will
+    /// keep (bt-0018), so what's shown never changes when the pass runs.
     static func entry(for habit: Habit, on date: Date) -> HabitEntry? {
-        guard let context = habit.modelContext, let habitID = habit.id else { return nil }
-        let dayStart = calendar.startOfDay(for: date)
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
-        var descriptor = FetchDescriptor<HabitEntry>(
-            predicate: #Predicate { entry in
-                entry.habit?.id == habitID && entry.date >= dayStart && entry.date < dayEnd
-            }
-        )
-        descriptor.fetchLimit = 1
-        return (try? context.fetch(descriptor))?.first
+        entries(for: habit, on: date).first
     }
 
     /// The completion state for a habit on a specific date.
@@ -69,6 +62,11 @@ enum HabitStore {
         let state = Int(entry.effectiveCompletionState.rawValue)
         let hasDetails = checkForMeaningfulDetails(in: entry, habit: habit, state: state)
         return HabitCompletionState(isCompleted: entry.effectiveCompletionState != .notDone, state: state, hasDetails: hasDetails)
+    }
+
+    /// Whether `date` is a neutral (Rest) day for `habit` (bt-0018).
+    static func isNeutral(entry: HabitEntry?) -> Bool {
+        HabitWinRule.isNeutral(state: entry?.effectiveCompletionState)
     }
 
     /// Whether `date` counts as a win for `habit` given its entry (or none) —
@@ -99,7 +97,10 @@ enum HabitStore {
         var result: [Date: HabitEntry] = [:]
         result.reserveCapacity(entries.count)
         for entry in entries {
-            result[calendar.startOfDay(for: entry.date)] = entry
+            let day = calendar.startOfDay(for: entry.date)
+            // Two rows on one day (not yet cleaned up): show the survivor.
+            if let existing = result[day], dedupeKey(existing) <= dedupeKey(entry) { continue }
+            result[day] = entry
         }
         return result
     }
@@ -153,15 +154,20 @@ enum HabitStore {
         for entry in entries {
             guard let id = entry.habit?.id, wantedIDs.contains(id) else { continue }
             let day = calendar.startOfDay(for: entry.date)
+            if let existing = result[id]?[day], dedupeKey(existing) <= dedupeKey(entry) { continue }
             result[id, default: [:]][day] = entry
         }
         return result
     }
 
     // MARK: - Writes (over a ModelContext)
+    //
+    // bt-0018: every write stamps who wrote the row (`source`, default hand —
+    // a tap) and when (`editedAt`). The automatic grader passes `.auto`;
+    // Step 3's inbox will pass `.voice`.
 
     /// Sets a habit's completion for a date. `state == 0` (`.notDone`) removes the entry; otherwise creates/updates it.
-    static func setCompletion(for habit: Habit, on date: Date, state: Int, in context: ModelContext) {
+    static func setCompletion(for habit: Habit, on date: Date, state: Int, source: EntrySource = .hand, in context: ModelContext) {
         let dayStart = calendar.startOfDay(for: date)
         let typedState = CompletionState(rawValue: Int16(state)) ?? .notDone
 
@@ -172,8 +178,10 @@ enum HabitStore {
 
         if let existing = entry(for: habit, on: dayStart) {
             existing.completionState = typedState
+            existing.source = source
+            existing.editedAt = Date()
         } else {
-            let entry = HabitEntry(date: dayStart, completionState: typedState, habit: habit)
+            let entry = HabitEntry(date: dayStart, completionState: typedState, habit: habit, source: source, editedAt: Date())
             context.insert(entry)
         }
         save(context)
@@ -190,35 +198,37 @@ enum HabitStore {
     }
 
     /// Creates or updates a habit's entry for a date, setting its state and typed details payload.
-    static func updateEntryDetails(for habit: Habit, on date: Date, state: Int, details: HabitEntryDetails?, in context: ModelContext) {
+    static func updateEntryDetails(for habit: Habit, on date: Date, state: Int, details: HabitEntryDetails?, source: EntrySource = .hand, in context: ModelContext) {
         let dayStart = calendar.startOfDay(for: date)
         let typedState = CompletionState(rawValue: Int16(state)) ?? .success
         if let existing = entry(for: habit, on: dayStart) {
             existing.completionState = typedState
             existing.details = details
+            existing.source = source
+            existing.editedAt = Date()
         } else {
-            let entry = HabitEntry(date: dayStart, completionState: typedState, details: details, habit: habit)
+            let entry = HabitEntry(date: dayStart, completionState: typedState, details: details, habit: habit, source: source, editedAt: Date())
             context.insert(entry)
         }
         save(context)
         reloadWidgetIfToday(dayStart)
     }
 
-    /// Cleanup pass (bt-0017): collapses duplicate rows for one habit + day
-    /// down to one. Returns how many rows were deleted.
+    /// Cleanup pass (bt-0017, rule sharpened in bt-0018): collapses duplicate
+    /// rows for one habit + day down to one. Returns how many rows were deleted.
     ///
     /// CloudKit can't enforce "one entry per habit per day", so two devices
     /// writing the same day offline each create a row. The rule here is
     /// built so every device picks the SAME survivor and no sequence of
     /// devices can reach zero rows:
     ///   • A device that sees fewer than two rows deletes nothing.
-    ///   • The survivor is the row with the smallest `id.uuidString`
-    ///     (plain string order — identical on every device).
+    ///   • The survivor is, in order: a hand / voice row over an automatic
+    ///     one ("overrides win"); then the newest `editedAt`; then the
+    ///     smallest `id.uuidString`. All three fields travel with the row,
+    ///     so every device orders the same rows the same way.
     ///   • Rows with a `nil` id never win against a row with an id and are
     ///     never deleted (we can't order them deterministically). In
     ///     practice every row has an id; this is belt-and-braces.
-    /// Deliberately NOT "latest edit wins": `HabitEntry` has no edit time,
-    /// and a rule that could differ between devices could delete both rows.
     @discardableResult
     static func dedupeEntries(for habit: Habit, on date: Date, in context: ModelContext) -> Int {
         let rows = entries(for: habit, on: date)
@@ -254,10 +264,23 @@ enum HabitStore {
         }
     }
 
-    /// Sort key for `entries(for:on:)` / `dedupeEntries`. Rows without an id
-    /// sort after every row with one ("~" is above hex digits in ASCII).
-    private static func dedupeKey(_ entry: HabitEntry) -> String {
-        entry.id?.uuidString ?? "~"
+    /// Sort key for `entries(for:on:)` / `dedupeEntries` — the survivor sorts
+    /// first. Built as one string so plain `<` gives the same order on every
+    /// device: hand / voice ("0") before auto ("1"); then newer edits first
+    /// (the edit time inverted, zero-padded; rows with no edit time last);
+    /// then the smallest id. Rows without an id sort after every row with
+    /// one ("~" is above hex digits in ASCII).
+    static func dedupeKey(_ entry: HabitEntry) -> String {
+        let rank = entry.isAutomatic ? "1" : "0"
+        let edited: String
+        if let t = entry.editedAt?.timeIntervalSinceReferenceDate {
+            // Invert so newer sorts first; pad so string order = numeric order.
+            let inverted = max(0, 10_000_000_000 - Int64(t))
+            edited = String(format: "%011lld", inverted)
+        } else {
+            edited = "99999999999"
+        }
+        return rank + edited + (entry.id?.uuidString ?? "~")
     }
 
     private static func reloadWidgetIfToday(_ dayStart: Date) {
@@ -295,16 +318,17 @@ enum HabitStore {
 /// Represents the completion state of a habit on a specific date.
 struct HabitCompletionState {
     let isCompleted: Bool
-    let state: Int // 0: none, 1: success, 2: partial, 3: failure
+    let state: Int // 0: none, 1: success, 2: partial, 3: failure, 4: rest
     let hasDetails: Bool
 
     var stateColor: Color {
         guard isCompleted else { return .clear }
         switch state {
-        case 1: return Color(hex: "#4CAF50")   // Success — warm green
-        case 2: return Color(hex: "#FFB300")   // Partial — warm yellow
-        case 3: return Color(hex: "#EF5350")   // Attempted — soft red
-        default: return Color(hex: "#4CAF50")
+        case 1: return AppTheme.success
+        case 2: return AppTheme.partial
+        case 3: return AppTheme.failed
+        case 4: return AppTheme.rest
+        default: return AppTheme.success
         }
     }
 
@@ -313,6 +337,7 @@ struct HabitCompletionState {
         case 1: return "checkmark"
         case 2: return "circle.lefthalf.filled"
         case 3: return "xmark"
+        case 4: return "zzz"
         default: return "checkmark"
         }
     }

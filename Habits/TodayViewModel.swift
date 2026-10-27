@@ -72,6 +72,9 @@ class TodayViewModel {
             if habit.completionStyle == .avoidance {
                 avoidanceTotal += 1
                 if HabitWinRule.isLogged(state: entry?.effectiveCompletionState) { slips += 1 }
+            } else if HabitStore.isNeutral(entry: entry) {
+                // A Rest day (bt-0018) is neither done nor missed: "4 of 7", not "4 of 8".
+                continue
             } else {
                 positiveTotal += 1
                 if HabitStore.isWin(for: habit, entry: entry, on: selectedDate) { positiveDone += 1 }

@@ -20,9 +20,14 @@ enum AppTheme {
     static let successHex = "#4CAF50"
     static let partialHex = "#FFB300"
     static let failedHex = "#EF5350"
+    /// Rest day (bt-0018) — neutral grey, the system's `.systemGray`.
+    static let restHex = "#8E8E93"
 
     /// Primary accent color - warm orange
     static let accent = Color(hex: accentHex)
+
+    /// Rest day — neither win nor miss
+    static let rest = Color(hex: restHex)
 
     /// Success state - warm green
     static let success = Color(hex: successHex)

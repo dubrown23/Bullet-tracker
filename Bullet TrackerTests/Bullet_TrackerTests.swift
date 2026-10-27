@@ -7,6 +7,7 @@
 
 import Testing
 import SwiftUI
+import SwiftData
 @testable import Bullet_Tracker
 
 // MARK: - HabitFrequency Tests
@@ -244,6 +245,260 @@ struct HabitWinRuleTests {
         #expect(!HabitWinRule.isLogged(state: .notDone))
         #expect(HabitWinRule.isLogged(state: .success))
         #expect(HabitWinRule.isLogged(state: .failure))
+        #expect(HabitWinRule.isLogged(state: .rest))
+    }
+
+    // bt-0018 — Rest is neutral: logged, not a win, not a miss.
+    @Test func restIsNeutralNotAWin() {
+        #expect(!HabitWinRule.isWin(style: .multiState, state: .rest, isFuture: false))
+        #expect(HabitWinRule.isNeutral(state: .rest))
+        #expect(!HabitWinRule.isNeutral(state: .failure))
+        #expect(!HabitWinRule.isNeutral(state: nil))
+    }
+}
+
+// MARK: - Streaks carry through Rest (bt-0018)
+
+struct RestStreakTests {
+    private let calendar = Calendar.current
+    private let service = HabitCalculationService.shared
+
+    private func day(_ offset: Int) -> Date {
+        calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: Date()))!
+    }
+
+    private func entries(_ states: [Int: CompletionState]) -> [Date: HabitEntry] {
+        var result: [Date: HabitEntry] = [:]
+        for (offset, state) in states {
+            result[day(offset)] = HabitEntry(date: day(offset), completionState: state)
+        }
+        return result
+    }
+
+    @Test func restDayDoesNotBreakOrExtendCurrentStreak() {
+        let habit = Habit(name: "Workout", frequency: "daily", completionStyle: .multiState)
+        // Done two days ago and yesterday, Rest today → streak 2 (not 0, not 3).
+        let withRest = entries([-2: .success, -1: .success, 0: .rest])
+        #expect(service.calculateCurrentStreak(for: habit, using: withRest) == 2)
+        // Rest in the middle: done, rest, done → 2.
+        let restInMiddle = entries([-2: .success, -1: .rest, 0: .success])
+        #expect(service.calculateCurrentStreak(for: habit, using: restInMiddle) == 2)
+        // Tried today still breaks it.
+        let tried = entries([-2: .success, -1: .success, 0: .failure])
+        #expect(service.calculateCurrentStreak(for: habit, using: tried) == 0)
+    }
+
+    @Test func restDayDropsOutOfCompletionRate() {
+        let habit = Habit(name: "Workout", frequency: "daily", completionStyle: .multiState)
+        // 4 days: done, done, rest, tried → 2 of 3 scored days.
+        let e = entries([-3: .success, -2: .success, -1: .rest, 0: .failure])
+        let rate = service.calculateCompletionRate(for: habit, using: e, from: day(-3), to: day(0))
+        #expect(rate.completed == 2)
+        #expect(rate.expected == 3)
+    }
+
+    @Test func bestStreakSkipsRest() {
+        let habit = Habit(name: "Workout", frequency: "daily", completionStyle: .multiState)
+        let e = entries([-4: .success, -3: .rest, -2: .success, -1: .success, 0: .failure])
+        #expect(service.calculateBestStreak(for: habit, using: e, from: day(-4), to: day(0)) == 3)
+    }
+}
+
+// MARK: - Grading rules (bt-0017 / bt-0018)
+
+struct GradingRuleTests {
+    @Test func dietUsesTheHabitsTargets() {
+        let defaults = GradingTargets.defaults
+        #expect(DietGrade.state(proteinGrams: 190, calories: 2050, targets: defaults) == .success)
+        #expect(DietGrade.state(proteinGrams: 190, calories: 1500, targets: defaults) == .partial)
+        #expect(DietGrade.state(proteinGrams: 100, calories: 1200, targets: defaults) == .failure)
+        #expect(DietGrade.state(proteinGrams: nil, calories: nil, targets: defaults) == .failure)
+        // Raise the protein floor to 200 → the same 190 g day is only Partial.
+        var raised = defaults
+        raised.proteinFloorGrams = 200
+        #expect(DietGrade.state(proteinGrams: 190, calories: 2050, targets: raised) == .partial)
+    }
+
+    @Test func workoutMinutesThenStepsThenUnknown() {
+        let t = GradingTargets.defaults
+        #expect(WorkoutGrade.state(minutes: 45, steps: 0, targets: t) == .success)
+        #expect(WorkoutGrade.state(minutes: 0, steps: 12_000, targets: t) == .partial)
+        #expect(WorkoutGrade.state(minutes: nil, steps: 12_000, targets: t) == .partial)
+        #expect(WorkoutGrade.state(minutes: 0, steps: 4_000, targets: t) == .failure)
+        // Minutes unknown and steps under target: can't grade → nil, never red.
+        #expect(WorkoutGrade.state(minutes: nil, steps: 4_000, targets: t) == nil)
+        #expect(WorkoutGrade.state(minutes: nil, steps: nil, targets: t) == nil)
+    }
+
+    @Test func todayIsNeverRedUntilItIsOver() {
+        #expect(InProgressRule.apply(.failure, isToday: true) == nil)
+        #expect(InProgressRule.apply(.failure, isToday: false) == .failure)
+        #expect(InProgressRule.apply(.partial, isToday: true) == .partial)
+        #expect(InProgressRule.apply(.success, isToday: true) == .success)
+        #expect(InProgressRule.apply(nil, isToday: false) == nil)
+    }
+
+    @Test func habitTargetsFallBackToDefaultsWhenBlank() {
+        let habit = Habit(name: "Diet", completionStyle: .multiState)
+        #expect(habit.gradingTargets == GradingTargets.defaults)
+        habit.targetProteinGrams = 200
+        #expect(habit.gradingTargets.proteinFloorGrams == 200)
+        #expect(habit.gradingTargets.calorieFloor == 1900)
+    }
+
+    @Test func goLiveDayGatesGradingAndBackToAutomatic() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let habit = Habit(name: "Diet", completionStyle: .multiState)
+        #expect(!habit.isAutoGraded)
+        #expect(!habit.isWithinGrading(today))
+        habit.gradingKind = .diet
+        habit.gradingSince = today
+        #expect(habit.isAutoGraded)
+        #expect(habit.isWithinGrading(today))
+        #expect(!habit.isWithinGrading(yesterday))
+    }
+
+    @Test func entriesWithoutASourceCountAsHand() {
+        let entry = HabitEntry(date: Date(), completionState: .success)
+        #expect(entry.source == .hand)
+        #expect(!entry.isAutomatic)
+        let auto = HabitEntry(date: Date(), completionState: .success, source: .auto)
+        #expect(auto.isAutomatic)
+    }
+}
+
+// MARK: - Store writes + cleanup on an in-memory store (bt-0018)
+
+@MainActor
+struct HabitStoreWriteTests {
+    private func makeContext() throws -> ModelContext {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Habit.self, HabitEntry.self, Note.self, configurations: config)
+        return ModelContext(container)
+    }
+
+    @Test func tapStampsHandSourceAndEditTime() throws {
+        let context = try makeContext()
+        let today = Calendar.current.startOfDay(for: Date())
+        let habit = Habit(name: "Test Diet", frequency: "daily", completionStyle: .multiState)
+        context.insert(habit)
+        try context.save()
+
+        HabitStore.setCompletion(for: habit, on: today, state: 3, in: context)
+        let row = try #require(HabitStore.entry(for: habit, on: today))
+        #expect(row.source == .hand)
+        #expect(row.editedAt != nil)
+
+        HabitStore.setCompletion(for: habit, on: today, state: 1, source: .auto, in: context)
+        #expect(HabitStore.entry(for: habit, on: today)?.source == .auto)
+        #expect(HabitStore.entryCount(for: habit, on: today) == 1)
+    }
+
+    @Test func cleanupKeepsTheHandRowOverNewerAutoRowsAndNeverReachesZero() throws {
+        let context = try makeContext()
+        let today = Calendar.current.startOfDay(for: Date())
+        let habit = Habit(name: "Test Diet", frequency: "daily", completionStyle: .multiState)
+        context.insert(habit)
+        try context.save()
+
+        HabitStore.setCompletion(for: habit, on: today, state: 3, in: context)
+        let tapped = try #require(HabitStore.entry(for: habit, on: today))
+
+        // Two auto duplicates: newer edit times AND smaller ids than the tap.
+        context.insert(HabitEntry(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001"), date: today,
+                                  completionState: .success, habit: habit, source: .auto, editedAt: Date().addingTimeInterval(60)))
+        context.insert(HabitEntry(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002"), date: today,
+                                  completionState: .partial, habit: habit, source: .auto, editedAt: Date().addingTimeInterval(120)))
+        try context.save()
+        #expect(HabitStore.entryCount(for: habit, on: today) == 3)
+        // What's shown before cleanup is already the survivor.
+        #expect(HabitStore.entry(for: habit, on: today)?.id == tapped.id)
+
+        #expect(HabitStore.dedupeEntries(for: habit, on: today, in: context) == 2)
+        let survivor = try #require(HabitStore.entry(for: habit, on: today))
+        #expect(survivor.id == tapped.id)
+        #expect(survivor.source == .hand)
+        #expect(survivor.effectiveCompletionState == .failure)
+
+        // Second pass: nothing to do; one row stays.
+        #expect(HabitStore.dedupeEntries(for: habit, on: today, in: context) == 0)
+        #expect(HabitStore.entryCount(for: habit, on: today) == 1)
+    }
+
+    @Test func restIsWrittenLikeAnyHandState() throws {
+        let context = try makeContext()
+        let today = Calendar.current.startOfDay(for: Date())
+        let workout = Habit(name: "Test Workout", frequency: "daily", completionStyle: .multiState)
+        workout.gradingKind = .workout
+        context.insert(workout)
+        try context.save()
+
+        HabitStore.setCompletion(for: workout, on: today, state: Int(CompletionState.rest.rawValue), in: context)
+        let row = HabitStore.entry(for: workout, on: today)
+        #expect(row?.effectiveCompletionState == .rest)
+        #expect(HabitStore.isNeutral(entry: row))
+        #expect(!HabitStore.isWin(for: workout, entry: row, on: today))
+        #expect(HabitStore.completionState(for: workout, entry: row).stateIcon == "zzz")
+    }
+
+    /// The Today row's "is this habit gone?" guard relies on these two facts
+    /// (bt-0018 pass test crash): `isDeleted` is true only while the delete
+    /// is pending; after the save the model is detached (`modelContext == nil`).
+    @Test func deletedHabitIsDetachedAfterSave() throws {
+        let context = try makeContext()
+        let habit = Habit(name: "Test Diet", frequency: "daily", completionStyle: .multiState)
+        context.insert(habit)
+        try context.save()
+        #expect(habit.modelContext != nil)
+        #expect(!habit.isDeleted)
+
+        context.delete(habit)
+        #expect(habit.isDeleted)
+        try context.save()
+        #expect(habit.modelContext == nil)
+    }
+
+    @Test func engineGradeAppliesInProgressAndUnknownRules() {
+        let today = Calendar.current.startOfDay(for: Date())
+        let t = GradingTargets.defaults
+        let neither = DayFacts(day: today, proteinGrams: 100, calories: 1200)
+        #expect(HabitSyncEngine.grade(kind: .diet, targets: t, facts: neither, steps: nil, isToday: true) == nil)
+        #expect(HabitSyncEngine.grade(kind: .diet, targets: t, facts: neither, steps: nil, isToday: false) == .failure)
+        #expect(HabitSyncEngine.grade(kind: .diet, targets: t, facts: nil, steps: nil, isToday: false) == nil)
+        #expect(HabitSyncEngine.grade(kind: .workout, targets: t, facts: nil, steps: 4000, isToday: false) == nil)
+        #expect(HabitSyncEngine.grade(kind: .workout, targets: t, facts: nil, steps: 12000, isToday: true) == .partial)
+        let zeroMinutes = DayFacts(day: today, proteinGrams: nil, calories: nil, workoutMinutes: 0)
+        #expect(HabitSyncEngine.grade(kind: .workout, targets: t, facts: zeroMinutes, steps: 4000, isToday: false) == .failure)
+        #expect(HabitSyncEngine.grade(kind: .workout, targets: t, facts: zeroMinutes, steps: 4000, isToday: true) == nil)
+    }
+}
+
+// MARK: - Cleanup survivor order (bt-0018)
+
+struct DedupeKeyTests {
+    @Test func handBeatsAutoThenNewestThenSmallestId() {
+        let now = Date()
+        let earlier = now.addingTimeInterval(-600)
+        let a = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+        let b = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!
+
+        let handOld = HabitEntry(id: b, date: now, completionState: .failure, source: .hand, editedAt: earlier)
+        let autoNew = HabitEntry(id: a, date: now, completionState: .success, source: .auto, editedAt: now)
+        // Override wins even though the auto row is newer and has the smaller id.
+        #expect(HabitStore.dedupeKey(handOld) < HabitStore.dedupeKey(autoNew))
+
+        let autoOld = HabitEntry(id: a, date: now, completionState: .partial, source: .auto, editedAt: earlier)
+        // Same source: newest edit first.
+        #expect(HabitStore.dedupeKey(autoNew) < HabitStore.dedupeKey(autoOld))
+
+        let legacyA = HabitEntry(id: a, date: now, completionState: .success)
+        let legacyB = HabitEntry(id: b, date: now, completionState: .success)
+        // No source, no edit time (pre-bt-0018 rows): smallest id, as in Step 0.
+        #expect(HabitStore.dedupeKey(legacyA) < HabitStore.dedupeKey(legacyB))
+        // And a legacy (hand) row still beats an auto row.
+        #expect(HabitStore.dedupeKey(legacyB) < HabitStore.dedupeKey(autoNew))
     }
 }
 

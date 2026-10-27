@@ -25,7 +25,13 @@ struct AddHabitView: View {
                     notes: $viewModel.notes,
                     detailKind: $viewModel.detailKind,
                     completionStyle: $viewModel.completionStyle,
-                    showingIconSheet: $viewModel.showingIconSheet
+                    showingIconSheet: $viewModel.showingIconSheet,
+                    gradingKind: $viewModel.gradingKind,
+                    targetProteinGrams: $viewModel.targetProteinGrams,
+                    targetCalorieLow: $viewModel.targetCalorieLow,
+                    targetCalorieHigh: $viewModel.targetCalorieHigh,
+                    targetWorkoutMinutes: $viewModel.targetWorkoutMinutes,
+                    targetSteps: $viewModel.targetSteps
                 )
             }
             .navigationTitle("New Habit")

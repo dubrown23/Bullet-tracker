@@ -41,14 +41,18 @@ struct DayJournalView: View {
                     // slip, so they get their own section instead of "Completed".
                     // Same win rule as Today: success / partial = completed,
                     // a multi-state "Tried" is its own section.
-                    let completedIcons = viewModel.binaryHabits.filter { !$0.isNegativeHabit && $0.completionState != 3 }
+                    let completedIcons = viewModel.binaryHabits.filter { !$0.isNegativeHabit && $0.completionState != 3 && $0.completionState != 4 }
                     let triedIcons = viewModel.binaryHabits.filter { !$0.isNegativeHabit && $0.completionState == 3 }
+                    let restIcons = viewModel.binaryHabits.filter { !$0.isNegativeHabit && $0.completionState == 4 }
                     let slippedIcons = viewModel.binaryHabits.filter { $0.isNegativeHabit }
                     if !completedIcons.isEmpty {
                         iconSection("Completed", entries: completedIcons)
                     }
                     if !triedIcons.isEmpty {
                         iconSection("Tried", entries: triedIcons)
+                    }
+                    if !restIcons.isEmpty {
+                        iconSection("Rest", entries: restIcons)
                     }
                     if !slippedIcons.isEmpty {
                         iconSection("Slipped", entries: slippedIcons)
@@ -409,6 +413,7 @@ struct BinaryHabitIcon: View {
         switch entry.completionState {
         case 2: return "\(entry.habitName), partial"
         case 3: return "\(entry.habitName), tried"
+        case 4: return "\(entry.habitName), rest day"
         default: return "\(entry.habitName), completed"
         }
     }
@@ -421,6 +426,7 @@ struct BinaryHabitIcon: View {
         switch entry.completionState {
         case 2: return AppTheme.partial
         case 3: return AppTheme.failed
+        case 4: return AppTheme.rest
         default: return AppTheme.success
         }
     }

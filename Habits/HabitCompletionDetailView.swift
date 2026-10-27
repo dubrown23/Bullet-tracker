@@ -22,6 +22,12 @@ struct HabitCompletionDetailView: View {
     @State private var notes: String = ""
     @State private var completionState: Int = 1
     @State private var entryExists: Bool = false
+    /// Who wrote the day's row and when (bt-0018). Shown for graded habits
+    /// on/after the go-live day; drives "Back to Automatic".
+    @State private var entrySource: EntrySource = .hand
+    @State private var entryEditedAt: Date?
+    @State private var loadedState: Int = 1
+    @State private var engine = HabitSyncEngine.shared
 
     // Workout
     @State private var duration: String = ""
@@ -91,9 +97,35 @@ struct HabitCompletionDetailView: View {
                             Label("Tried", systemImage: "xmark.circle.fill")
                                 .foregroundStyle(AppTheme.failed)
                                 .tag(3)
+                            // bt-0018 — Workout-graded habits only.
+                            if habit.offersRest {
+                                Label("Rest", systemImage: "zzz")
+                                    .foregroundStyle(AppTheme.rest)
+                                    .tag(4)
+                            }
                         }
                         .pickerStyle(.inline)
                         .labelsHidden()
+                    }
+                }
+
+                // bt-0018 — who graded this day. Only on/after the go-live
+                // day: earlier rows are history and stay as set.
+                if entryExists && habit.isWithinGrading(date) {
+                    Section {
+                        LabeledContent("Graded", value: sourceText)
+                        if entrySource != .auto {
+                            Button("Back to Automatic", systemImage: "arrow.uturn.backward") {
+                                Task {
+                                    await engine.revertToAutomatic(habit: habit, day: date, in: modelContext)
+                                    dismiss()
+                                }
+                            }
+                        }
+                    } footer: {
+                        if entrySource != .auto {
+                            Text("Clears this grade so the automatic one comes back.")
+                        }
                     }
                 }
 
@@ -247,8 +279,20 @@ struct HabitCompletionDetailView: View {
         }
     }
 
+    /// "By hand, 3:12 PM" / "By voice" / "Automatic".
+    private var sourceText: String {
+        var text = GradeWording.describe(entrySource)
+        if let editedAt = entryEditedAt {
+            text += ", " + editedAt.formatted(date: .omitted, time: .shortened)
+        }
+        return text
+    }
+
     private func loadEntryData(from entry: HabitEntry) {
         completionState = Int(entry.effectiveCompletionState.rawValue)
+        loadedState = completionState
+        entrySource = entry.source
+        entryEditedAt = entry.editedAt
 
         guard let details = entry.details else { return }
 
@@ -279,7 +323,10 @@ struct HabitCompletionDetailView: View {
         // If nothing was logged yet, the entry is created as `.notDone` with
         // the notes attached — the square is the only thing that marks a day.
         let state = entryExists ? completionState : 0
-        HabitStore.updateEntryDetails(for: habit, on: date, state: state, details: details, in: modelContext)
+        // Adding notes to an automatic grade keeps it automatic; changing the
+        // state makes it a hand grade ("overrides win").
+        let source: EntrySource = (entryExists && entrySource == .auto && state == loadedState) ? .auto : .hand
+        HabitStore.updateEntryDetails(for: habit, on: date, state: state, details: details, source: source, in: modelContext)
         dismiss()
     }
 

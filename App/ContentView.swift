@@ -54,11 +54,10 @@ struct ContentView: View {
             // Refresh data when app becomes active
             if newPhase == .active {
                 NotificationCenter.default.post(name: .appBecameActive, object: nil)
-                #if DEBUG
-                // bt-0017 — "sync is automatic when the app opens". Step 0
-                // runs the fake source when the Developer switch is on.
-                Task { await HabitSyncEngine.shared.runSimulationIfEnabled(in: modelContext) }
-                #endif
+                // bt-0017 / bt-0018 — "sync is automatic when the app opens".
+                // Steps + grades every time; the fake source when the
+                // Developer switch is on (debug builds); dh in Step 3.
+                Task { await HabitSyncEngine.shared.refresh(in: modelContext) }
             }
         }
     }

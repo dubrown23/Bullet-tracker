@@ -88,6 +88,8 @@ struct TodayHabitRowView: View {
     /// Bumped on every check / uncheck / cycle so `.sensoryFeedback` fires
     /// exactly once per user action (and not when the row re-renders).
     @State private var feedbackTick = 0
+    /// Live numbers for graded habits + "Back to Automatic" (bt-0018).
+    @State private var engine = HabitSyncEngine.shared
 
     @ScaledMetric(relativeTo: .body) private var cellBase: CGFloat = 24
     @ScaledMetric(relativeTo: .body) private var glyphWidth: CGFloat = 24
@@ -154,13 +156,46 @@ struct TodayHabitRowView: View {
     }
 
     private var completedDaysOfSeven: Int {
-        weekDays.filter { state(on: $0) != 0 }.count
+        weekDays.filter { state(on: $0) != 0 && state(on: $0) != restState }.count
+    }
+
+    private let restState = Int(CompletionState.rest.rawValue)
+
+    /// The selected day is a Rest day.
+    private var isSelectedDayRest: Bool { state(on: date) == restState }
+
+    /// Live caption under the name: only on today's row of a graded habit,
+    /// and only once a run has produced numbers.
+    private var liveCaption: String? {
+        guard habit.isAutoGraded, calendar.isDateInToday(date) else { return nil }
+        return engine.caption(for: habit)
+    }
+
+    /// "Back to Automatic" is offered only on or after the go-live day
+    /// (Dustin's rule: old rows count as hand, and history is never re-graded)
+    /// and only when the day's row is a hand / voice row.
+    private var canRevertToAutomatic: Bool {
+        guard habit.isWithinGrading(date), let entry = entry(on: date) else { return false }
+        return !entry.isAutomatic
     }
 
     // MARK: - Body
 
     var body: some View {
-        Group {
+        // A row can be asked to render in the same turn its habit is deleted
+        // (the delete and an observable change landing together). Reading a
+        // deleted model's fields asserts; draw nothing until @Query drops it.
+        // `isDeleted` is only true while the delete is PENDING; once saved the
+        // model is detached and its `modelContext` is nil, so check both.
+        if habit.isDeleted || habit.modelContext == nil {
+            EmptyView()
+        } else {
+            rowContent
+        }
+    }
+
+    private var rowContent: some View {
+        VStack(alignment: .leading, spacing: 2) {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 8) {
                     identityButton
@@ -174,11 +209,36 @@ struct TodayHabitRowView: View {
                     weekGrid
                 }
             }
+            // bt-0018 — today's live numbers for a graded habit, on their own
+            // line under the row so they get the full width ("40 / 180 g ·
+            // 600 cal" doesn't fit beside the grid on a folded phone).
+            if let liveCaption {
+                Text(liveCaption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .contentTransition(.numericText())
+                    .padding(.leading, glyphWidth + 10)
+                    .accessibilityLabel("Today so far: \(liveCaption)")
+            }
         }
         .contextMenu {
             if shouldTrackDetails {
                 Button("Log Details", systemImage: "info.circle") {
                     detailTarget = DetailTarget(date: date)
+                }
+            }
+            // bt-0018 — Rest is never reached by tapping; it lives here and
+            // in Log Details, Workout-graded habits only.
+            if habit.offersRest && isEditable(date) {
+                Button(isSelectedDayRest ? "Clear Rest Day" : "Rest Day", systemImage: "zzz") {
+                    toggleRest(on: date)
+                }
+            }
+            if canRevertToAutomatic {
+                Button("Back to Automatic", systemImage: "arrow.uturn.backward") {
+                    Task { await engine.revertToAutomatic(habit: habit, day: date, in: modelContext) }
                 }
             }
             Button("Edit Habit", systemImage: "pencil") { showingEditSheet = true }
@@ -342,13 +402,25 @@ struct TodayHabitRowView: View {
         }
     }
 
+    /// Rest Day on / off (bt-0018). A hand write like any tap.
+    private func toggleRest(on day: Date) {
+        guard isEditable(day), habit.offersRest else { return }
+        feedbackTick += 1
+        if state(on: day) == restState {
+            HabitStore.removeEntry(for: habit, on: day, in: modelContext)
+        } else {
+            HabitStore.setCompletion(for: habit, on: day, state: restState, in: modelContext)
+        }
+    }
+
     // MARK: - State appearance
 
     /// Cell colour for a day's state. Simple habits use their own colour;
     /// multi-state uses the brand success / partial / failed colours;
-    /// avoidance (any state = slipped) uses failed.
+    /// avoidance (any state = slipped) uses failed; Rest is grey.
     private func hex(forState state: Int) -> String {
         if isNegativeHabit { return AppTheme.failedHex }
+        if state == restState { return AppTheme.restHex }
         if !useMultipleStates { return habitColorHex }
         switch state {
         case 2: return AppTheme.partialHex
@@ -364,6 +436,7 @@ struct TodayHabitRowView: View {
         switch state {
         case 2: return "circle.lefthalf.filled"
         case 3: return "xmark"
+        case 4: return "zzz"
         default: return "checkmark"
         }
     }
@@ -374,6 +447,7 @@ struct TodayHabitRowView: View {
         switch state {
         case 2: return "Partial"
         case 3: return "Tried"
+        case 4: return "Rest day"
         default: return "Done"
         }
     }
