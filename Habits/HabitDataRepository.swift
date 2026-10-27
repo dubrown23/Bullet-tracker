@@ -214,6 +214,66 @@ enum HabitStore {
         reloadWidgetIfToday(dayStart)
     }
 
+    /// bt-0019 — a voice note adds details and nothing else. State and
+    /// `source` are left exactly as they are (an auto row stays auto, so the
+    /// grader keeps rewriting it; a hand row stays hand). Returns false when
+    /// the day has no row — callers then put the text in the day's Journal
+    /// note rather than inventing an entry, so the automatic grade stays
+    /// free to colour the day (Dustin's rule).
+    @discardableResult
+    static func mergeDetails(for habit: Habit, on date: Date, text: String?, book: String?, pages: Int?, in context: ModelContext) -> Bool {
+        let dayStart = calendar.startOfDay(for: date)
+        guard let existing = entry(for: habit, on: dayStart) else { return false }
+        existing.details = merged(existing.details, habitKind: habit.detailKind, text: text, book: book, pages: pages)
+        save(context)
+        reloadWidgetIfToday(dayStart)
+        return true
+    }
+
+    /// Pure merge: appends `text` to the notes line, sets book / pages on a
+    /// reading payload. An empty payload becomes the habit's own kind so
+    /// the Log Details sheet shows the fields it expects.
+    static func merged(_ current: HabitEntryDetails?, habitKind: DetailKind?, text: String?, book: String?, pages: Int?) -> HabitEntryDetails? {
+        func joined(_ old: String, _ new: String?) -> String {
+            guard let new, !new.isEmpty else { return old }
+            return old.isEmpty ? new : old + "\n" + new
+        }
+        let pagesText = pages.map(String.init)
+        switch current {
+        case .notes(let n):
+            return .notes(notes: joined(n, text))
+        case .workout(let types, let duration, let intensity, let n):
+            return .workout(types: types, duration: duration, intensity: intensity, notes: joined(n, text))
+        case .reading(let title, let read, let n):
+            return .reading(bookTitle: book ?? title, pagesRead: pagesText ?? read, notes: joined(n, text))
+        case .mood(let mood, let n):
+            return .mood(mood: mood, notes: joined(n, text))
+        case nil:
+            switch habitKind {
+            case .reading:
+                return .reading(bookTitle: book ?? "", pagesRead: pagesText ?? "", notes: text ?? "")
+            case .workout:
+                return .workout(types: [], duration: "", intensity: 3, notes: text ?? "")
+            case .mood, .notes, nil:
+                let line = [book, pagesText.map { "\($0) pages" }, text].compactMap { $0 }.joined(separator: ", ")
+                return line.isEmpty ? nil : .notes(notes: line)
+            }
+        }
+    }
+
+    /// bt-0019 — the day's Journal note, the home for a voice note when the
+    /// habit has no row that day. Same date shape `DayJournalViewModel.addNote`
+    /// uses (the day, with the current clock time).
+    static func addJournalNote(_ content: String, on date: Date, in context: ModelContext) {
+        var parts = calendar.dateComponents([.year, .month, .day], from: date)
+        let now = calendar.dateComponents([.hour, .minute], from: Date())
+        parts.hour = now.hour
+        parts.minute = now.minute
+        let noteDate = calendar.date(from: parts) ?? calendar.startOfDay(for: date)
+        context.insert(Note(date: noteDate, content: content))
+        save(context)
+    }
+
     /// Cleanup pass (bt-0017, rule sharpened in bt-0018): collapses duplicate
     /// rows for one habit + day down to one. Returns how many rows were deleted.
     ///

@@ -475,6 +475,320 @@ struct HabitStoreWriteTests {
     }
 }
 
+// MARK: - Step 3, the real sync (bt-0019)
+
+struct DustinHealthWireTests {
+    @Test func dayStringsRoundTripAsLocalDays() throws {
+        let day = try #require(DustinHealthWire.day(from: "2026-10-27"))
+        #expect(day == Calendar.current.startOfDay(for: day))
+        #expect(DustinHealthWire.string(from: day) == "2026-10-27")
+        #expect(DustinHealthWire.day(from: "2026-13-40") == nil || DustinHealthWire.day(from: "nope") == nil)
+    }
+
+    @Test func factsBecomeDayFactsWithNothingTrackedAsNil() throws {
+        let json = """
+        {"time_zone":"America/New_York","days":[
+          {"day":"2026-10-26","meals":{"count":2,"calories":2050,"protein":190.5,"carbs":100,"fat":60,"names":["Eggs","Chicken"]},
+           "workouts":{"count":1,"minutes":45,"sessions":[{"name":"Incline walk","category":"cardio","minutes":45,"set_count":0,"started_at":"2026-10-26T12:00:00+00:00"}]}},
+          {"day":"2026-10-27","meals":{"count":0,"calories":0,"protein":0,"carbs":0,"fat":0,"names":[]},
+           "workouts":{"count":0,"minutes":0,"sessions":[]}}
+        ]}
+        """
+        let response = try JSONDecoder().decode(DustinHealthClient.FactsResponse.self, from: Data(json.utf8))
+        let facts = DustinHealthWire.facts(response)
+        let tracked = try #require(facts[DustinHealthWire.day(from: "2026-10-26")!])
+        #expect(tracked.proteinGrams == 190.5)
+        #expect(tracked.calories == 2050)
+        #expect(tracked.workoutMinutes == 45)
+        #expect(tracked.mealNames == ["Eggs", "Chicken"])
+        #expect(tracked.sessions == [DayFacts.Session(name: "Incline walk", minutes: 45)])
+        let empty = try #require(facts[DustinHealthWire.day(from: "2026-10-27")!])
+        #expect(empty.proteinGrams == nil)
+        #expect(empty.calories == nil)
+        #expect(empty.workoutMinutes == 0)
+        // Nothing tracked still grades as a miss, as the design says.
+        #expect(DietGrade.state(for: empty) == .failure)
+    }
+
+    @Test func inboxRowsBecomeActions() throws {
+        let json = """
+        {"actions":[
+          {"id":"a1","habit":"Test Sauna","kind":"simple","day":"2026-10-27","action":"tick","status":"pending","created_at":"x"},
+          {"id":"a2","habit":"Read","kind":"simple","day":"2026-10-27","action":"tick","book":"Harry Potter","pages":30,"status":"pending","created_at":"x"},
+          {"id":"a3","habit":"Diet","kind":"graded","day":"2026-10-26","action":"set_grade","grade":"partial","status":"pending","created_at":"x"},
+          {"id":"a4","habit":"Workout","kind":"graded","day":"2026-10-27","action":"note","note":"knee felt tight","status":"pending","created_at":"x"},
+          {"id":"a5","day":"2026-10-27","action":"set_target","target_key":"protein_min_g","target_value":190,"status":"pending","created_at":"x"},
+          {"id":"a6","habit":"Sauna","kind":"simple","day":"2026-10-27","action":"untick","status":"pending","created_at":"x"},
+          {"id":"a7","habit":"Sauna","kind":"simple","day":"2026-10-27","action":"something_new","status":"pending","created_at":"x"}
+        ]}
+        """
+        let response = try JSONDecoder().decode(DustinHealthClient.InboxResponse.self, from: Data(json.utf8))
+        let actions = DustinHealthWire.actions(response)
+        #expect(actions.count == 6)
+        #expect(actions[0].kind == .tick(note: nil, book: nil, pages: nil))
+        #expect(actions[1].kind == .tick(note: nil, book: "Harry Potter", pages: 30))
+        #expect(actions[2].kind == .setGrade(.partial))
+        #expect(actions[3].kind == .note(text: "knee felt tight", book: nil, pages: nil))
+        #expect(actions[4].kind == .setTarget(.proteinMinGrams, 190))
+        #expect(actions[4].habitName == nil)
+        #expect(actions[5].kind == .untick)
+    }
+
+    @Test func syncReplyKeepsHeldTargets() throws {
+        let json = """
+        {"habits":12,"held_targets":["protein_min_g"],"targets":{"protein_min_g":190,"calories_min":1900,"calories_max":2200,"workout_minutes_min":30,"steps_min":10000},"time_zone":"America/New_York"}
+        """
+        let reply = DustinHealthWire.syncReply(try JSONDecoder().decode(DustinHealthClient.SyncResponse.self, from: Data(json.utf8)))
+        #expect(reply.heldTargets == [.proteinMinGrams])
+        #expect(reply.targets[.proteinMinGrams] == 190)
+        #expect(reply.targets[.stepsMin] == 10_000)
+    }
+
+    @Test func syncRequestSendsExplicitNullDetailKind() throws {
+        let payload = HabitSyncPayload(
+            habits: [.init(name: "Read", kind: "simple", detailKind: "reading_log"), .init(name: "Sauna", kind: "simple", detailKind: nil)],
+            targets: [.proteinMinGrams: 180], timeZone: "America/New_York", tickedToday: ["Sauna"])
+        let data = try JSONEncoder().encode(DustinHealthWire.syncRequest(payload))
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let habits = try #require(object["habits"] as? [[String: Any]])
+        #expect(habits[0]["detail_kind"] as? String == "reading_log")
+        #expect(habits[1]["detail_kind"] is NSNull)
+        #expect((object["targets"] as? [String: Double])?["protein_min_g"] == 180)
+        #expect(object["ticked_today"] as? [String] == ["Sauna"])
+    }
+
+    @Test func rangesSplitAtGapsAndAtTheCap() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        func d(_ offset: Int) -> Date { calendar.date(byAdding: .day, value: offset, to: today)! }
+        let ranges = DustinHealthWire.ranges(of: [d(0), d(-1), d(-2), d(-10)], calendar: calendar)
+        #expect(ranges.count == 2)
+        #expect(ranges[0].from == d(-10) && ranges[0].to == d(-10))
+        #expect(ranges[1].from == d(-2) && ranges[1].to == d(0))
+        let long = DustinHealthWire.ranges(of: Set((0..<100).map { d(-$0) }), maxDays: 93, calendar: calendar)
+        #expect(long.count == 2)
+        #expect(long.allSatisfy { (calendar.dateComponents([.day], from: $0.from, to: $0.to).day ?? 0) < 93 })
+        #expect(DustinHealthWire.ranges(of: []).isEmpty)
+    }
+
+    /// bt-0019 pass-test fix: dh's cursor carries "+00:00"; the "+" must be
+    /// sent as %2B or the server reads it as a space and refuses it.
+    @Test func plusInTheChangesCursorIsPercentEncoded() throws {
+        let cursor = "2026-10-27T17:58:12.345678+00:00"
+        let url = try #require(DustinHealthClient.url(base: DustinHealthClient.defaultBaseURL, op: "changes",
+                                                      query: [URLQueryItem(name: "since", value: cursor)]))
+        let query = try #require(url.query(percentEncoded: true))
+        #expect(!query.contains("+"))
+        #expect(query.contains("since=2026-10-27T17%3A58%3A12.345678%2B00%3A00") || query.contains("since=2026-10-27T17:58:12.345678%2B00:00"))
+        // What a server that turns "+" into a space, then percent-decodes, sees:
+        let serverSide = query.replacingOccurrences(of: "+", with: " ").removingPercentEncoding
+        #expect(serverSide?.contains("since=\(cursor)") == true)
+        #expect(url.absoluteString.hasPrefix("https://dustin-health.vercel.app/api/bullet?op=changes&"))
+    }
+
+    @Test func pastedKeyIsTrimmed() {
+        #expect(APIKeyStore.trimmed("  abc123\n") == "abc123")
+        #expect(APIKeyStore.trimmed("abc 123") == "abc 123")
+        #expect(APIKeyStore.trimmed(" \n\t") == nil)
+    }
+
+    @Test func targetKeysMapToHabitFields() {
+        let habit = Habit(name: "Diet", completionStyle: .multiState)
+        habit.setTarget(.proteinMinGrams, to: 190)
+        habit.setTarget(.caloriesMax, to: 2300)
+        #expect(habit.targetProteinGrams == 190)
+        #expect(habit.target(for: .caloriesMax) == 2300)
+        #expect(habit.target(for: .stepsMin) == nil)
+        #expect(TargetKey.proteinMinGrams.gradingKind == .diet)
+        #expect(TargetKey.stepsMin.gradingKind == .workout)
+        #expect(VoiceGrade.rest.completionState == .rest)
+        #expect(VoiceGrade.auto.completionState == nil)
+    }
+}
+
+@MainActor
+struct SyncEngineStep3Tests {
+    private func makeContext() throws -> ModelContext {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Habit.self, HabitEntry.self, Note.self, configurations: config)
+        return ModelContext(container)
+    }
+
+    @Test func payloadSendsKindsTargetsAndTodaysTicks() throws {
+        let context = try makeContext()
+        let today = Calendar.current.startOfDay(for: Date())
+        let diet = Habit(name: "Diet", order: 0, completionStyle: .multiState)
+        diet.gradingKind = .diet
+        diet.gradingSince = today
+        diet.targetProteinGrams = 190
+        let read = Habit(name: "Read", order: 1, completionStyle: .simple, detailKind: .reading)
+        let weed = Habit(name: "Weed", order: 2, completionStyle: .avoidance)
+        let sauna = Habit(name: "Sauna", order: 3, completionStyle: .simple)
+        let dupe = Habit(name: "sauna ", order: 4, completionStyle: .simple)
+        for h in [diet, read, weed, sauna, dupe] { context.insert(h) }
+        try context.save()
+        HabitStore.setCompletion(for: sauna, on: today, state: 1, in: context)
+
+        let payload = HabitSyncEngine.payload(habits: [diet, read, weed, sauna, dupe], today: today, timeZone: "America/New_York")
+        #expect(payload.habits.map(\.name) == ["Diet", "Read", "Weed", "Sauna"])
+        #expect(payload.habits.map(\.kind) == ["graded", "simple", "avoid", "simple"])
+        #expect(payload.habits[1].detailKind == "reading_log")
+        #expect(payload.habits[0].detailKind == nil)
+        #expect(payload.targets[.proteinMinGrams] == 190)
+        #expect(payload.targets[.caloriesMin] == 1900)
+        #expect(payload.targets[.stepsMin] == nil)
+        #expect(payload.tickedToday == ["Sauna"])
+        #expect(payload.timeZone == "America/New_York")
+    }
+
+    @Test func daysToGradeAddChangedDaysOnOrAfterGoLiveOnly() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        func d(_ offset: Int) -> Date { calendar.date(byAdding: .day, value: offset, to: today)! }
+        let days = HabitSyncEngine.daysToGrade(since: d(-20), today: today, changedDays: [d(-15), d(-30), d(2)], calendar: calendar)
+        #expect(days.first == d(-15))
+        #expect(days.count == HabitSyncEngine.lookbackDays + 1)
+        #expect(!days.contains(d(-30)) && !days.contains(d(2)))
+        let young = HabitSyncEngine.daysToGrade(since: d(-2), today: today, changedDays: [d(-5)], calendar: calendar)
+        #expect(young == [d(-2), d(-1), d(0)])
+    }
+
+    @Test func unknownFactsAreNotActedOn() {
+        let t = GradingTargets.defaults
+        #expect(!HabitSyncEngine.isKnown(kind: .diet, facts: nil, grade: nil))
+        #expect(HabitSyncEngine.isKnown(kind: .diet, facts: DayFacts(day: Date(), proteinGrams: nil, calories: nil), grade: nil))
+        #expect(!HabitSyncEngine.isKnown(kind: .workout, facts: nil, grade: nil))
+        #expect(HabitSyncEngine.isKnown(kind: .workout, facts: nil, grade: .partial))
+        #expect(HabitSyncEngine.isKnown(kind: .workout, facts: DayFacts(day: Date(), proteinGrams: nil, calories: nil, workoutMinutes: 0), grade: nil))
+        _ = t
+    }
+
+    /// Dustin's rule (bt-0019 addition 3): a voice note adds details only.
+    /// With no row it goes to the Journal; the automatic grade then colours
+    /// the day as if the note had never happened — and the note survives.
+    @Test func voiceNoteNeverBlocksTheAutomaticGrade() throws {
+        let context = try makeContext()
+        let engine = HabitSyncEngine.shared
+        let today = Calendar.current.startOfDay(for: Date())
+        let workout = Habit(name: "Test Workout", frequency: "daily", completionStyle: .multiState, detailKind: .workout)
+        workout.gradingKind = .workout
+        workout.gradingSince = today
+        context.insert(workout)
+        try context.save()
+
+        let note = InboxAction(id: "n1", kind: .note(text: "knee felt tight", book: nil, pages: nil), habitName: "test workout", day: today)
+        guard case .applied(let touched, _) = engine.applyInbox(note, on: today, habits: [workout], in: context) else {
+            Issue.record("note was not applied")
+            return
+        }
+        #expect(touched == nil)
+        #expect(HabitStore.entry(for: workout, on: today) == nil)
+        let journal = try context.fetch(FetchDescriptor<Note>())
+        #expect(journal.count == 1)
+        #expect(journal.first?.content == "Test Workout: knee felt tight")
+
+        // The facts arrive: 45 minutes → the grader is free to write Done.
+        HabitStore.setCompletion(for: workout, on: today, state: 1, source: .auto, in: context)
+        let row = try #require(HabitStore.entry(for: workout, on: today))
+        #expect(row.source == .auto)
+
+        // A second note lands on the row's details, state and source untouched.
+        let second = InboxAction(id: "n2", kind: .note(text: "stretch after", book: nil, pages: nil), habitName: "Test Workout", day: today)
+        _ = engine.applyInbox(second, on: today, habits: [workout], in: context)
+        let after = try #require(HabitStore.entry(for: workout, on: today))
+        #expect(after.source == .auto)
+        #expect(after.effectiveCompletionState == .success)
+        if case .workout(_, _, _, let notes)? = after.details {
+            #expect(notes == "stretch after")
+        } else {
+            Issue.record("expected workout details")
+        }
+    }
+
+    @Test func voiceTickOnAnAvoidHabitIsTheSlipAndReadingDetailsRideAlong() throws {
+        let context = try makeContext()
+        let engine = HabitSyncEngine.shared
+        let today = Calendar.current.startOfDay(for: Date())
+        let weed = Habit(name: "Test Weed", frequency: "daily", completionStyle: .avoidance)
+        let read = Habit(name: "Read", frequency: "daily", completionStyle: .simple, detailKind: .reading)
+        context.insert(weed)
+        context.insert(read)
+        try context.save()
+
+        _ = engine.applyInbox(InboxAction(id: "t1", kind: .tick(note: nil, book: nil, pages: nil), habitName: "Test Weed", day: today),
+                              on: today, habits: [weed, read], in: context)
+        let slip = try #require(HabitStore.entry(for: weed, on: today))
+        #expect(slip.effectiveCompletionState == .failure)
+        #expect(slip.source == .voice)
+
+        _ = engine.applyInbox(InboxAction(id: "t2", kind: .tick(note: nil, book: "Harry Potter", pages: 30), habitName: "read", day: today),
+                              on: today, habits: [weed, read], in: context)
+        let reading = try #require(HabitStore.entry(for: read, on: today))
+        #expect(reading.effectiveCompletionState == .success)
+        #expect(reading.details == .reading(bookTitle: "Harry Potter", pagesRead: "30", notes: ""))
+
+        // Undo removes the row; a target with no graded habit is skipped, not acked.
+        _ = engine.applyInbox(InboxAction(id: "t3", kind: .untick, habitName: "Read", day: today), on: today, habits: [weed, read], in: context)
+        #expect(HabitStore.entry(for: read, on: today) == nil)
+        guard case .skipped = engine.applyInbox(InboxAction(id: "t4", kind: .setTarget(.proteinMinGrams, 190), habitName: nil, day: today),
+                                                on: today, habits: [weed, read], in: context) else {
+            Issue.record("target with no graded habit should be skipped")
+            return
+        }
+    }
+
+    @Test func voiceGradesRespectRestAndGoLive() throws {
+        let context = try makeContext()
+        let engine = HabitSyncEngine.shared
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let diet = Habit(name: "Test Diet", frequency: "daily", completionStyle: .multiState)
+        diet.gradingKind = .diet
+        diet.gradingSince = today
+        context.insert(diet)
+        try context.save()
+
+        _ = engine.applyInbox(InboxAction(id: "g1", kind: .setGrade(.partial), habitName: "Test Diet", day: today), on: today, habits: [diet], in: context)
+        let row = try #require(HabitStore.entry(for: diet, on: today))
+        #expect(row.effectiveCompletionState == .partial && row.source == .voice)
+
+        guard case .skipped = engine.applyInbox(InboxAction(id: "g2", kind: .setGrade(.rest), habitName: "Test Diet", day: today), on: today, habits: [diet], in: context) else {
+            Issue.record("Rest on a Diet habit should be skipped"); return
+        }
+        guard case .skipped = engine.applyInbox(InboxAction(id: "g3", kind: .setGrade(.auto), habitName: "Test Diet", day: yesterday), on: yesterday, habits: [diet], in: context) else {
+            Issue.record("Back to auto before go-live should be skipped"); return
+        }
+        guard case .applied = engine.applyInbox(InboxAction(id: "g4", kind: .setGrade(.auto), habitName: "Test Diet", day: today), on: today, habits: [diet], in: context) else {
+            Issue.record("Back to auto on the go-live day should apply"); return
+        }
+        #expect(HabitStore.entry(for: diet, on: today) == nil)
+    }
+
+    @Test func mergedDetailsAppendNotesAndSetBookAndPages() {
+        let base = HabitStore.merged(nil, habitKind: .reading, text: nil, book: "Dune", pages: 12)
+        #expect(base == .reading(bookTitle: "Dune", pagesRead: "12", notes: ""))
+        let more = HabitStore.merged(base, habitKind: .reading, text: "slow start", book: nil, pages: 40)
+        #expect(more == .reading(bookTitle: "Dune", pagesRead: "40", notes: "slow start"))
+        let workout = HabitStore.merged(.workout(types: ["Run"], duration: "30 min", intensity: 4, notes: "a"), habitKind: .workout, text: "b", book: nil, pages: nil)
+        #expect(workout == .workout(types: ["Run"], duration: "30 min", intensity: 4, notes: "a\nb"))
+        #expect(HabitStore.merged(nil, habitKind: nil, text: nil, book: nil, pages: nil) == nil)
+        #expect(HabitStore.merged(nil, habitKind: nil, text: "hi", book: nil, pages: nil) == .notes(notes: "hi"))
+    }
+
+    @Test func autoWorkoutDetailsKeepTheRowsNotes() {
+        let today = Calendar.current.startOfDay(for: Date())
+        let workout = Habit(name: "Workout", completionStyle: .multiState, detailKind: .workout)
+        let facts = DayFacts(day: today, proteinGrams: nil, calories: nil, workoutMinutes: 75,
+                             sessions: [.init(name: "Incline walk", minutes: 60), .init(name: "KOT", minutes: 15), .init(name: "KOT", minutes: 0)])
+        let details = HabitSyncEngine.autoDetails(for: workout, facts: facts, existing: .workout(types: [], duration: "", intensity: 3, notes: "knee"))
+        #expect(details == .workout(types: ["Incline walk", "KOT"], duration: "75 min", intensity: 3, notes: "knee"))
+        #expect(HabitSyncEngine.autoDetails(for: workout, facts: DayFacts(day: today, proteinGrams: nil, calories: nil, workoutMinutes: 0), existing: nil) == nil)
+        let diet = Habit(name: "Diet", completionStyle: .multiState)
+        #expect(HabitSyncEngine.autoDetails(for: diet, facts: facts, existing: nil) == nil)
+    }
+}
+
 // MARK: - Cleanup survivor order (bt-0018)
 
 struct DedupeKeyTests {

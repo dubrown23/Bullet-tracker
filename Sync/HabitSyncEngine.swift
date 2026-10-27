@@ -2,25 +2,30 @@
 //  HabitSyncEngine.swift
 //  Bullet Tracker
 //
-//  bt-0017 / bt-0018. One sync run: pull day facts + the inbox from a
-//  `HabitFactsSource` (if one is connected), read steps from Apple Health,
-//  grade every automatically graded habit with the app's rules over its
-//  go-live window, write entries through the SAME write path a tap uses
-//  (`HabitStore.setCompletion`, source = auto), run the duplicate cleanup,
-//  confirm back to the source. Keeps today's live numbers for the Today row
-//  and reports what it did so the Developer screen can show it.
+//  bt-0017 / bt-0018 / bt-0019. One sync run against a `HabitFactsSource`
+//  (dustin-health when a key is stored on the iPhone; the fake from the
+//  Developer screen; none = steps only):
 //
-//  Rules (shared design note, Part A + Dustin's bt-0018 review):
+//    1. steps from Apple Health for every day that will be graded
+//    2. op=sync  — send habits, targets, time zone, today's hand ticks;
+//                  take dh's value for any target it held (voice wins)
+//    3. op=changes — which past days' facts changed since the last run
+//    4. inbox → apply through the SAME write path a tap uses (source =
+//       voice; a note adds details only), ack what was applied
+//    5. op=facts for the window + changed days → grade with the app's
+//       rules → write auto rows (overrides are never touched)
+//    6. duplicate cleanup, status + cursor saved only after a clean run
+//
+//  Rules (shared design note, Part A + Dustin's bt-0018 / bt-0019 reviews):
 //    • Overrides win — an entry written by hand or voice is never touched.
 //    • Never re-grade history — only days on/after `Habit.gradingSince`.
 //    • Today is "in progress" — Tried is withheld until the day is over.
-//    • Only the iPhone writes automatic grades. Any other device (the iPad)
-//      reads and shows, but never writes, removes or changes an auto entry:
-//      its lagging step count must not undo the phone's grade.
+//    • Only the iPhone writes automatic grades AND only the iPhone talks
+//      to dh. The iPad reads and shows what iCloud brings it.
 //    • One entry per habit per day — `HabitStore.dedupeEntries` after every
 //      write; deterministic, never reaches zero (see that function).
-//
-//  Step 3 points `source` at dustin-health and adds the changed-days list.
+//    • A voice note never sets a state or a source.
+//    • Facts that could not be loaded leave every row exactly as it is.
 //
 
 import Foundation
@@ -53,31 +58,62 @@ final class HabitSyncEngine {
         var steps: Int?
     }
 
+    /// bt-0019 — what Settings → Dustin's Health shows. Persisted so the
+    /// line survives a relaunch; only a live source (dh) writes it.
+    struct SyncStatus: Codable, Equatable {
+        var lastSuccess: Date?
+        var lastError: String?
+        var keyRejected = false
+        var lastAppliedCount = 0
+        var unapplied: [UnappliedAction] = []
+    }
+
+    /// An inbox action the app could not use. Stays pending on dh and
+    /// listed here until Dismiss acks it on purpose.
+    struct UnappliedAction: Codable, Equatable, Identifiable {
+        let id: String
+        let title: String
+        let reason: String
+    }
+
     private(set) var isRunning = false
     private(set) var lastReport: Report?
     /// Keyed by habit id. Cleared and refilled on every run.
     private(set) var liveFacts: [UUID: LiveFacts] = [:]
+    private(set) var status: SyncStatus
 
-    /// Dustin's rule: only the iPhone grades. The Duo is a phone; the iPad
-    /// (and a Mac, if it ever runs this) is read-only for automatic entries.
+    /// Dustin's rule: only the iPhone grades and only the iPhone syncs.
+    /// The Duo is a phone; the iPad (and a Mac, if it ever runs this) is
+    /// read-only for automatic entries and never calls dh.
     static var isGradingDevice: Bool {
         UIDevice.current.userInterfaceIdiom == .phone
     }
 
-    /// How far back a run re-grades (bounded, so a run stays cheap). The
-    /// go-live day caps it further.
+    /// How far back a run re-grades on its own (bounded, so a run stays
+    /// cheap). The go-live day caps it further; changed days extend it.
     static let lookbackDays = 7
 
-    private let calendar = Calendar.current
+    /// An automatic run (app became active) is skipped if the last clean
+    /// run with dh was this recent. Pull-down and Save always run.
+    static let minimumInterval: TimeInterval = 120
 
-    private init() {}
+    private static let statusKey = "dhSyncStatus"
+    private static let cursorKey = "dhNextSince"
+
+    private let calendar = Calendar.current
+    private var lastAttempt: Date?
+
+    private init() {
+        status = Self.loadStatus()
+    }
 
     // MARK: - Entry points
 
-    /// What the app calls on becoming active and on pull-to-refresh. Picks
-    /// the source: the fake one when the Developer switch is on; none until
-    /// Step 3 connects dustin-health (steps still flow).
-    func refresh(in context: ModelContext) async {
+    /// What the app calls on becoming active (`force == false`) and on
+    /// pull-to-refresh (`force == true`). Picks the source: the fake when
+    /// the Developer switch is on; dh when this is the iPhone and a key is
+    /// stored; otherwise none (steps still flow).
+    func refresh(in context: ModelContext, force: Bool = false) async {
         #if DEBUG
         if isSimulationEnabled {
             ensureTestHabits(in: context)
@@ -85,7 +121,48 @@ final class HabitSyncEngine {
             return
         }
         #endif
+        if Self.isGradingDevice, let key = APIKeyStore.read() {
+            if !force, let last = lastAttempt, Date().timeIntervalSince(last) < Self.minimumInterval {
+                return
+            }
+            lastAttempt = Date()
+            await run(source: DustinHealthFacts(key: key), in: context)
+            return
+        }
         await run(source: nil, in: context)
+    }
+
+    /// Settings → Save / Sync now.
+    func syncNow(in context: ModelContext) async {
+        await refresh(in: context, force: true)
+    }
+
+    /// Whether this device holds a key and may talk to dh.
+    var isConnectedToHealth: Bool {
+        Self.isGradingDevice && APIKeyStore.hasKey
+    }
+
+    /// "Couldn't apply" → Dismiss: ack the action without applying it, on
+    /// purpose, so dh stops sending it.
+    func dismiss(_ action: UnappliedAction) async {
+        guard Self.isGradingDevice, let key = APIKeyStore.read() else { return }
+        do {
+            _ = try await DustinHealthFacts(key: key).confirmApplied([action.id])
+            status.unapplied.removeAll { $0.id == action.id }
+            Self.saveStatus(status)
+        } catch {
+            status.lastError = error.localizedDescription
+            Self.saveStatus(status)
+        }
+    }
+
+    /// Settings → Remove key. Forgets the key, the status and the cursor.
+    func disconnectFromHealth() {
+        APIKeyStore.delete()
+        status = SyncStatus()
+        Self.saveStatus(status)
+        UserDefaults.standard.removeObject(forKey: Self.cursorKey)
+        lastAttempt = nil
     }
 
     /// One full sync, writing into `context` (the view's main-actor context,
@@ -104,14 +181,124 @@ final class HabitSyncEngine {
         if !canWrite {
             report.lines.append("This device doesn't grade (iPhone only) — showing, not writing")
         }
+        let isLive = source?.isLive ?? false
 
-        // 1. Steps per day in the lookback window, from the phone itself.
+        // A transport / key failure anywhere stops the later network steps
+        // and keeps the cursor and status from advancing.
+        var transportFailed = false
+        var keyRejected = false
+        func failed(_ step: String, _ error: Error) {
+            transportFailed = true
+            if let clientError = error as? DustinHealthClient.ClientError, clientError.isAuthFailure {
+                keyRejected = true
+            }
+            report.errors.append("\(step): \(error.localizedDescription)")
+        }
+
+        // 2. op=sync — the habit list, targets, time zone and today's taps.
+        if let source {
+            let payload = Self.payload(habits: habits, today: today, timeZone: TimeZone.current.identifier)
+            do {
+                let reply = try await source.sync(payload)
+                report.lines.append("Sent \(payload.habits.count) habits, \(payload.targets.count) targets, \(payload.tickedToday.count) ticked today")
+                var heldAny = false
+                for key in reply.heldTargets {
+                    guard let value = reply.targets[key],
+                          let habit = habits.first(where: { $0.gradingKind == key.gradingKind }) else { continue }
+                    if habit.target(for: key) != value {
+                        habit.setTarget(key, to: value)
+                        heldAny = true
+                    }
+                    report.lines.append("\(habit.name ?? "?"): \(key.title) held by dh → \(value.formatted()) (voice wins)")
+                }
+                if heldAny { try? context.save() }
+            } catch {
+                failed("Sync", error)
+            }
+        }
+
+        // 3. op=changes — past days whose facts moved since the last run.
+        var changedDays: [Date] = []
+        var newCursor: String?
+        if let source, !transportFailed {
+            do {
+                let since = isLive ? UserDefaults.standard.string(forKey: Self.cursorKey) : nil
+                let changes = try await source.changedDays(since: since)
+                changedDays = changes.days.map { calendar.startOfDay(for: $0) }.filter { $0 <= today }
+                newCursor = changes.nextSince
+                if changedDays.isEmpty {
+                    report.lines.append("No changed days")
+                } else {
+                    report.lines.append("Changed days: " + changedDays.map(Self.shortDay).joined(separator: ", "))
+                }
+            } catch {
+                failed("Changes", error)
+            }
+        }
+
+        // 4. Inbox → through the tap write path (voice rows), before grading
+        //    so "back to auto" is re-graded in this same run.
+        var appliedIDs: [String] = []
+        var unapplied: [UnappliedAction] = []
+        var inboxFetched = false
+        if let source, !transportFailed {
+            do {
+                let actions = try await source.pendingActions()
+                inboxFetched = true
+                for action in actions {
+                    let day = calendar.startOfDay(for: action.day)
+                    guard day <= today else {
+                        unapplied.append(UnappliedAction(id: action.id, title: action.title, reason: "dated in the future"))
+                        continue
+                    }
+                    guard canWrite else {
+                        report.lines.append("Inbox: “\(action.title)” left for the iPhone")
+                        continue
+                    }
+                    switch applyInbox(action, on: day, habits: habits, in: context) {
+                    case .applied(let habit, let line):
+                        report.lines.append(line)
+                        appliedIDs.append(action.id)
+                        if let habit { touched.append((habit, day)) }
+                    case .skipped(let reason):
+                        report.lines.append("Not applied: \(action.title) — \(reason)")
+                        unapplied.append(UnappliedAction(id: action.id, title: action.title, reason: reason))
+                    }
+                }
+                if actions.isEmpty {
+                    report.lines.append("Inbox empty")
+                }
+                if !appliedIDs.isEmpty {
+                    let ack = try await source.confirmApplied(appliedIDs)
+                    report.lines.append("Confirmed \(ack.applied) to dh")
+                    for miss in ack.notApplied {
+                        report.errors.append("dh did not mark \(miss.id.prefix(8)) applied: \(miss.reason)")
+                    }
+                }
+            } catch {
+                failed("Inbox", error)
+            }
+        }
+
+        // 5. Which days each graded habit needs, then steps + facts for them.
+        var daysByHabit: [UUID: [Date]] = [:]
+        var allDays = Set<Date>()
+        for habit in habits where habit.isAutoGraded {
+            guard let since = habit.gradingSince, let habitID = habit.id else { continue }
+            let days = Self.daysToGrade(since: since, today: today, changedDays: changedDays, calendar: calendar)
+            daysByHabit[habitID] = days
+            allDays.formUnion(days)
+        }
+        // Steps for the lookback window regardless (the report shows today's).
+        for offset in 0..<Self.lookbackDays {
+            if let day = calendar.date(byAdding: .day, value: -offset, to: today) { allDays.insert(day) }
+        }
+
         var stepsByDay: [Date: Int] = [:]
         if HealthSteps.isAvailable {
             do {
                 try await HealthSteps.shared.requestAuthorization()
-                for offset in 0..<Self.lookbackDays {
-                    guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
+                for day in allDays.sorted() {
                     stepsByDay[day] = try await HealthSteps.shared.steps(on: day)
                 }
                 report.stepsToday = stepsByDay[today]
@@ -122,23 +309,33 @@ final class HabitSyncEngine {
             report.errors.append("Steps: Health data not available on this device")
         }
 
-        // 2. Graded habits → one grade per day in their window.
+        // `nil` = facts not loaded (no source, or the fetch failed): rows
+        // are then left exactly as they are.
+        var factsByDay: [Date: DayFacts]?
+        if let source, !transportFailed {
+            let needed = Set(daysByHabit.values.flatMap { $0 })
+            var collected: [Date: DayFacts] = [:]
+            var ok = true
+            for range in DustinHealthWire.ranges(of: needed, calendar: calendar) {
+                do {
+                    collected.merge(try await source.facts(from: range.from, to: range.to)) { _, new in new }
+                } catch {
+                    failed("Facts", error)
+                    ok = false
+                    break
+                }
+            }
+            if ok { factsByDay = collected }
+        }
+
+        // Grade every habit-day.
         var newLive: [UUID: LiveFacts] = [:]
         for habit in habits where habit.isAutoGraded {
-            guard let kind = habit.gradingKind, let since = habit.gradingSince, let habitID = habit.id else { continue }
-            let windowStart = max(calendar.startOfDay(for: since),
-                                  calendar.date(byAdding: .day, value: -(Self.lookbackDays - 1), to: today) ?? today)
-            var day = windowStart
-            while day <= today {
-                var facts: DayFacts?
-                if let source {
-                    do { facts = try await source.facts(for: day) } catch {
-                        report.errors.append("Facts \(Self.shortDay(day)): \(error.localizedDescription)")
-                    }
-                }
+            guard let kind = habit.gradingKind, let habitID = habit.id, let days = daysByHabit[habitID] else { continue }
+            for day in days {
+                let facts = factsByDay?[day]
                 let steps = Self.isGradingDevice ? stepsByDay[day] : nil
                 let isToday = day == today
-
                 let grade = Self.grade(kind: kind, targets: habit.gradingTargets, facts: facts, steps: steps, isToday: isToday)
 
                 if isToday {
@@ -146,56 +343,24 @@ final class HabitSyncEngine {
                                                  workoutMinutes: facts?.workoutMinutes, steps: steps)
                 }
 
-                let outcome = apply(grade: grade, to: habit, on: day, canWrite: canWrite, in: context)
-                if outcome.wrote { touched.append((habit, day)) }
-                report.lines.append("\(habit.name ?? "?") \(Self.shortDay(day)): \(Self.describe(facts, steps: steps)) → \(GradeWording.describe(grade)) · \(outcome.note)")
+                let prefix = "\(habit.name ?? "?") \(Self.shortDay(day)): \(Self.describe(facts, steps: steps))"
+                if source != nil && factsByDay == nil {
+                    report.lines.append("\(prefix) → facts unavailable, left as is")
+                    continue
+                }
+                guard Self.isKnown(kind: kind, facts: facts, grade: grade) else {
+                    report.lines.append("\(prefix) → not enough known, left as is")
+                    continue
+                }
 
-                guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
-                day = next
+                let outcome = apply(grade: grade, facts: facts, to: habit, on: day, canWrite: canWrite, in: context)
+                if outcome.wrote { touched.append((habit, day)) }
+                report.lines.append("\(prefix) → \(GradeWording.describe(grade)) · \(outcome.note)")
             }
         }
         liveFacts = newLive
 
-        // 3. Inbox → ticks, through the tap write path (voice rows).
-        if let source {
-            do {
-                let actions = try await source.pendingActions()
-                var applied: [String] = []
-                for action in actions {
-                    guard let target = habit(named: action.habitName, in: habits) else {
-                        report.errors.append("Inbox: no habit named “\(action.habitName)”")
-                        continue
-                    }
-                    let day = calendar.startOfDay(for: action.day)
-                    guard day <= today else {
-                        report.errors.append("Inbox: “\(action.habitName)” is dated in the future, skipped")
-                        continue
-                    }
-                    guard canWrite else {
-                        report.lines.append("Inbox: “\(action.habitName)” left for the iPhone")
-                        continue
-                    }
-                    switch action.kind {
-                    case .tick:
-                        let state = TickGrade.state(for: target.completionStyle)
-                        HabitStore.setCompletion(for: target, on: day, state: Int(state.rawValue), source: .voice, in: context)
-                        report.lines.append("\(target.name ?? action.habitName): ticked (\(GradeWording.describe(state)), voice)")
-                    }
-                    touched.append((target, day))
-                    applied.append(action.id)
-                }
-                if !applied.isEmpty {
-                    try await source.confirmApplied(applied)
-                }
-                if actions.isEmpty {
-                    report.lines.append("Inbox empty")
-                }
-            } catch {
-                report.errors.append("Inbox: \(error.localizedDescription)")
-            }
-        }
-
-        // 4. Cleanup pass over everything this run touched, plus today for
+        // 6. Cleanup pass over everything this run touched, plus today for
         //    every graded habit (a duplicate can arrive from the other device
         //    even when this run wrote nothing). Deterministic on every device.
         var cleanupTargets = touched
@@ -210,8 +375,94 @@ final class HabitSyncEngine {
             }
         }
 
+        // Status + cursor: only a live source, only after a clean run.
+        if isLive {
+            if transportFailed {
+                status.lastError = report.errors.first
+                status.keyRejected = keyRejected
+            } else {
+                status.lastSuccess = Date()
+                status.lastError = nil
+                status.keyRejected = false
+                status.lastAppliedCount = appliedIDs.count
+                if inboxFetched { status.unapplied = unapplied }
+                if let newCursor { UserDefaults.standard.set(newCursor, forKey: Self.cursorKey) }
+            }
+            Self.saveStatus(status)
+        }
+
         report.finished = Date()
         lastReport = report
+    }
+
+    // MARK: - What the app sends
+
+    /// The sync payload, from the habit list. Kind: avoid for an avoidance
+    /// habit, graded when "Graded by" is on, else simple. Reading Log habits
+    /// say so, so a voice "read done, Harry Potter, 30 pages" knows where
+    /// the book goes. Names that dh would see as the same (same letters and
+    /// digits, case-insensitive) are sent once.
+    static func payload(habits: [Habit], today: Date, timeZone: String) -> HabitSyncPayload {
+        var items: [HabitSyncPayload.HabitItem] = []
+        var keys = Set<String>()
+        var targets: [TargetKey: Double] = [:]
+        var ticked: [String] = []
+        for habit in habits.sorted(by: { $0.order < $1.order }) {
+            guard let name = habit.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { continue }
+            let key = habitKey(name)
+            guard !key.isEmpty, keys.insert(key).inserted else { continue }
+            let kind: String
+            if habit.completionStyle == .avoidance {
+                kind = "avoid"
+            } else if habit.gradingKind != nil {
+                kind = "graded"
+            } else {
+                kind = "simple"
+            }
+            items.append(.init(name: String(name.prefix(80)), kind: kind,
+                               detailKind: habit.detailKind == .reading ? "reading_log" : nil))
+            if let gradingKind = habit.gradingKind {
+                let t = habit.gradingTargets
+                for key in TargetKey.allCases where key.gradingKind == gradingKind && targets[key] == nil {
+                    switch key {
+                    case .proteinMinGrams: targets[key] = t.proteinFloorGrams
+                    case .caloriesMin: targets[key] = t.calorieFloor
+                    case .caloriesMax: targets[key] = t.calorieCeiling
+                    case .workoutMinutesMin: targets[key] = t.workoutMinutes
+                    case .stepsMin: targets[key] = t.steps
+                    }
+                }
+            }
+            if let entry = HabitStore.entry(for: habit, on: today), HabitWinRule.isLogged(state: entry.effectiveCompletionState) {
+                ticked.append(String(name.prefix(80)))
+            }
+        }
+        return HabitSyncPayload(habits: items, targets: targets, timeZone: timeZone, tickedToday: ticked)
+    }
+
+    /// dh's `habit_key`: lower-case letters and digits only.
+    static func habitKey(_ name: String) -> String {
+        String(name.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) && $0.isASCII })
+    }
+
+    /// The days one graded habit is graded in this run: the usual window
+    /// (`max(gradingSince, today − 6)…today`) plus any changed day on or
+    /// after the go-live day. Sorted, unique, never before go-live.
+    static func daysToGrade(since: Date, today: Date, changedDays: [Date], calendar: Calendar = .current) -> [Date] {
+        let start = calendar.startOfDay(for: since)
+        let windowStart = max(start, calendar.date(byAdding: .day, value: -(lookbackDays - 1), to: today) ?? today)
+        var days = Set<Date>()
+        var day = windowStart
+        while day <= today {
+            days.insert(day)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        for changed in changedDays {
+            let d = calendar.startOfDay(for: changed)
+            if d >= start && d <= today { days.insert(d) }
+        }
+        return days.sorted()
     }
 
     // MARK: - Grading
@@ -231,9 +482,36 @@ final class HabitSyncEngine {
         return InProgressRule.apply(raw, isToday: isToday)
     }
 
+    /// Whether enough is known to act on `grade` at all. A `nil` grade can
+    /// mean "no colour today" (drop back — acted on) or "can't tell" (left
+    /// alone). Diet needs facts; Workout needs minutes, or a grade from
+    /// steps alone.
+    static func isKnown(kind: GradingKind, facts: DayFacts?, grade: CompletionState?) -> Bool {
+        switch kind {
+        case .diet: return facts != nil
+        case .workout: return facts?.workoutMinutes != nil || grade != nil
+        }
+    }
+
+    /// Details an automatic Workout row carries: the sessions' names and
+    /// minutes from dh. Any notes already on the row (a voice note) stay.
+    static func autoDetails(for habit: Habit, facts: DayFacts?, existing: HabitEntryDetails?) -> HabitEntryDetails? {
+        guard habit.detailKind == .workout, let facts, !facts.sessions.isEmpty else { return nil }
+        var types: [String] = []
+        for session in facts.sessions where !types.contains(session.name) { types.append(session.name) }
+        let minutes = facts.workoutMinutes ?? facts.sessions.reduce(0) { $0 + $1.minutes }
+        var notes = ""
+        var intensity = 3
+        if case .workout(_, _, let i, let n)? = existing {
+            notes = n
+            intensity = i
+        }
+        return .workout(types: types, duration: minutes > 0 ? "\(Int(minutes)) min" : "", intensity: intensity, notes: notes)
+    }
+
     /// Writes `grade` for the day if this device may and the day's row isn't
     /// an override. `grade == nil` removes an automatic row (drop back).
-    private func apply(grade: CompletionState?, to habit: Habit, on day: Date, canWrite: Bool, in context: ModelContext) -> (wrote: Bool, note: String) {
+    private func apply(grade: CompletionState?, facts: DayFacts?, to habit: Habit, on day: Date, canWrite: Bool, in context: ModelContext) -> (wrote: Bool, note: String) {
         let existing = HabitStore.entry(for: habit, on: day)
 
         if let existing, !existing.isAutomatic {
@@ -250,10 +528,87 @@ final class HabitSyncEngine {
             HabitStore.removeEntry(for: habit, on: day, in: context)
             return (true, "auto row removed")
         case (let g?, let e?) where e.effectiveCompletionState == g:
+            if let details = Self.autoDetails(for: habit, facts: facts, existing: e.details), details != e.details {
+                HabitStore.updateEntryDetails(for: habit, on: day, state: Int(g.rawValue), details: details, source: .auto, in: context)
+                return (true, "unchanged, details updated")
+            }
             return (false, "unchanged")
-        case (let g?, _):
-            HabitStore.setCompletion(for: habit, on: day, state: Int(g.rawValue), source: .auto, in: context)
+        case (let g?, let e):
+            if let details = Self.autoDetails(for: habit, facts: facts, existing: e?.details) {
+                HabitStore.updateEntryDetails(for: habit, on: day, state: Int(g.rawValue), details: details, source: .auto, in: context)
+            } else {
+                HabitStore.setCompletion(for: habit, on: day, state: Int(g.rawValue), source: .auto, in: context)
+            }
             return (true, "written (auto)")
+        }
+    }
+
+    // MARK: - Inbox
+
+    enum InboxOutcome {
+        case applied(Habit?, String)
+        case skipped(String)
+    }
+
+    /// One voice action → one write (or a reason it can't be done). The
+    /// app's own rules decide what a tick means for the habit's style; a
+    /// note adds details and nothing else.
+    func applyInbox(_ action: InboxAction, on day: Date, habits: [Habit], in context: ModelContext) -> InboxOutcome {
+        if case .setTarget(let key, let value) = action.kind {
+            guard let habit = habits.first(where: { $0.gradingKind == key.gradingKind }) else {
+                return .skipped("no habit is graded by \(key.gradingKind.rawValue)")
+            }
+            habit.setTarget(key, to: value)
+            try? context.save()
+            return .applied(nil, "\(habit.name ?? "?"): \(key.title) → \(value.formatted()) (voice)")
+        }
+
+        guard let name = action.habitName, let habit = habit(named: name, in: habits) else {
+            return .skipped("no habit named “\(action.habitName ?? "?")”")
+        }
+        let shown = habit.name ?? name
+
+        switch action.kind {
+        case .setTarget:
+            return .skipped("unreachable")
+
+        case .tick(let note, let book, let pages):
+            let state = TickGrade.state(for: habit.completionStyle)
+            HabitStore.setCompletion(for: habit, on: day, state: Int(state.rawValue), source: .voice, in: context)
+            if note != nil || book != nil || pages != nil {
+                HabitStore.mergeDetails(for: habit, on: day, text: note, book: book, pages: pages, in: context)
+            }
+            return .applied(habit, "\(shown) \(Self.shortDay(day)): ticked (\(GradeWording.describe(state)), voice)")
+
+        case .untick:
+            HabitStore.removeEntry(for: habit, on: day, in: context)
+            return .applied(habit, "\(shown) \(Self.shortDay(day)): undone (voice)")
+
+        case .setGrade(let grade):
+            if grade == .auto {
+                guard habit.isWithinGrading(day) else {
+                    return .skipped("grading hasn't started for that day")
+                }
+                HabitStore.removeEntry(for: habit, on: day, in: context)
+                return .applied(habit, "\(shown) \(Self.shortDay(day)): back to automatic (voice)")
+            }
+            guard let state = grade.completionState else { return .skipped("unknown grade") }
+            if state == .rest && !habit.offersRest {
+                return .skipped("Rest is only for the habit graded by Workout")
+            }
+            if habit.completionStyle != .multiState && state != .success {
+                return .skipped("\(shown) isn't a multi-state habit")
+            }
+            HabitStore.setCompletion(for: habit, on: day, state: Int(state.rawValue), source: .voice, in: context)
+            return .applied(habit, "\(shown) \(Self.shortDay(day)): \(GradeWording.describe(state)) (voice)")
+
+        case .note(let text, let book, let pages):
+            if HabitStore.mergeDetails(for: habit, on: day, text: text, book: book, pages: pages, in: context) {
+                return .applied(habit, "\(shown) \(Self.shortDay(day)): note added to the entry")
+            }
+            let line = [book, pages.map { "\($0) pages" }, text].compactMap { $0 }.joined(separator: ", ")
+            HabitStore.addJournalNote("\(shown): \(line)", on: day, in: context)
+            return .applied(nil, "\(shown) \(Self.shortDay(day)): note added to the Journal (no entry that day)")
         }
     }
 
@@ -266,7 +621,7 @@ final class HabitSyncEngine {
         let dayStart = calendar.startOfDay(for: day)
         guard habit.isWithinGrading(dayStart) else { return }
         HabitStore.removeEntry(for: habit, on: dayStart, in: context)
-        await refresh(in: context)
+        await refresh(in: context, force: true)
     }
 
     // MARK: - Captions
@@ -290,14 +645,32 @@ final class HabitSyncEngine {
         }
     }
 
+    // MARK: - Status persistence
+
+    private static func loadStatus() -> SyncStatus {
+        guard let data = UserDefaults.standard.data(forKey: statusKey),
+              let status = try? JSONDecoder().decode(SyncStatus.self, from: data) else { return SyncStatus() }
+        return status
+    }
+
+    private static func saveStatus(_ status: SyncStatus) {
+        if let data = try? JSONEncoder().encode(status) {
+            UserDefaults.standard.set(data, forKey: statusKey)
+        }
+    }
+
     // MARK: - Lookups
 
     private func allHabits(in context: ModelContext) -> [Habit] {
         (try? context.fetch(FetchDescriptor<Habit>(sortBy: [SortDescriptor(\.order)]))) ?? []
     }
 
+    /// dh sends the name as the app sent it; match the way dh does (letters
+    /// and digits, case-insensitive) so "Cold Tub" and "cold tub" agree.
     private func habit(named name: String, in habits: [Habit]) -> Habit? {
-        habits.first { ($0.name ?? "").compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+        let wanted = Self.habitKey(name)
+        guard !wanted.isEmpty else { return nil }
+        return habits.first { Self.habitKey($0.name ?? "") == wanted }
     }
 
     // MARK: - Wording
@@ -326,6 +699,8 @@ final class HabitSyncEngine {
     static let testDietName = "Test Diet"
     static let testSaunaName = "Test Sauna"
     static let testWorkoutName = "Test Workout"
+    static let testWeedName = "Test Weed"
+    static let testHabitNames = [testDietName, testWorkoutName, testSaunaName, testWeedName]
 
     #if DEBUG
     private static let simulationKey = "debugSimulateDHSync"
@@ -353,10 +728,10 @@ final class HabitSyncEngine {
         await run(source: FakeHealthFacts(), in: context)
     }
 
-    /// Creates Test Diet (graded by diet), Test Workout (graded by workout)
-    /// and Test Sauna (simple) if missing, go-live today. Run from ONE
-    /// device and let CloudKit carry them to the other — two devices
-    /// creating them at once would make two sets.
+    /// Creates Test Diet (graded by diet), Test Workout (graded by workout),
+    /// Test Sauna (simple) and Test Weed (avoidance, bt-0019) if missing,
+    /// go-live today. Run from ONE device and let CloudKit carry them to
+    /// the other — two devices creating them at once would make two sets.
     func ensureTestHabits(in context: ModelContext) {
         let habits = allHabits(in: context)
         var order = Int32(habits.count)
@@ -388,6 +763,12 @@ final class HabitSyncEngine {
         if habit(named: Self.testSaunaName, in: habits) == nil {
             context.insert(Habit(name: Self.testSaunaName, color: TestHabitHex.failed, icon: "flame.fill",
                                  frequency: "daily", startDate: start, order: order, completionStyle: .simple))
+            order += 1
+            inserted = true
+        }
+        if habit(named: Self.testWeedName, in: habits) == nil {
+            context.insert(Habit(name: Self.testWeedName, color: TestHabitHex.failed, icon: "leaf.fill",
+                                 frequency: "daily", startDate: start, order: order, completionStyle: .avoidance))
             inserted = true
         }
         if inserted {
@@ -430,7 +811,7 @@ final class HabitSyncEngine {
         liveFacts = [:]
 
         let habits = allHabits(in: context)
-        for name in [Self.testDietName, Self.testWorkoutName, Self.testSaunaName] {
+        for name in Self.testHabitNames {
             // Delete every match, not just the first — if two devices did
             // create a set each, this is how the extras go too.
             for habit in habits where (habit.name ?? "").caseInsensitiveCompare(name) == .orderedSame {
@@ -456,7 +837,7 @@ final class HabitSyncEngine {
         let today = calendar.startOfDay(for: Date())
         let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
         var result: [(String, String, [RowReadout]?)] = []
-        for name in [Self.testDietName, Self.testWorkoutName, Self.testSaunaName] {
+        for name in Self.testHabitNames {
             guard let habit = habit(named: name, in: habits) else {
                 result.append((name, "today", nil))
                 continue

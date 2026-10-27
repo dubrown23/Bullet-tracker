@@ -36,6 +36,8 @@
 		77BE07A1308FFF2100A3E8D7 /* HabitGrading.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BE079A308FFEA600A3E8D7 /* HabitGrading.swift */; };
 		77BE07A2308FFF2100A3E8D7 /* HealthSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BE079B308FFEAE00A3E8D7 /* HealthSteps.swift */; };
 		77BE07A3308FFF2100A3E8D7 /* HabitSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BE079C308FFED300A3E8D7 /* HabitSyncEngine.swift */; };
+		77BE07C0309116BE00A3E8D7 /* DustinHealthSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BE07BF309116BE00A3E8D7 /* DustinHealthSource.swift */; };
+		77BE07C2309116D100A3E8D7 /* HealthSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BE07C1309116D100A3E8D7 /* HealthSyncSettingsView.swift */; };
 		77D9A51F2F294BBB0019C64C /* HabitDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A51E2F294BBB0019C64C /* HabitDashboardView.swift */; };
 		77D9A5272F2952730019C64C /* DayJournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A5262F2952730019C64C /* DayJournalView.swift */; };
 		77D9A5292F29A1B60019C64C /* HabitCalculations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A5282F29A1B60019C64C /* HabitCalculations.swift */; };
@@ -120,6 +122,8 @@
 		77BE079B308FFEAE00A3E8D7 /* HealthSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSteps.swift; sourceTree = "<group>"; };
 		77BE079C308FFED300A3E8D7 /* HabitSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitSyncEngine.swift; sourceTree = "<group>"; };
 		77BE079D308FFF2100A3E8D7 /* DeveloperSyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperSyncView.swift; sourceTree = "<group>"; };
+		77BE07BF309116BE00A3E8D7 /* DustinHealthSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DustinHealthSource.swift; sourceTree = "<group>"; };
+		77BE07C1309116D100A3E8D7 /* HealthSyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncSettingsView.swift; sourceTree = "<group>"; };
 		77D9A51E2F294BBB0019C64C /* HabitDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitDashboardView.swift; sourceTree = "<group>"; };
 		77D9A5262F2952730019C64C /* DayJournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayJournalView.swift; sourceTree = "<group>"; };
 		77D9A5282F29A1B60019C64C /* HabitCalculations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitCalculations.swift; sourceTree = "<group>"; };
@@ -297,6 +301,7 @@
 				77BE079A308FFEA600A3E8D7 /* HabitGrading.swift */,
 				77BE079B308FFEAE00A3E8D7 /* HealthSteps.swift */,
 				77BE079C308FFED300A3E8D7 /* HabitSyncEngine.swift */,
+				77BE07BF309116BE00A3E8D7 /* DustinHealthSource.swift */,
 			);
 			path = Sync;
 			sourceTree = "<group>";
@@ -317,6 +322,7 @@
 				77DB37C72DEBFBB4004E2ED9 /* SettingsView.swift */,
 				77DB37B42DEBFBB4004E2ED9 /* ContentView.swift */,
 				77BE079D308FFF2100A3E8D7 /* DeveloperSyncView.swift */,
+				77BE07C1309116D100A3E8D7 /* HealthSyncSettingsView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -490,6 +496,7 @@
 			isa = PBXSourcesBuildPhase;
 			files = (
 				772F012D2F91152400AA7F11 /* EditNoteView.swift in Sources */,
+				77BE07C0309116BE00A3E8D7 /* DustinHealthSource.swift in Sources */,
 				77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */,
 				77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */,
 				77A9E554308D03FF000C0F07 /* AdaptiveLayout.swift in Sources */,
@@ -500,6 +507,7 @@
 				772F01282F903D6800AA7F11 /* TodayHabitCardView.swift in Sources */,
 				772F01262F903D6800AA7F11 /* TodayViewModel.swift in Sources */,
 				770A78BB2F8FBAF600AC52AC /* JournalJSONExporter.swift in Sources */,
+				77BE07C2309116D100A3E8D7 /* HealthSyncSettingsView.swift in Sources */,
 				770A78BC2F8FBAF600AC52AC /* JournalPDFGenerator.swift in Sources */,
 				77DB37D42DEBFBB4004E2ED9 /* Constants.swift in Sources */,
 				77DB37DA2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift in Sources */,

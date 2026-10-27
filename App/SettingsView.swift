@@ -171,6 +171,8 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 syncSection
+                // bt-0019 — the dh key (iPhone) / "syncs on the iPhone" (iPad).
+                HealthSyncSection()
                 remindersSection
                 dataManagementSection
                 aboutSection

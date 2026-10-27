@@ -61,11 +61,14 @@ struct DeveloperSyncView: View {
             } header: {
                 Text("Fake dh")
             } footer: {
-                Text("While the switch is on, the fake sync runs every time the app becomes active and on pull-down. The fake says the same thing for every day it is asked about. Meals: Neither = 100 g / 1,200 cal · Protein only = 190 g / 1,500 cal · Both = 190 g / 2,050 cal · Over = 190 g / 2,400 cal. Inbox: “Test Sauna done”. Switch it on from one device only and let the test habits reach the other before running there.")
+                Text("While the switch is on, the fake sync runs instead of Dustin's Health every time the app becomes active and on pull-down. The fake says the same thing for every day it is asked about. Meals: Neither = 100 g / 1,200 cal · Protein only = 190 g / 1,500 cal · Both = 190 g / 2,050 cal · Over = 190 g / 2,400 cal. Inbox: “Test Sauna done”. Switch it on from one device only and let the test habits (Test Diet, Test Workout, Test Sauna, Test Weed) reach the other before running there. With the switch off and a key saved in Settings, Run now is the real sync.")
             }
 
             Section("This device") {
-                LabeledContent("Role", value: HabitSyncEngine.isGradingDevice ? "Grades (iPhone)" : "Read-only (shows grades, never writes them)")
+                LabeledContent("Role", value: HabitSyncEngine.isGradingDevice ? "Grades + syncs (iPhone)" : "Read-only (shows grades, never writes them, never calls dh)")
+                // bt-0019 — the key's presence and protection, read from the
+                // Keychain item itself. The key's value is never shown.
+                LabeledContent("dh key", value: APIKeyStore.hasKey ? "stored, \(APIKeyStore.accessibilityDescription ?? "protection unknown")" : "none")
                 LabeledContent("Steps today") {
                     if let steps = engine.lastReport?.stepsToday {
                         Text(steps, format: .number)
@@ -158,22 +161,28 @@ struct DeveloperSyncView: View {
                     confirmingRemove = true
                 }
             } footer: {
-                Text("Deletes Test Diet, Test Workout and Test Sauna and all their entries, on every device once it syncs.")
+                Text("Deletes Test Diet, Test Workout, Test Sauna and Test Weed and all their entries, on every device once it syncs.")
             }
         }
         .navigationTitle("Developer")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: refreshCounts)
         .confirmationDialog("Remove the test habits?", isPresented: $confirmingRemove, titleVisibility: .visible) {
-            Button("Remove Test Diet, Test Workout and Test Sauna", role: .destructive) {
+            Button("Remove Test Diet, Test Workout, Test Sauna and Test Weed", role: .destructive) {
                 engine.removeTestHabits(in: modelContext)
                 refreshCounts()
             }
         }
     }
 
+    /// Simulation on → the fake. Off → whatever `refresh` picks (dh with a
+    /// key on the iPhone; steps only otherwise), forced past the debounce.
     private func runNow() async {
-        await engine.runSimulation(in: modelContext)
+        if engine.isSimulationEnabled {
+            await engine.runSimulation(in: modelContext)
+        } else {
+            await engine.refresh(in: modelContext, force: true)
+        }
         refreshCounts()
     }
 

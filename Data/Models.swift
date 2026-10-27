@@ -108,6 +108,39 @@ enum GradingKind: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+// MARK: - TargetKey (bt-0019)
+//
+// The five target keys dh and the app share (`lib/habits.js`
+// `HABIT_TARGET_KEYS`). Each belongs to one grading kind, so a voice "set my
+// protein target to 190" knows which habit to land on. Here rather than in
+// `Sync/` because `Habit` reads and writes by it (below) and this file is in
+// the widget target too.
+
+enum TargetKey: String, CaseIterable, Sendable, Codable {
+    case proteinMinGrams = "protein_min_g"
+    case caloriesMin = "calories_min"
+    case caloriesMax = "calories_max"
+    case workoutMinutesMin = "workout_minutes_min"
+    case stepsMin = "steps_min"
+
+    var gradingKind: GradingKind {
+        switch self {
+        case .proteinMinGrams, .caloriesMin, .caloriesMax: return .diet
+        case .workoutMinutesMin, .stepsMin: return .workout
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .proteinMinGrams: return "protein target"
+        case .caloriesMin: return "calorie floor"
+        case .caloriesMax: return "calorie ceiling"
+        case .workoutMinutesMin: return "workout minutes"
+        case .stepsMin: return "steps target"
+        }
+    }
+}
+
 // MARK: - Win Rule (bt-0014; moved here in bt-0011 so the widget shares it)
 //
 // The ONE definition of "this tracked day counts" — used by the Today header,
@@ -158,7 +191,7 @@ enum HabitWinRule {
 // `BackupManager` round-trip in Wave 3 transforms old `details: String` JSON
 // into this typed shape on import.
 
-enum HabitEntryDetails: Codable {
+enum HabitEntryDetails: Codable, Equatable {
     /// Used when `habit.detailKind == .notes`.
     case notes(notes: String)
     /// Used when `habit.detailKind == .workout`.
@@ -443,6 +476,28 @@ extension Habit {
 
     /// Whether Rest may be set on this habit (Workout only, by design).
     var offersRest: Bool { gradingKind == .workout }
+
+    /// bt-0019 — the five wire targets, read from and written to the five
+    /// optional columns. `nil` = blank = built-in default.
+    func target(for key: TargetKey) -> Double? {
+        switch key {
+        case .proteinMinGrams: return targetProteinGrams
+        case .caloriesMin: return targetCalorieLow
+        case .caloriesMax: return targetCalorieHigh
+        case .workoutMinutesMin: return targetWorkoutMinutes
+        case .stepsMin: return targetSteps
+        }
+    }
+
+    func setTarget(_ key: TargetKey, to value: Double?) {
+        switch key {
+        case .proteinMinGrams: targetProteinGrams = value
+        case .caloriesMin: targetCalorieLow = value
+        case .caloriesMax: targetCalorieHigh = value
+        case .workoutMinutesMin: targetWorkoutMinutes = value
+        case .stepsMin: targetSteps = value
+        }
+    }
 
     /// The habit's targets with blanks filled from the defaults.
     var gradingTargets: GradingTargets {

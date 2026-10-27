@@ -84,6 +84,22 @@ enum TickGrade {
     }
 }
 
+// MARK: - Voice grades (bt-0019)
+
+extension VoiceGrade {
+    /// The state a spoken grade writes. `auto` has no state: it means
+    /// "drop the override" and is handled by `revertToAutomatic`.
+    var completionState: CompletionState? {
+        switch self {
+        case .done: return .success
+        case .partial: return .partial
+        case .tried: return .failure
+        case .rest: return .rest
+        case .auto: return nil
+        }
+    }
+}
+
 // MARK: - Wording shared by the row caption and the Developer screen
 
 enum GradeWording {
