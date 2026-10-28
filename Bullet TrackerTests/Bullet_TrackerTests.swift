@@ -1040,6 +1040,136 @@ struct BackupRoundTripTests {
     }
 }
 
+// MARK: - History rewrite (bt-0022)
+
+@MainActor
+struct HistoryMigrationTests {
+    private func makeContext() throws -> ModelContext {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: Habit.self, HabitEntry.self, Note.self, configurations: config)
+        return ModelContext(container)
+    }
+
+    private let calendar = Calendar.current
+    private func day(_ m: Int, _ d: Int) -> Date {
+        calendar.startOfDay(for: calendar.date(from: DateComponents(year: 2026, month: m, day: d))!)
+    }
+
+    /// Dustin's table, end to end: Poison keeps everything; Workout loses
+    /// every row before Oct 27 (even July) and gets one Auto row per dh
+    /// session day, graded minutes-then-steps, sessions + steps under
+    /// `health`; every other habit loses its rows before Oct 27; notes and
+    /// everything from Oct 27 on are untouched; no Diet row is written
+    /// before Oct 27 even though the same facts carry meals.
+    @Test func rewriteKeepsPoisonRebuildsWorkoutFromSessionsAndWipesTheRest() throws {
+        let context = try makeContext()
+        let dates = HistoryMigration.Dates.standard(calendar: calendar)
+        UserDefaults.standard.removeObject(forKey: HistoryMigration.doneKey)
+        defer { UserDefaults.standard.removeObject(forKey: HistoryMigration.doneKey) }
+
+        let poison = Habit(name: "Poison", order: 0, completionStyle: .avoidance)
+        let weed = Habit(name: "Weed", order: 1, completionStyle: .avoidance)
+        let diet = Habit(name: "Diet", order: 2, completionStyle: .multiState)
+        diet.gradingKind = .diet
+        diet.gradingSince = dates.cutoff
+        let workout = Habit(name: "Workout", order: 3, completionStyle: .multiState, detailKind: .workout)
+        workout.gradingKind = .workout
+        workout.gradingSince = dates.cutoff
+        workout.targetWorkoutMinutes = 30
+        workout.targetSteps = 10_000
+        let sauna = Habit(name: "Sauna", order: 4, completionStyle: .simple)
+        let all = [poison, weed, diet, workout, sauna]
+        for h in all { context.insert(h) }
+        // Three hand rows before the cutoff (one in July), two from the cutoff on, for every habit.
+        for h in all {
+            for d in [day(7, 15), day(8, 5), day(10, 26), day(10, 27), day(10, 28)] {
+                context.insert(HabitEntry(date: d, completionState: .success, habit: h, source: .hand, editedAt: Date()))
+            }
+        }
+        context.insert(Note(date: day(8, 5), content: "old note"))
+        context.insert(Note(date: day(10, 27), content: "new note"))
+        try context.save()
+
+        // dh's answer: a 45-min day (Done), a 10-min day with 12,000 steps
+        // (Partial), a 20-min day with 2,000 steps (Tried), a meal-only day
+        // (no Workout row), and a session before Aug 1 that is out of the span.
+        let meal = DayFacts.Meal(id: "m", name: "Bowl", calories: 700, protein: 50, carbs: 60, fat: 20)
+        func facts(_ d: Date, minutes: Double, sessions: [DayFacts.Session]) -> DayFacts {
+            DayFacts(day: d, proteinGrams: 50, calories: 700, workoutMinutes: minutes, mealNames: ["Bowl"], sessions: sessions, meals: [meal])
+        }
+        let history = HistoryMigration.History(
+            facts: [
+                day(8, 5): facts(day(8, 5), minutes: 45, sessions: [.init(name: "Incline walk", minutes: 45, category: "walking", activeKcal: 300, activityType: "Indoor Walk")]),
+                day(9, 1): facts(day(9, 1), minutes: 10, sessions: [.init(name: "Core", minutes: 10, category: "strength")]),
+                day(9, 2): facts(day(9, 2), minutes: 20, sessions: [.init(name: "Walk", minutes: 12, category: "walking"), .init(name: "Stretch", minutes: 8, category: "flexibility")]),
+                day(10, 1): facts(day(10, 1), minutes: 0, sessions: []),
+                day(7, 20): facts(day(7, 20), minutes: 60, sessions: [.init(name: "Run", minutes: 60, category: "cardio")]),
+            ],
+            steps: [day(8, 5): 4_000, day(9, 1): 12_000, day(9, 2): 2_000],
+            stepsAvailable: true)
+
+        // The plan first — the counts the screen shows.
+        let plan = HistoryMigration.plan(habits: all, history: history, dates: dates, in: context)
+        #expect(plan.lines.map(\.name) == ["Poison", "Weed", "Diet", "Workout", "Sauna"])
+        #expect(plan.lines.map(\.rowsBefore) == [3, 3, 3, 3, 3])
+        #expect(plan.lines[0].action == .kept)
+        #expect(plan.lines[1].action == .deleted && plan.lines[2].action == .deleted && plan.lines[4].action == .deleted)
+        #expect(plan.lines[3].action == .rebuilt(.init(sessions: 4, days: 3, done: 1, partial: 1, tried: 1)))
+        #expect(plan.notesBefore == 1 && plan.deletedRows == 12 && plan.keptRows == 3 && !plan.workoutMissing)
+        #expect(!HistoryMigration.isDone)
+
+        try HistoryMigration.perform(habits: all, history: history, dates: dates, in: context)
+        #expect(HistoryMigration.isDone)
+
+        func rows(_ h: Habit) -> [HabitEntry] {
+            (try? context.fetch(FetchDescriptor<HabitEntry>()))?.filter { $0.habit?.id == h.id }.sorted { $0.date < $1.date } ?? []
+        }
+        // Poison: all five. Weed / Diet / Sauna: only the two from the cutoff on.
+        #expect(rows(poison).count == 5)
+        for h in [weed, diet, sauna] {
+            #expect(rows(h).map(\.date) == [day(10, 27), day(10, 28)])
+            #expect(rows(h).allSatisfy { $0.source == .hand })
+        }
+        // No Diet row before the cutoff although every facts day carried a meal.
+        #expect(rows(diet).allSatisfy { $0.date >= dates.cutoff })
+
+        // Workout: July and the hand rows gone; three Auto rows on the session days; Oct 27/28 untouched.
+        let w = rows(workout)
+        #expect(w.map(\.date) == [day(8, 5), day(9, 1), day(9, 2), day(10, 27), day(10, 28)])
+        #expect(w[0].effectiveCompletionState == .success && w[1].effectiveCompletionState == .partial && w[2].effectiveCompletionState == .failure)
+        #expect(w[0...2].allSatisfy { $0.source == .auto })
+        #expect(w[3].source == .hand && w[4].source == .hand)
+        let first = try #require(w[0].health)
+        #expect(first.sessions.map(\.name) == ["Incline walk"] && first.meals.isEmpty && first.steps == 4_000)
+        #expect(first.sessions.first?.activeKcal == 300 && first.sessions.first?.activityType == "Indoor Walk")
+        #expect(w[2].health?.sessions.count == 2 && w[2].health?.steps == 2_000)
+        if case .workout(let types, let duration, _, _)? = w[0].details {
+            #expect(types.contains("Cardio") && duration == "45 min")
+        } else {
+            Issue.record("the rebuilt row should carry workout details")
+        }
+        // Notes untouched.
+        #expect(((try? context.fetch(FetchDescriptor<Note>())) ?? []).count == 2)
+    }
+
+    /// Without a Workout habit nothing is rebuilt and the plan says so; a
+    /// Diet-only store still wipes before the cutoff and keeps the rest.
+    @Test func planWithoutAWorkoutHabitOnlyDeletes() throws {
+        let context = try makeContext()
+        let dates = HistoryMigration.Dates.standard(calendar: calendar)
+        let diet = Habit(name: "Diet", order: 0, completionStyle: .multiState)
+        context.insert(diet)
+        context.insert(HabitEntry(date: day(9, 9), completionState: .partial, habit: diet))
+        try context.save()
+        let history = HistoryMigration.History(facts: [day(9, 9): DayFacts(day: day(9, 9), proteinGrams: 1, calories: 1,
+                                                                             sessions: [.init(name: "Run", minutes: 50)])],
+                                               steps: [:], stepsAvailable: false)
+        let plan = HistoryMigration.plan(habits: [diet], history: history, dates: dates, in: context)
+        #expect(plan.workoutMissing && plan.rebuilt == nil && plan.deletedRows == 1)
+        #expect(HistoryMigration.isKeptWhole(Habit(name: " POISON ")) && !HistoryMigration.isKeptWhole(diet))
+    }
+}
+
 // MARK: - Cleanup survivor order (bt-0018)
 
 struct DedupeKeyTests {

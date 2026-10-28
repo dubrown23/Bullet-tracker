@@ -15,6 +15,8 @@
 		770AC4D62FB3E4BC00E99F98 /* DataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770AC4D42FB3E4BC00E99F98 /* DataStore.swift */; };
 		77166BC72DF3CBDC0071BED6 /* HabitFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */; };
 		77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */; };
+		772A40B23092B01000A8673E /* HistoryMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772A40B13092B01000A8673E /* HistoryMigration.swift */; };
+		772A40B43092B03400A8673E /* HistoryMigrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772A40B33092B03400A8673E /* HistoryMigrationView.swift */; };
 		772D05842EB3A2DC00186D04 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 772D05832EB3A2DC00186D04 /* WidgetKit.framework */; };
 		772D05862EB3A2DC00186D04 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 772D05852EB3A2DC00186D04 /* SwiftUI.framework */; };
 		772D05972EB3A2DD00186D04 /* BulletTrackerWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 772D05812EB3A2DC00186D04 /* BulletTrackerWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -99,6 +101,8 @@
 		770AC4D42FB3E4BC00E99F98 /* DataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStore.swift; sourceTree = "<group>"; };
 		77166BC62DF3CBDC0071BED6 /* HabitFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitFormView.swift; sourceTree = "<group>"; };
 		77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconSelectorView.swift; sourceTree = "<group>"; };
+		772A40B13092B01000A8673E /* HistoryMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryMigration.swift; sourceTree = "<group>"; };
+		772A40B33092B03400A8673E /* HistoryMigrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryMigrationView.swift; sourceTree = "<group>"; };
 		772D05812EB3A2DC00186D04 /* BulletTrackerWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BulletTrackerWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		772D05832EB3A2DC00186D04 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		772D05852EB3A2DC00186D04 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -302,6 +306,7 @@
 				77BE079B308FFEAE00A3E8D7 /* HealthSteps.swift */,
 				77BE079C308FFED300A3E8D7 /* HabitSyncEngine.swift */,
 				77BE07BF309116BE00A3E8D7 /* DustinHealthSource.swift */,
+				772A40B13092B01000A8673E /* HistoryMigration.swift */,
 			);
 			path = Sync;
 			sourceTree = "<group>";
@@ -323,6 +328,7 @@
 				77DB37B42DEBFBB4004E2ED9 /* ContentView.swift */,
 				77BE079D308FFF2100A3E8D7 /* DeveloperSyncView.swift */,
 				77BE07C1309116D100A3E8D7 /* HealthSyncSettingsView.swift */,
+				772A40B33092B03400A8673E /* HistoryMigrationView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -508,6 +514,7 @@
 				772F01262F903D6800AA7F11 /* TodayViewModel.swift in Sources */,
 				770A78BB2F8FBAF600AC52AC /* JournalJSONExporter.swift in Sources */,
 				77BE07C2309116D100A3E8D7 /* HealthSyncSettingsView.swift in Sources */,
+				772A40B23092B01000A8673E /* HistoryMigration.swift in Sources */,
 				770A78BC2F8FBAF600AC52AC /* JournalPDFGenerator.swift in Sources */,
 				77DB37D42DEBFBB4004E2ED9 /* Constants.swift in Sources */,
 				77DB37DA2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift in Sources */,
@@ -522,6 +529,7 @@
 				77D9A52E2F2A5AAF0019C64C /* DashboardComponents.swift in Sources */,
 				77D9A5332F2D112C0019C64C /* AppTheme.swift in Sources */,
 				77D9A52F2F2A5AAF0019C64C /* HabitDetailDashboardView.swift in Sources */,
+				772A40B43092B03400A8673E /* HistoryMigrationView.swift in Sources */,
 				77D9A51F2F294BBB0019C64C /* HabitDashboardView.swift in Sources */,
 				77DB37E02DEBFBB4004E2ED9 /* ContentView.swift in Sources */,
 				77DB37E12DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift in Sources */,

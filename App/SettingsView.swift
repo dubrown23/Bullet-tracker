@@ -166,6 +166,9 @@ extension Notification.Name {
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel = SettingsViewModel()
+    /// bt-0022 — seconds since 1970 once the history rewrite has run; the
+    /// row below hides itself after that.
+    @AppStorage(HistoryMigration.doneKey) private var historyRewrittenAt: Double = 0
 
     var body: some View {
         NavigationStack {
@@ -254,6 +257,13 @@ struct SettingsView: View {
 
             Button(action: { viewModel.showingExportJournal = true }) {
                 Label("Export Journal", systemImage: "square.and.arrow.up")
+            }
+
+            // bt-0022 — one-time, gone once run.
+            if historyRewrittenAt == 0 {
+                NavigationLink(destination: HistoryMigrationView()) {
+                    Label("Prepare Dashboard History", systemImage: "clock.arrow.circlepath")
+                }
             }
 
             Button(role: .destructive, action: viewModel.confirmClearData) {
