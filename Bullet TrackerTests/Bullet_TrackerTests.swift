@@ -950,6 +950,51 @@ struct HealthSnapshotTests {
     }
 }
 
+// MARK: - Backup round trip (bt-0022)
+
+struct BackupRoundTripTests {
+    private func makeContext() throws -> ModelContext {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: Habit.self, HabitEntry.self, Note.self, configurations: config)
+        return ModelContext(container)
+    }
+
+    /// A backup → restore keeps dh's `health` block beside the notes (it used
+    /// to rebuild the string from the typed enum and drop it), and a row from
+    /// a pre-fix backup — details keys only — still restores typed.
+    @Test func backupKeepsTheHealthBlock() throws {
+        let source = try makeContext()
+        let today = Calendar.current.startOfDay(for: Date())
+        let diet = Habit(name: "Diet", frequency: "daily", completionStyle: .multiState)
+        diet.gradingKind = .diet
+        diet.gradingSince = today
+        source.insert(diet)
+        let row = HabitEntry(date: today, completionState: .partial, details: .notes(notes: "ate out"), habit: diet, source: .hand)
+        let coffee = HealthSnapshot(meals: [.init(id: "m1", name: "1.5 protein coffees", calories: 168, protein: 30, carbs: 2, fat: 1,
+                                                 at: HealthSnapshot.wholeSecond(Date()))])
+        row.health = coffee
+        source.insert(row)
+        // A pre-fix shape: the legacy details string with no `health` key.
+        let legacy = HabitEntry(date: today, completionState: .success, habit: diet)
+        legacy.detailsJSON = #"{"bookTitle":"Dune","pagesRead":"12","notes":""}"#
+        source.insert(legacy)
+        try source.save()
+
+        let url = try #require(BackupManager.shared.createBackup(in: source))
+        let target = try makeContext()
+        #expect(BackupManager.shared.restoreFromURL(url, in: target))
+
+        let restored = try target.fetch(FetchDescriptor<HabitEntry>())
+        #expect(restored.count == 2)
+        let withHealth = try #require(restored.first { $0.health != nil })
+        #expect(withHealth.health == coffee)
+        #expect(withHealth.details == .notes(notes: "ate out"))
+        #expect(withHealth.effectiveCompletionState == .partial && withHealth.source == .hand)
+        let typed = try #require(restored.first { $0.health == nil })
+        #expect(typed.details == .reading(bookTitle: "Dune", pagesRead: "12", notes: ""))
+    }
+}
+
 // MARK: - Cleanup survivor order (bt-0018)
 
 struct DedupeKeyTests {

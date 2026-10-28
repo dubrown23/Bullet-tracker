@@ -184,48 +184,22 @@ class BackupManager {
         let entries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
 
         return entries.map { entry in
-            // Convert typed `details: HabitEntryDetails?` back to a JSON string
-            // (matches the pre-Phase-2 wire shape every old backup uses).
-            let detailsJSONString = entry.details.flatMap { jsonifyDetails($0) } ?? ""
-
-            return HabitEntryData(
+            // bt-0022 — the stored string as it is. It already IS the legacy
+            // wire shape (the details keys) plus dh's `health` key beside
+            // them, so the backup carries both and an old build restoring it
+            // still finds the keys it knows. (Rebuilding the string from the
+            // typed enum, as before, silently dropped `health`.)
+            HabitEntryData(
                 id: entry.id?.uuidString ?? UUID().uuidString,
                 date: entry.date,
                 completed: entry.effectiveCompletionState != .notDone,
-                details: detailsJSONString,
+                details: entry.detailsJSON ?? "",
                 habitID: entry.habit?.id?.uuidString ?? "",
                 completionState: Int(entry.effectiveCompletionState.rawValue),
                 source: entry.sourceRaw,
                 editedAt: entry.editedAt
             )
         }
-    }
-
-    /// Convert a typed `HabitEntryDetails` to the legacy JSON string format
-    /// (the same shape pre-Phase-2 backups carried — workout/reading/mood
-    /// have their own field names; `notes` is the universal shared field).
-    private func jsonifyDetails(_ details: HabitEntryDetails) -> String? {
-        var dict: [String: Any] = [:]
-        switch details {
-        case .notes(let notes):
-            dict["notes"] = notes
-        case .workout(let types, let duration, let intensity, let notes):
-            dict["types"] = types
-            dict["type"] = types.first ?? ""
-            dict["duration"] = duration
-            dict["intensity"] = intensity
-            dict["notes"] = notes
-        case .reading(let bookTitle, let pagesRead, let notes):
-            dict["bookTitle"] = bookTitle
-            dict["pagesRead"] = pagesRead
-            dict["notes"] = notes
-        case .mood(let mood, let notes):
-            dict["mood"] = mood
-            dict["notes"] = notes
-        }
-        guard let data = try? JSONSerialization.data(withJSONObject: dict),
-              let str = String(data: data, encoding: .utf8) else { return nil }
-        return str
     }
 
     private func fetchNotes(in context: ModelContext) -> [NoteData] {
@@ -350,57 +324,20 @@ class BackupManager {
                 return entryData.completed ? .success : .notDone
             }()
 
-            // Parse the legacy details JSON string into typed HabitEntryDetails.
-            // The shape is determined by which JSON keys are present (the four
-            // detail kinds don't share keys, so this is unambiguous).
-            let typedDetails = parseLegacyDetailsJSON(entryData.details, kind: habit.detailKind)
-
             let entry = HabitEntry(
                 id: UUID(uuidString: entryData.id),
                 date: entryData.date,
                 completionState: typedState,
-                details: typedDetails,
                 habit: habit,
                 source: entryData.source.flatMap(EntrySource.init(rawValue:)),
                 editedAt: entryData.editedAt
             )
+            // bt-0022 — the string goes back exactly as it came: details keys
+            // and the `health` key together. `HabitEntry.details` decodes the
+            // legacy shapes (and plain text as a note) on read, so a backup
+            // from before this fix restores the same as before.
+            entry.detailsJSON = entryData.details.isEmpty ? nil : entryData.details
             context.insert(entry)
-        }
-    }
-
-    /// Parse a legacy `details: String` JSON blob into a typed `HabitEntryDetails`.
-    /// Returns `nil` for empty input. Uses the parent habit's `detailKind` as a
-    /// hint when the JSON shape is ambiguous (e.g., only `notes` present).
-    private func parseLegacyDetailsJSON(_ json: String, kind: DetailKind?) -> HabitEntryDetails? {
-        guard !json.isEmpty else { return nil }
-        guard let data = json.data(using: .utf8),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            // Non-JSON legacy plaintext — treat the whole string as notes.
-            return .notes(notes: json)
-        }
-        let notes = dict["notes"] as? String ?? ""
-
-        // Discriminate by JSON keys first (most reliable signal — they don't overlap).
-        if let types = dict["types"] as? [String] {
-            let duration = dict["duration"] as? String ?? ""
-            let intensity = dict["intensity"] as? Int ?? 3
-            return .workout(types: types, duration: duration, intensity: intensity, notes: notes)
-        }
-        if dict["bookTitle"] != nil || dict["pagesRead"] != nil {
-            let bookTitle = dict["bookTitle"] as? String ?? ""
-            let pagesRead = dict["pagesRead"] as? String ?? ""
-            return .reading(bookTitle: bookTitle, pagesRead: pagesRead, notes: notes)
-        }
-        if let mood = dict["mood"] as? Int {
-            return .mood(mood: mood, notes: notes)
-        }
-        // No discriminator keys — fall back to the parent habit's detailKind hint,
-        // or `.notes` if even that's nil.
-        switch kind {
-        case .workout: return .workout(types: [], duration: "", intensity: 3, notes: notes)
-        case .reading: return .reading(bookTitle: "", pagesRead: "", notes: notes)
-        case .mood:    return .mood(mood: 3, notes: notes)
-        case .notes, nil: return .notes(notes: notes)
         }
     }
 
