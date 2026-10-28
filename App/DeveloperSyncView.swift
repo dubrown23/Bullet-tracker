@@ -152,7 +152,14 @@ struct DeveloperSyncView: View {
                 } header: {
                     Text("Last run")
                 } footer: {
-                    Text("\(report.sourceName) · \(report.finished.formatted(date: .omitted, time: .standard))")
+                    // bt-0020 — why the run happened and the count since launch
+                    // (five quick taps → the count goes up by one, not five).
+                    // Two lines on purpose: one line wrapped with an orphan
+                    // "since launch" on the folded Duo.
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(report.sourceName) · \(report.reason.rawValue) · \(report.finished.formatted(date: .omitted, time: .standard))")
+                        Text("\(engine.runsSinceLaunch) run\(engine.runsSinceLaunch == 1 ? "" : "s") since launch")
+                    }
                 }
             }
 

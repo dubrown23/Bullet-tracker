@@ -1077,3 +1077,187 @@ struct ColorHexTests {
     }
 }
 
+// MARK: - Quiet sync after a tap (bt-0020)
+
+/// Counts `sync()` calls and keeps the last payload; every other call is
+/// empty. The engine is main-actor, so the counters are only touched there.
+final class CountingSource: HabitFactsSource, @unchecked Sendable {
+    let displayName = "Counting"
+    let isLive = false
+    private(set) var syncCalls = 0
+    private(set) var lastPayload: HabitSyncPayload?
+
+    func sync(_ payload: HabitSyncPayload) async throws -> HabitSyncReply {
+        syncCalls += 1
+        lastPayload = payload
+        return HabitSyncReply(heldTargets: [], targets: payload.targets)
+    }
+    func changedDays(since: String?) async throws -> ChangedDays { ChangedDays(days: [], nextSince: "counting") }
+    func facts(from: Date, to: Date) async throws -> [Date: DayFacts] { [:] }
+    func pendingActions() async throws -> [InboxAction] { [] }
+    func confirmApplied(_ ids: [String]) async throws -> AckResult { AckResult(applied: ids.count, notApplied: []) }
+}
+
+/// Serialized: these share `HabitSyncEngine.shared`'s test override and
+/// delay. Taps from any other suite's context are ignored while an
+/// override is set, so the counts here are exact.
+@Suite(.serialized) @MainActor
+struct QuietSyncTests {
+    private let today = Calendar.current.startOfDay(for: Date())
+
+    private struct Rig {
+        let context: ModelContext
+        let pills: Habit
+        let source: CountingSource
+    }
+
+    private func makeRig() async throws -> Rig {
+        // The test host is the real app: its on-open sync (steps only on the
+        // simulator, and the Health permission request can take its full
+        // 10 s) may still be running. One run at a time, so wait it out.
+        var waited = 0
+        while HabitSyncEngine.shared.isRunning && waited < 400 {
+            try await Task.sleep(for: .milliseconds(50))
+            waited += 1
+        }
+        #expect(!HabitSyncEngine.shared.isRunning, "the host app's own sync never finished")
+
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: Habit.self, HabitEntry.self, Note.self, configurations: config)
+        let context = ModelContext(container)
+        let pills = Habit(name: "Pills", order: 0, completionStyle: .simple)
+        context.insert(pills)
+        try context.save()
+        let source = CountingSource()
+        HabitSyncEngine.quietSyncDelay = .milliseconds(300)
+        HabitSyncEngine.shared.testOverride = .init(source: source, context: context)
+        return Rig(context: context, pills: pills, source: source)
+    }
+
+    private func tearDown() {
+        HabitSyncEngine.shared.testOverride = nil
+        HabitSyncEngine.quietSyncDelay = .seconds(3)
+    }
+
+    /// Lets the store's main-actor hand-off to the engine run.
+    private func settle() async throws {
+        try await Task.sleep(for: .milliseconds(30))
+    }
+
+    @Test func fiveQuickTapsMakeOneSend() async throws {
+        let rig = try await makeRig()
+        defer { tearDown() }
+
+        // on / off / on / off / on — ends ticked.
+        for state in [1, 0, 1, 0, 1] {
+            HabitStore.setCompletion(for: rig.pills, on: today, state: state, in: rig.context)
+        }
+        try await Task.sleep(for: .seconds(1))
+
+        #expect(rig.source.syncCalls == 1)
+        #expect(rig.source.lastPayload?.tickedToday == ["Pills"])
+        #expect(HabitSyncEngine.shared.lastReport?.reason == .afterTap)
+    }
+
+    @Test func autoVoiceAndPastDayWritesSendNothing() async throws {
+        let rig = try await makeRig()
+        defer { tearDown() }
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today)!
+
+        HabitStore.setCompletion(for: rig.pills, on: today, state: 1, source: .auto, in: rig.context)
+        HabitStore.setCompletion(for: rig.pills, on: today, state: 1, source: .voice, in: rig.context)
+        HabitStore.removeEntry(for: rig.pills, on: today, source: .auto, in: rig.context)
+        HabitStore.setCompletion(for: rig.pills, on: yesterday, state: 1, in: rig.context)
+        try await Task.sleep(for: .milliseconds(700))
+
+        #expect(rig.source.syncCalls == 0)
+    }
+
+    @Test func aStartingRunDropsTheWaitingOne() async throws {
+        let rig = try await makeRig()
+        defer { tearDown() }
+
+        HabitStore.setCompletion(for: rig.pills, on: today, state: 1, in: rig.context)
+        try await settle()
+        // Pull-down (or open, Save, Back to Auto) right after the tap.
+        await HabitSyncEngine.shared.refresh(in: rig.context, force: true)
+
+        #expect(rig.source.syncCalls == 1)
+        #expect(rig.source.lastPayload?.tickedToday == ["Pills"])
+        try await Task.sleep(for: .milliseconds(700))
+        #expect(rig.source.syncCalls == 1, "the waiting quiet sync must not run as a second send")
+    }
+
+    /// Review finding (2026-10-28): the store's hand-off to the engine is a
+    /// queued main-actor task, so a hand write followed at once by a forced
+    /// run armed the timer AFTER the run had started and made Back to Auto
+    /// two runs. No settle() here on purpose — that ordering is the test.
+    @Test func backToAutoIsOneRun() async throws {
+        let rig = try await makeRig()
+        defer { tearDown() }
+        let diet = Habit(name: "Diet", order: 1, completionStyle: .multiState)
+        diet.gradingKind = .diet
+        diet.gradingSince = today
+        rig.context.insert(diet)
+        try rig.context.save()
+        // An override row to drop (voice, so creating it arms nothing).
+        HabitStore.setCompletion(for: diet, on: today, state: 2, source: .voice, in: rig.context)
+        try await settle()
+        #expect(rig.source.syncCalls == 0)
+
+        await HabitSyncEngine.shared.revertToAutomatic(habit: diet, day: today, in: rig.context)
+
+        #expect(rig.source.syncCalls == 1)
+        #expect(HabitSyncEngine.shared.lastReport?.reason == .backToAuto)
+        #expect(HabitStore.entry(for: diet, on: today) == nil)
+        try await Task.sleep(for: .milliseconds(700))   // past the 300 ms timer
+        #expect(rig.source.syncCalls == 1, "Back to Auto must not be followed by a quiet sync")
+    }
+
+    @Test func quietSyncDecisionTable() {
+        typealias E = HabitSyncEngine
+        #expect(E.shouldQuietSync(isPhone: true, hasKey: true, source: .hand, isToday: true))
+        #expect(!E.shouldQuietSync(isPhone: false, hasKey: true, source: .hand, isToday: true), "iPad")
+        #expect(!E.shouldQuietSync(isPhone: true, hasKey: false, source: .hand, isToday: true), "no key")
+        #expect(!E.shouldQuietSync(isPhone: true, hasKey: true, source: .auto, isToday: true), "grader")
+        #expect(!E.shouldQuietSync(isPhone: true, hasKey: true, source: .voice, isToday: true), "voice")
+        #expect(!E.shouldQuietSync(isPhone: true, hasKey: true, source: .hand, isToday: false), "yesterday")
+    }
+
+    @Test func leavingTheAppSendsTheWaitingTapNow() async throws {
+        let rig = try await makeRig()
+        defer { tearDown() }
+
+        // Nothing waiting → leaving does nothing.
+        HabitSyncEngine.shared.appLeftForeground()
+        try await settle()
+        #expect(rig.source.syncCalls == 0)
+
+        HabitStore.setCompletion(for: rig.pills, on: today, state: 1, in: rig.context)
+        try await settle()
+        HabitSyncEngine.shared.appLeftForeground()
+        try await Task.sleep(for: .milliseconds(100))   // well inside the 300 ms the timer would have waited
+
+        #expect(rig.source.syncCalls == 1)
+        #expect(HabitSyncEngine.shared.lastReport?.reason == .leavingApp)
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(rig.source.syncCalls == 1, "the dropped timer must not send again")
+    }
+
+    @Test func aWaitingTapBeatsTheThrottle() {
+        typealias E = HabitSyncEngine
+        let now = Date()
+        let sent = now.addingTimeInterval(-60)          // a run started a minute ago and sent fine
+        let attempt = now.addingTimeInterval(-30)       // inside the 120 s throttle
+
+        #expect(E.decideOnOpen(lastAttempt: attempt, now: now, tapWaitingSince: nil, widgetStamp: nil, lastSentAt: sent) == .skip)
+        #expect(E.decideOnOpen(lastAttempt: attempt, now: now, tapWaitingSince: sent.addingTimeInterval(-5), widgetStamp: nil, lastSentAt: sent) == .skip, "a tap already sent")
+        #expect(E.decideOnOpen(lastAttempt: attempt, now: now, tapWaitingSince: now.addingTimeInterval(-10), widgetStamp: nil, lastSentAt: sent) == .runTapWaiting)
+        #expect(E.decideOnOpen(lastAttempt: attempt, now: now, tapWaitingSince: nil, widgetStamp: now.addingTimeInterval(-10), lastSentAt: sent) == .runTapWaiting, "widget tap")
+        // A tap that landed after the last run STARTED but before it finished is still waiting.
+        #expect(E.decideOnOpen(lastAttempt: attempt, now: now, tapWaitingSince: sent.addingTimeInterval(1), widgetStamp: nil, lastSentAt: sent) == .runTapWaiting)
+        #expect(E.decideOnOpen(lastAttempt: now.addingTimeInterval(-300), now: now, tapWaitingSince: nil, widgetStamp: nil, lastSentAt: sent) == .run, "throttle over")
+        #expect(E.decideOnOpen(lastAttempt: nil, now: now, tapWaitingSince: nil, widgetStamp: nil, lastSentAt: nil) == .run, "first open")
+    }
+}
+

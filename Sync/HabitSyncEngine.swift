@@ -26,6 +26,9 @@
 //      write; deterministic, never reaches zero (see that function).
 //    • A voice note never sets a state or a source.
 //    • Facts that could not be loaded leave every row exactly as it is.
+//    • bt-0020: a hand tap on today sends itself — a quiet run 3 s after
+//      the last tap, at once when the app leaves, and never hidden by the
+//      on-open throttle (see "Quiet sync after a tap" below).
 //
 
 import Foundation
@@ -45,9 +48,23 @@ final class HabitSyncEngine {
     struct Report {
         var finished: Date
         let sourceName: String
+        /// bt-0020 — why this run happened (Developer screen's Last run line).
+        let reason: RunReason
         var lines: [String] = []
         var stepsToday: Int?
         var errors: [String] = []
+    }
+
+    /// Why a run happened. Plain words, shown as-is on the Developer screen.
+    enum RunReason: String {
+        case open = "open"
+        case openTapWaiting = "open · tap waiting"
+        case pullDown = "pull-down"
+        case settings = "Settings"
+        case afterTap = "after a tap"
+        case leavingApp = "leaving the app"
+        case backToAuto = "Back to Auto"
+        case developer = "Developer"
     }
 
     /// Today's numbers for one graded habit, for the caption under its name.
@@ -106,6 +123,62 @@ final class HabitSyncEngine {
     private let calendar = Calendar.current
     private var lastAttempt: Date?
 
+    // MARK: - Quiet sync after a tap (bt-0020)
+    //
+    // `HabitStore` reports every write here. A hand write on today arms a
+    // timer; when it fires the same full run as pull-down goes (op=sync is
+    // its first call, so dh knows about the tap within about a second).
+    // Every tap restarts the timer, so a burst of taps is one send. Any run
+    // that starts for another reason drops the waiting timer — it built its
+    // tick list after the tap's save, so it already carries the tap.
+    //
+    // Leaving the app (lock, Home) with a tap waiting sends at once inside
+    // a background-task window taken at the tap (Apple: take it before
+    // entering the background, not on the way out). Two dates on disk make
+    // the backstop: `tapWaitingSince` (every hand tap on today) and
+    // `lastSentAt` (the START of the last run whose op=sync succeeded). On
+    // open, a tap or widget stamp newer than `lastSentAt` runs past the
+    // 120 s throttle. No clearing step, so nothing can be left stuck.
+
+    /// How long after the last hand tap the quiet sync goes. Longer than the
+    /// gap between taps when cycling a square (~1 s); shorter than lifting
+    /// the phone and asking Claude. Tests shorten it.
+    static var quietSyncDelay: Duration = .seconds(3)
+
+    /// Runs since launch — the Developer screen's proof that five quick
+    /// taps made one send.
+    private(set) var runsSinceLaunch = 0
+
+    private static let tapWaitingKey = "dhTapWaitingSince"
+    private static let lastSentKey = "dhLastSentAt"
+    /// Written by the widget's intent after every tile tap (App Group).
+    private static let widgetStampKey = "lastWidgetUpdate"
+
+    private var pendingTap: Task<Void, Never>?
+    private var pendingTapContext: ModelContext?
+    private var backgroundWindow: UIBackgroundTaskIdentifier = .invalid
+
+    #if DEBUG
+    /// Tests only: every `refresh` runs this source against this context,
+    /// taps from any other context are ignored, and Health isn't asked
+    /// for steps (the permission sheet would stall the test host).
+    struct TestOverride {
+        let source: any HabitFactsSource
+        let context: ModelContext
+    }
+    var testOverride: TestOverride?
+
+    /// True inside a test host. The app's own on-open sync then stays out
+    /// of the way — it would ask Health (whose permission request can hang
+    /// the host) and hold `isRunning` while a test waits. Only runs a test
+    /// drives through `testOverride` happen.
+    static let isUnderTest: Bool = {
+        let env = ProcessInfo.processInfo.environment
+        return env["XCTestConfigurationFilePath"] != nil || env["XCTestBundlePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
+    }()
+    #endif
+
     private init() {
         status = Self.loadStatus()
     }
@@ -116,28 +189,151 @@ final class HabitSyncEngine {
     /// pull-to-refresh (`force == true`). Picks the source: the fake when
     /// the Developer switch is on; dh when this is the iPhone and a key is
     /// stored; otherwise none (steps still flow).
-    func refresh(in context: ModelContext, force: Bool = false) async {
+    func refresh(in context: ModelContext, force: Bool = false, reason: RunReason? = nil) async {
+        var reason = reason ?? (force ? .pullDown : .open)
         #if DEBUG
+        if let override = testOverride {
+            await run(source: override.source, in: override.context, reason: reason)
+            return
+        }
+        if Self.isUnderTest { return }
         if isSimulationEnabled {
             ensureTestHabits(in: context)
-            await run(source: FakeHealthFacts(), in: context)
+            await run(source: FakeHealthFacts(), in: context, reason: reason)
             return
         }
         #endif
         if Self.isGradingDevice, let key = APIKeyStore.read() {
-            if !force, let last = lastAttempt, Date().timeIntervalSince(last) < Self.minimumInterval {
-                return
+            if !force {
+                switch Self.decideOnOpen(lastAttempt: lastAttempt, now: Date(),
+                                         tapWaitingSince: Self.tapWaitingSince,
+                                         widgetStamp: Self.widgetStamp,
+                                         lastSentAt: Self.lastSentAt) {
+                case .skip: return
+                case .runTapWaiting: reason = .openTapWaiting
+                case .run: break
+                }
             }
             lastAttempt = Date()
-            await run(source: DustinHealthFacts(key: key), in: context)
+            await run(source: DustinHealthFacts(key: key), in: context, reason: reason)
             return
         }
-        await run(source: nil, in: context)
+        await run(source: nil, in: context, reason: reason)
     }
 
     /// Settings → Save / Sync now.
     func syncNow(in context: ModelContext) async {
-        await refresh(in: context, force: true)
+        await refresh(in: context, force: true, reason: .settings)
+    }
+
+    // MARK: - Quiet sync entry points (bt-0020)
+
+    /// `HabitStore` calls this after every write. Only a hand write on
+    /// today, on an iPhone that can reach dh, arms the quiet sync.
+    func noteWrite(on day: Date, source: EntrySource, in context: ModelContext) {
+        var canReach = APIKeyStore.hasKey
+        #if DEBUG
+        if let override = testOverride {
+            guard context === override.context else { return }
+            canReach = true
+        } else if isSimulationEnabled {
+            canReach = true
+        }
+        #endif
+        guard Self.shouldQuietSync(isPhone: Self.isGradingDevice, hasKey: canReach,
+                                   source: source, isToday: calendar.isDateInToday(day)) else { return }
+
+        Self.tapWaitingSince = Date()
+        holdBackgroundWindow()
+        pendingTap?.cancel()
+        pendingTapContext = context
+        pendingTap = Task { [weak self] in
+            guard let self else { return }
+            do { try await Task.sleep(for: Self.quietSyncDelay) } catch { return }
+            await self.sendWaitingTap(reason: .afterTap)
+        }
+    }
+
+    /// The scene went to the background. A tap still waiting goes now,
+    /// inside the window taken when it was noted. Nothing waiting → nothing.
+    func appLeftForeground() {
+        guard pendingTap != nil else { return }
+        pendingTap?.cancel()
+        pendingTap = Task { [weak self] in
+            await self?.sendWaitingTap(reason: .leavingApp)
+        }
+    }
+
+    /// Phone + key + a hand write + today. Pure, so the table is testable
+    /// without faking a device.
+    static func shouldQuietSync(isPhone: Bool, hasKey: Bool, source: EntrySource, isToday: Bool) -> Bool {
+        isPhone && hasKey && source == .hand && isToday
+    }
+
+    enum OpenDecision: Equatable {
+        case skip, run, runTapWaiting
+    }
+
+    /// The on-open rule. A tap or widget stamp newer than the last
+    /// successful send always runs (the throttle never hides a waiting
+    /// tap); otherwise the 120 s throttle applies.
+    static func decideOnOpen(lastAttempt: Date?, now: Date, tapWaitingSince: Date?, widgetStamp: Date?, lastSentAt: Date?) -> OpenDecision {
+        let waiting = [tapWaitingSince, widgetStamp].compactMap { $0 }.max()
+        if let waiting, waiting > (lastSentAt ?? .distantPast) {
+            return .runTapWaiting
+        }
+        if let lastAttempt, now.timeIntervalSince(lastAttempt) < minimumInterval {
+            return .skip
+        }
+        return .run
+    }
+
+    /// Waits for a running sync to finish (its tick list predates the tap),
+    /// then runs. Clears `pendingTap` first so the run's own cancel doesn't
+    /// hit the task that is calling it.
+    private func sendWaitingTap(reason: RunReason) async {
+        while isRunning {
+            do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+        }
+        guard let context = pendingTapContext else { return }
+        pendingTap = nil
+        pendingTapContext = nil
+        await refresh(in: context, force: true, reason: reason)
+    }
+
+    private func holdBackgroundWindow() {
+        guard backgroundWindow == .invalid else { return }
+        backgroundWindow = UIApplication.shared.beginBackgroundTask(withName: "Send taps to dh") { [weak self] in
+            self?.releaseBackgroundWindow()
+        }
+    }
+
+    private func releaseBackgroundWindow() {
+        guard backgroundWindow != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundWindow)
+        backgroundWindow = .invalid
+    }
+
+    /// Last hand tap on today (standard defaults).
+    static var tapWaitingSince: Date? {
+        get { date(forKey: tapWaitingKey, in: .standard) }
+        set { UserDefaults.standard.set(newValue?.timeIntervalSince1970, forKey: tapWaitingKey) }
+    }
+
+    /// Start time of the last run whose op=sync succeeded.
+    static var lastSentAt: Date? {
+        get { date(forKey: lastSentKey, in: .standard) }
+        set { UserDefaults.standard.set(newValue?.timeIntervalSince1970, forKey: lastSentKey) }
+    }
+
+    /// The widget's last tile tap (App Group defaults; the widget writes it).
+    static var widgetStamp: Date? {
+        date(forKey: widgetStampKey, in: UserDefaults(suiteName: DataStore.appGroupIdentifier))
+    }
+
+    private static func date(forKey key: String, in defaults: UserDefaults?) -> Date? {
+        guard let defaults, defaults.object(forKey: key) != nil else { return nil }
+        return Date(timeIntervalSince1970: defaults.double(forKey: key))
     }
 
     /// Whether this device holds a key and may talk to dh.
@@ -171,12 +367,26 @@ final class HabitSyncEngine {
     /// One full sync, writing into `context` (the view's main-actor context,
     /// so `@Query`-driven screens update in place). `source == nil` means no
     /// outside facts: Diet can't be graded, Workout only by steps.
-    func run(source: (any HabitFactsSource)?, in context: ModelContext) async {
+    func run(source: (any HabitFactsSource)?, in context: ModelContext, reason: RunReason = .developer) async {
         guard !isRunning else { return }
         isRunning = true
-        defer { isRunning = false }
+        defer {
+            isRunning = false
+            // bt-0020 — the window taken at a tap is held until the run
+            // that carries the tap is over (or a newer tap is waiting).
+            if pendingTap == nil { releaseBackgroundWindow() }
+        }
 
-        var report = Report(finished: Date(), sourceName: source?.displayName ?? "No source (steps only)")
+        // bt-0020 — a run that starts now carries every tap saved so far
+        // (the tick list is built below, before any network call), so a
+        // waiting quiet sync is no longer needed.
+        pendingTap?.cancel()
+        pendingTap = nil
+        pendingTapContext = nil
+        runsSinceLaunch += 1
+        let startedAt = Date()
+
+        var report = Report(finished: Date(), sourceName: source?.displayName ?? "No source (steps only)", reason: reason)
         let today = calendar.startOfDay(for: Date())
         let habits = allHabits(in: context)
         var touched: [(Habit, Date)] = []
@@ -203,6 +413,9 @@ final class HabitSyncEngine {
             let payload = Self.payload(habits: habits, today: today, timeZone: TimeZone.current.identifier)
             do {
                 let reply = try await source.sync(payload)
+                // bt-0020 — the run's START, so a tap that landed while this
+                // run was going is still newer and still "waiting".
+                Self.lastSentAt = startedAt
                 report.lines.append("Sent \(payload.habits.count) habits, \(payload.targets.count) targets, \(payload.tickedToday.count) ticked today")
                 var heldAny = false
                 for key in reply.heldTargets {
@@ -298,7 +511,11 @@ final class HabitSyncEngine {
         }
 
         var stepsByDay: [Date: Int] = [:]
-        if HealthSteps.isAvailable {
+        var readsHealth = HealthSteps.isAvailable
+        #if DEBUG
+        if testOverride != nil { readsHealth = false }
+        #endif
+        if readsHealth {
             do {
                 try await HealthSteps.shared.requestAuthorization()
                 for day in allDays.sorted() {
@@ -585,7 +802,7 @@ final class HabitSyncEngine {
         case (nil, .some(let e)) where !e.isAutomatic:
             return (false, "details-only row kept")
         case (nil, .some):
-            HabitStore.removeEntry(for: habit, on: day, in: context)
+            HabitStore.removeEntry(for: habit, on: day, source: .auto, in: context)
             return (true, "auto row removed")
         case (let g?, let e?) where e.effectiveCompletionState == g:
             if let details = Self.autoDetails(for: habit, facts: facts, existing: e.details), details != e.details {
@@ -641,7 +858,7 @@ final class HabitSyncEngine {
             return .applied(habit, "\(shown) \(Self.shortDay(day)): ticked (\(GradeWording.describe(state)), voice)")
 
         case .untick:
-            HabitStore.removeEntry(for: habit, on: day, in: context)
+            HabitStore.removeEntry(for: habit, on: day, source: .voice, in: context)
             return .applied(habit, "\(shown) \(Self.shortDay(day)): undone (voice)")
 
         case .setGrade(let grade):
@@ -649,7 +866,7 @@ final class HabitSyncEngine {
                 guard habit.isWithinGrading(day) else {
                     return .skipped("grading hasn't started for that day")
                 }
-                HabitStore.removeEntry(for: habit, on: day, in: context)
+                HabitStore.removeEntry(for: habit, on: day, source: .voice, in: context)
                 return .applied(habit, "\(shown) \(Self.shortDay(day)): back to automatic (voice)")
             }
             guard let state = grade.completionState else { return .skipped("unknown grade") }
@@ -680,8 +897,13 @@ final class HabitSyncEngine {
     func revertToAutomatic(habit: Habit, day: Date, in context: ModelContext) async {
         let dayStart = calendar.startOfDay(for: day)
         guard habit.isWithinGrading(dayStart) else { return }
-        HabitStore.removeEntry(for: habit, on: dayStart, in: context)
-        await refresh(in: context, force: true)
+        // bt-0020 — `.auto`, not the default `.hand`: the forced run right
+        // below carries this change, and a hand write here would arm the
+        // quiet-sync timer AFTER that run has started (the store's hand-off
+        // to `noteWrite` is a queued main-actor task, so `run`'s cancel comes
+        // too early) and make Back to Auto two runs instead of one.
+        HabitStore.removeEntry(for: habit, on: dayStart, source: .auto, in: context)
+        await refresh(in: context, force: true, reason: .backToAuto)
     }
 
     // MARK: - Captions
@@ -785,7 +1007,7 @@ final class HabitSyncEngine {
     /// Developer "Run now": ensures the test habits, runs against the fake.
     func runSimulation(in context: ModelContext) async {
         ensureTestHabits(in: context)
-        await run(source: FakeHealthFacts(), in: context)
+        await run(source: FakeHealthFacts(), in: context, reason: .developer)
     }
 
     /// Creates Test Diet (graded by diet), Test Workout (graded by workout),

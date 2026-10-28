@@ -59,6 +59,11 @@ struct ContentView: View {
                 // Developer switch is on (debug builds); dh in Step 3.
                 Task { await HabitSyncEngine.shared.refresh(in: modelContext) }
             }
+            // bt-0020 — a tap still waiting when the app leaves (lock, Home)
+            // goes now, inside the background window taken at the tap.
+            if newPhase == .background {
+                HabitSyncEngine.shared.appLeftForeground()
+            }
         }
     }
 }

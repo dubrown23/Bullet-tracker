@@ -172,7 +172,7 @@ enum HabitStore {
         let typedState = CompletionState(rawValue: Int16(state)) ?? .notDone
 
         if typedState == .notDone {
-            removeEntry(for: habit, on: dayStart, in: context)
+            removeEntry(for: habit, on: dayStart, source: source, in: context)
             return
         }
 
@@ -185,16 +185,20 @@ enum HabitStore {
             context.insert(entry)
         }
         save(context)
-        reloadWidgetIfToday(dayStart)
+        didWrite(dayStart, source: source, in: context)
     }
 
-    /// Removes a habit's entry for a date, if any.
-    static func removeEntry(for habit: Habit, on date: Date, in context: ModelContext) {
+    /// Removes a habit's entry for a date, if any. `source` says who is
+    /// clearing it (bt-0020): a tap is `.hand`, the grader's drop-back and
+    /// Back to Auto are `.auto` (Back to Auto runs its own forced sync at
+    /// once), a voice un-tick is `.voice` — only a hand clear on today
+    /// starts the quiet sync.
+    static func removeEntry(for habit: Habit, on date: Date, source: EntrySource = .hand, in context: ModelContext) {
         let dayStart = calendar.startOfDay(for: date)
         guard let entry = entry(for: habit, on: dayStart) else { return }
         context.delete(entry)
         save(context)
-        reloadWidgetIfToday(dayStart)
+        didWrite(dayStart, source: source, in: context)
     }
 
     /// Creates or updates a habit's entry for a date, setting its state and typed details payload.
@@ -211,7 +215,7 @@ enum HabitStore {
             context.insert(entry)
         }
         save(context)
-        reloadWidgetIfToday(dayStart)
+        didWrite(dayStart, source: source, in: context)
     }
 
     /// bt-0019 — a voice note adds details and nothing else. State and
@@ -226,7 +230,7 @@ enum HabitStore {
         guard let existing = entry(for: habit, on: dayStart) else { return false }
         existing.details = merged(existing.details, habitKind: habit.detailKind, text: text, book: book, pages: pages)
         save(context)
-        reloadWidgetIfToday(dayStart)
+        didWrite(dayStart, source: .voice, in: context)
         return true
     }
 
@@ -360,6 +364,20 @@ enum HabitStore {
         return rank + edited + (entry.id?.uuidString ?? "~")
     }
 
+    /// After every write: redraw the widget when the day is today, and tell
+    /// the sync engine who wrote (bt-0020 — a hand tap on today starts the
+    /// quiet sync to dh; the engine decides, see `HabitSyncEngine.noteWrite`).
+    /// One place for every screen: Today, Log Details, Back to Auto and any
+    /// future caller get it by calling the store.
+    private static func didWrite(_ dayStart: Date, source: EntrySource, in context: ModelContext) {
+        reloadWidgetIfToday(dayStart)
+        Task { @MainActor in
+            HabitSyncEngine.shared.noteWrite(on: dayStart, source: source, in: context)
+        }
+    }
+
+    /// Widget redraw only — the cleanup pass uses this directly (a dedupe
+    /// is housekeeping, not a tap, so it never starts a sync).
     private static func reloadWidgetIfToday(_ dayStart: Date) {
         if calendar.isDateInToday(dayStart) {
             WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
