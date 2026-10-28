@@ -202,6 +202,82 @@ enum HabitEntryDetails: Codable, Equatable {
     case mood(mood: Int, notes: String)
 }
 
+// MARK: - Workout type chips (bt-0021)
+//
+// The six buckets the Log Details form offers. One list, shared by the form
+// and the sync, which lights a chip from the category dustin-health reports
+// for a session. Not Apple's activity types: dh keeps those but only sends
+// the category, so the finer chips (Functional, Core/Pre-Hab, HIIT/Jump)
+// are Dustin's to add by hand.
+
+enum WorkoutTypeChips {
+    static let all = ["Cardio", "Strength", "Functional", "Core/Pre-Hab", "HIIT/Jump", "Other"]
+
+    /// dh's `activity_category` → a chip. Walking, running, cycling,
+    /// swimming, hockey and any team sport (dh names the sport) are Cardio;
+    /// strength is Strength; "other" is Other. Unknown → no chip.
+    static func chip(forCategory category: String?) -> String? {
+        guard let category = category?.lowercased(), !category.isEmpty else { return nil }
+        switch category {
+        case "strength": return "Strength"
+        case "other": return "Other"
+        default: return "Cardio"
+        }
+    }
+}
+
+// MARK: - HealthSnapshot (bt-0021)
+//
+// What dustin-health reported for one habit-day: the workout sessions (on a
+// Workout row) or the meals (on a Diet row). Stored under its own `health`
+// key inside `HabitEntry.detailsJSON`, beside the details keys and never
+// inside them, so a note (hand or voice) and this list can't wipe each
+// other, and a build that doesn't know the key reads the row as before.
+// Written only by the sync (`HabitStore.setHealth`), only when it changed.
+
+struct HealthSnapshot: Codable, Equatable, Sendable {
+    struct Session: Codable, Equatable, Sendable {
+        var name: String
+        var category: String?
+        var minutes: Double
+        var sets: Int
+        var start: Date?
+    }
+
+    struct Meal: Codable, Equatable, Sendable {
+        var id: String?
+        var name: String
+        /// `nil` = dh doesn't know (shown as a dash), never 0.
+        var calories: Double?
+        var protein: Double?
+        var carbs: Double?
+        var fat: Double?
+        var at: Date?
+    }
+
+    var sessions: [Session] = []
+    var meals: [Meal] = []
+
+    var isEmpty: Bool { sessions.isEmpty && meals.isEmpty }
+
+    var totalMinutes: Double { sessions.reduce(0) { $0 + $1.minutes } }
+    var totalCalories: Double? { Self.sum(meals.map(\.calories)) }
+    var totalProtein: Double? { Self.sum(meals.map(\.protein)) }
+
+    /// Sum of the known values; `nil` when none is known (dh's SQL `sum`
+    /// skips nulls the same way).
+    private static func sum(_ values: [Double?]) -> Double? {
+        let known = values.compactMap { $0 }
+        return known.isEmpty ? nil : known.reduce(0, +)
+    }
+
+    /// Whole-second dates, so a snapshot survives the JSON round trip
+    /// unchanged and the "write only when changed" check holds.
+    static func wholeSecond(_ date: Date?) -> Date? {
+        date.map { Date(timeIntervalSince1970: $0.timeIntervalSince1970.rounded(.down)) }
+    }
+}
+
 // MARK: - Habit
 
 @Model
@@ -337,7 +413,32 @@ final class HabitEntry {
             return Self.decodeDetails(raw)
         }
         set {
-            detailsJSON = newValue.flatMap { Self.encodeDetails($0) }
+            // bt-0021 — the `health` key rides along untouched: a Done in
+            // Log Details or a voice note can never drop dh's list.
+            var object = Self.healthOnly(from: detailsJSON)
+            if let newValue {
+                object.merge(Self.detailsDictionary(newValue)) { _, new in new }
+            }
+            detailsJSON = object.isEmpty ? nil : Self.string(from: object)
+        }
+    }
+
+    /// bt-0021 — dh's sessions (Workout row) or meals (Diet row) for this
+    /// day, under the `health` key of the same string. Written only by the
+    /// sync through `HabitStore.setHealth`; every other write leaves it be.
+    var health: HealthSnapshot? {
+        get {
+            guard let object = Self.healthObject(in: detailsJSON) else { return nil }
+            return Self.decodeHealth(object)
+        }
+        set {
+            var object = Self.jsonObject(from: detailsJSON)
+            if let encoded = newValue.flatMap(Self.encodeHealth) {
+                object[Self.healthKey] = encoded
+            } else {
+                object.removeValue(forKey: Self.healthKey)
+            }
+            detailsJSON = object.isEmpty ? nil : Self.string(from: object)
         }
     }
 
@@ -362,7 +463,7 @@ final class HabitEntry {
         self.id = id
         self.date = date
         self.completionState = completionState
-        self.detailsJSON = details.flatMap { Self.encodeDetails($0) }
+        self.detailsJSON = details.flatMap { Self.string(from: Self.detailsDictionary($0)) }
         self.habit = habit
         self.sourceRaw = source?.rawValue
         self.editedAt = editedAt
@@ -378,6 +479,11 @@ final class HabitEntry {
     /// True for rows the automatic grader may rewrite or remove.
     var isAutomatic: Bool { source == .auto }
 
+    /// bt-0021 — a hand / voice row that carries a grade: the only kind that
+    /// wins over the automatic one. A `notDone` hand row holds details only
+    /// (notes typed before the day was marked) and never blocks the grader.
+    var isOverride: Bool { !isAutomatic && effectiveCompletionState != .notDone }
+
     // MARK: - HabitEntryDetails ⇄ JSON-string conversion
     //
     // Same wire shape `BackupManager` (and the pre-Phase-2 `details: String`
@@ -385,7 +491,10 @@ final class HabitEntry {
     // is the universal shared field. Discriminate on read by which JSON keys
     // are present (the four kinds don't share keys, so it's unambiguous).
 
-    private static func encodeDetails(_ d: HabitEntryDetails) -> String? {
+    private static let healthKey = "health"
+
+    /// The details keys as a dictionary (the legacy wire shape).
+    private static func detailsDictionary(_ d: HabitEntryDetails) -> [String: Any] {
         var dict: [String: Any] = [:]
         switch d {
         case .notes(let n):
@@ -404,31 +513,70 @@ final class HabitEntry {
             dict["mood"] = mood
             dict["notes"] = n
         }
-        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+        return dict
+    }
+
+    /// The stored string as a dictionary. Non-JSON legacy plaintext is a
+    /// notes line; nothing stored → empty.
+    private static func jsonObject(from raw: String?) -> [String: Any] {
+        guard let raw, !raw.isEmpty else { return [:] }
+        guard let data = raw.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return ["notes": raw]
+        }
+        return dict
+    }
+
+    private static func healthObject(in raw: String?) -> Any? {
+        jsonObject(from: raw)[healthKey]
+    }
+
+    /// Just the `health` key (if any), for the `details` setter to build on.
+    private static func healthOnly(from raw: String?) -> [String: Any] {
+        guard let health = healthObject(in: raw) else { return [:] }
+        return [healthKey: health]
+    }
+
+    /// Sorted keys, so the same content is always the same string.
+    private static func string(from object: [String: Any]) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
               let str = String(data: data, encoding: .utf8) else { return nil }
         return str
     }
 
+    private static func encodeHealth(_ snapshot: HealthSnapshot) -> Any? {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(snapshot) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data)
+    }
+
+    private static func decodeHealth(_ object: Any) -> HealthSnapshot? {
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(withJSONObject: object) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(HealthSnapshot.self, from: data)
+    }
+
     private static func decodeDetails(_ str: String) -> HabitEntryDetails? {
-        guard let data = str.data(using: .utf8),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            // Non-JSON legacy plaintext — treat the whole string as notes.
-            return .notes(notes: str)
-        }
-        let notes = dict["notes"] as? String ?? ""
+        let dict = jsonObject(from: str)
+        let notes = dict["notes"] as? String
         if let types = dict["types"] as? [String] {
             let duration = dict["duration"] as? String ?? ""
             let intensity = dict["intensity"] as? Int ?? 3
-            return .workout(types: types, duration: duration, intensity: intensity, notes: notes)
+            return .workout(types: types, duration: duration, intensity: intensity, notes: notes ?? "")
         }
         if dict["bookTitle"] != nil || dict["pagesRead"] != nil {
             let bookTitle = dict["bookTitle"] as? String ?? ""
             let pagesRead = dict["pagesRead"] as? String ?? ""
-            return .reading(bookTitle: bookTitle, pagesRead: pagesRead, notes: notes)
+            return .reading(bookTitle: bookTitle, pagesRead: pagesRead, notes: notes ?? "")
         }
         if let mood = dict["mood"] as? Int {
-            return .mood(mood: mood, notes: notes)
+            return .mood(mood: mood, notes: notes ?? "")
         }
+        // bt-0021 — a row holding only the `health` key has no details.
+        guard let notes else { return nil }
         return .notes(notes: notes)
     }
 }

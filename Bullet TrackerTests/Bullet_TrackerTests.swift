@@ -374,7 +374,11 @@ struct GradingRuleTests {
 @MainActor
 struct HabitStoreWriteTests {
     private func makeContext() throws -> ModelContext {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        // No CloudKit on the test store: `.automatic` picks up the app's
+        // iCloud entitlement, the mirroring setup fails without an account
+        // on the simulator, and the first save then throws "No eligible
+        // connection available" (seen on the iOS 27.1 runtime, bt-0021).
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: Habit.self, HabitEntry.self, Note.self, configurations: config)
         return ModelContext(container)
     }
@@ -488,8 +492,10 @@ struct DustinHealthWireTests {
     @Test func factsBecomeDayFactsWithNothingTrackedAsNil() throws {
         let json = """
         {"time_zone":"America/New_York","days":[
-          {"day":"2026-10-26","meals":{"count":2,"calories":2050,"protein":190.5,"carbs":100,"fat":60,"names":["Eggs","Chicken"]},
-           "workouts":{"count":1,"minutes":45,"sessions":[{"name":"Incline walk","category":"cardio","minutes":45,"set_count":0,"started_at":"2026-10-26T12:00:00+00:00"}]}},
+          {"day":"2026-10-26","meals":{"count":2,"calories":2050,"protein":190.5,"carbs":100,"fat":60,"names":["Eggs","Chicken"],
+             "items":[{"id":"m1","name":"Eggs","calories":450,"protein":30.5,"carbs":2,"fat":30,"logged_at":"2026-10-26T12:05:22.397+00:00"},
+                      {"id":"m2","name":"Chicken","calories":null,"protein":160,"carbs":null,"fat":null,"logged_at":"2026-10-26T23:10:00+00:00"}]},
+           "workouts":{"count":1,"minutes":45,"sessions":[{"name":"Incline walk","category":"walking","minutes":45,"set_count":13,"started_at":"2026-10-26T12:00:00+00:00"}]}},
           {"day":"2026-10-27","meals":{"count":0,"calories":0,"protein":0,"carbs":0,"fat":0,"names":[]},
            "workouts":{"count":0,"minutes":0,"sessions":[]}}
         ]}
@@ -501,7 +507,17 @@ struct DustinHealthWireTests {
         #expect(tracked.calories == 2050)
         #expect(tracked.workoutMinutes == 45)
         #expect(tracked.mealNames == ["Eggs", "Chicken"])
-        #expect(tracked.sessions == [DayFacts.Session(name: "Incline walk", minutes: 45)])
+        // bt-0021 — category, set count and start time ride along.
+        let start = try #require(DustinHealthWire.timestamp(from: "2026-10-26T12:00:00+00:00"))
+        #expect(tracked.sessions == [DayFacts.Session(name: "Incline walk", minutes: 45, category: "walking", setCount: 13, startedAt: start)])
+        // bt-0021 — per-meal items; null is nil (a dash), never 0; fractional seconds parse.
+        #expect(tracked.meals.count == 2)
+        #expect(tracked.meals[0].name == "Eggs" && tracked.meals[0].calories == 450 && tracked.meals[0].protein == 30.5)
+        let whole = try #require(DustinHealthWire.timestamp(from: "2026-10-26T12:05:22+00:00"))
+        let logged = try #require(tracked.meals[0].loggedAt)
+        #expect(abs(logged.timeIntervalSince(whole) - 0.397) < 0.001)
+        #expect(tracked.meals[1].calories == nil && tracked.meals[1].protein == 160 && tracked.meals[1].fat == nil)
+        #expect(DustinHealthWire.timestamp(from: nil) == nil && DustinHealthWire.timestamp(from: "nope") == nil)
         let empty = try #require(facts[DustinHealthWire.day(from: "2026-10-27")!])
         #expect(empty.proteinGrams == nil)
         #expect(empty.calories == nil)
@@ -609,7 +625,11 @@ struct DustinHealthWireTests {
 @MainActor
 struct SyncEngineStep3Tests {
     private func makeContext() throws -> ModelContext {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        // No CloudKit on the test store: `.automatic` picks up the app's
+        // iCloud entitlement, the mirroring setup fails without an account
+        // on the simulator, and the first save then throws "No eligible
+        // connection available" (seen on the iOS 27.1 runtime, bt-0021).
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: Habit.self, HabitEntry.self, Note.self, configurations: config)
         return ModelContext(container)
     }
@@ -776,16 +796,157 @@ struct SyncEngineStep3Tests {
         #expect(HabitStore.merged(nil, habitKind: nil, text: "hi", book: nil, pages: nil) == .notes(notes: "hi"))
     }
 
-    @Test func autoWorkoutDetailsKeepTheRowsNotes() {
+    /// bt-0021 — chips light from dh's categories; a chip Dustin lit stays;
+    /// the bt-0019 session names drop out of `types`; notes + intensity kept.
+    @Test func autoWorkoutDetailsLightChipsAndKeepTheRowsNotes() {
         let today = Calendar.current.startOfDay(for: Date())
         let workout = Habit(name: "Workout", completionStyle: .multiState, detailKind: .workout)
-        let facts = DayFacts(day: today, proteinGrams: nil, calories: nil, workoutMinutes: 75,
-                             sessions: [.init(name: "Incline walk", minutes: 60), .init(name: "KOT", minutes: 15), .init(name: "KOT", minutes: 0)])
-        let details = HabitSyncEngine.autoDetails(for: workout, facts: facts, existing: .workout(types: [], duration: "", intensity: 3, notes: "knee"))
-        #expect(details == .workout(types: ["Incline walk", "KOT"], duration: "75 min", intensity: 3, notes: "knee"))
+        let facts = DayFacts(day: today, proteinGrams: nil, calories: nil, workoutMinutes: 89,
+                             sessions: [.init(name: "Weighted incline walk", minutes: 66, category: "walking"),
+                                        .init(name: "Workout B — Full Body", minutes: 23, category: "strength", setCount: 13)])
+        let details = HabitSyncEngine.autoDetails(for: workout, facts: facts,
+                                                  existing: .workout(types: ["Incline walk", "Core/Pre-Hab"], duration: "", intensity: 4, notes: "knee"))
+        #expect(details == .workout(types: ["Core/Pre-Hab", "Cardio", "Strength"], duration: "89 min", intensity: 4, notes: "knee"))
         #expect(HabitSyncEngine.autoDetails(for: workout, facts: DayFacts(day: today, proteinGrams: nil, calories: nil, workoutMinutes: 0), existing: nil) == nil)
         let diet = Habit(name: "Diet", completionStyle: .multiState)
         #expect(HabitSyncEngine.autoDetails(for: diet, facts: facts, existing: nil) == nil)
+        #expect(WorkoutTypeChips.chip(forCategory: "basketball") == "Cardio")
+        #expect(WorkoutTypeChips.chip(forCategory: "other") == "Other")
+        #expect(WorkoutTypeChips.chip(forCategory: nil) == nil)
+    }
+}
+
+// MARK: - dh's list on the row (bt-0021)
+
+@MainActor
+struct HealthSnapshotTests {
+    private func makeContext() throws -> ModelContext {
+        // No CloudKit on the test store: `.automatic` picks up the app's
+        // iCloud entitlement, the mirroring setup fails without an account
+        // on the simulator, and the first save then throws "No eligible
+        // connection available" (seen on the iOS 27.1 runtime, bt-0021).
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: Habit.self, HabitEntry.self, Note.self, configurations: config)
+        return ModelContext(container)
+    }
+
+    private var coffee: HealthSnapshot {
+        HealthSnapshot(meals: [.init(id: "m1", name: "1.5 protein coffees", calories: 168, protein: 30, carbs: 0, fat: 0,
+                                     at: HealthSnapshot.wholeSecond(Date()))])
+    }
+
+    /// The `health` key sits beside the details keys: a note write keeps it,
+    /// a health write keeps the note, and a row with only `health` has no
+    /// details (an old build reads it as empty notes).
+    @Test func healthKeyRidesBesideTheDetails() throws {
+        let today = Calendar.current.startOfDay(for: Date())
+        let entry = HabitEntry(date: today, completionState: .partial, details: .notes(notes: "hi"))
+        entry.health = coffee
+        #expect(entry.details == .notes(notes: "hi"))
+        #expect(entry.health == coffee)
+        entry.details = .notes(notes: "hi\nmore")
+        #expect(entry.health == coffee)
+        let json = try #require(entry.detailsJSON)
+        #expect(json.contains("\"health\"") && json.contains("\"notes\""))
+        entry.details = nil
+        #expect(entry.details == nil && entry.health == coffee)
+
+        let workout = HabitEntry(date: today, completionState: .success,
+                                 details: .workout(types: ["Cardio"], duration: "89 min", intensity: 3, notes: ""))
+        workout.health = HealthSnapshot(sessions: [.init(name: "Walk", category: "walking", minutes: 66, sets: 0, start: nil)])
+        #expect(workout.details == .workout(types: ["Cardio"], duration: "89 min", intensity: 3, notes: ""))
+        #expect(workout.health?.sessions.first?.name == "Walk")
+
+        let bare = HabitEntry(date: today, completionState: .success)
+        bare.health = coffee
+        #expect(bare.details == nil && bare.health == coffee)
+        bare.health = nil
+        #expect(bare.detailsJSON == nil)
+    }
+
+    /// Dates arrive with fractional seconds; the stored copy must compare
+    /// equal to a fresh one or every run would rewrite every row.
+    @Test func snapshotFromFactsRoundTripsUnchanged() {
+        let today = Calendar.current.startOfDay(for: Date())
+        let logged = DustinHealthWire.timestamp(from: "2026-10-27T14:05:22.397+00:00")
+        let facts = DayFacts(day: today, proteinGrams: 30, calories: 168, workoutMinutes: 89,
+                             sessions: [.init(name: "Workout B — Full Body", minutes: 23, category: "strength", setCount: 13, startedAt: logged)],
+                             meals: [.init(id: "m1", name: "1.5 protein coffees", calories: 168, protein: 30, carbs: nil, fat: nil, loggedAt: logged)])
+        let diet = HabitSyncEngine.snapshot(kind: .diet, facts: facts)
+        let workout = HabitSyncEngine.snapshot(kind: .workout, facts: facts)
+        let entry = HabitEntry(date: today, completionState: .success)
+        entry.health = diet
+        #expect(entry.health == diet)
+        #expect(entry.health?.meals.first?.carbs == nil)
+        entry.health = workout
+        #expect(entry.health == workout)
+        #expect(entry.health?.sessions.first?.sets == 13)
+        #expect(HabitSyncEngine.snapshot(kind: .diet, facts: DayFacts(day: today, proteinGrams: nil, calories: nil)) == nil)
+        #expect(HabitSyncEngine.snapshot(kind: .workout, facts: nil) == nil)
+    }
+
+    /// Dustin's test: a hand-set row keeps its source and edit time after a
+    /// sync that changes its meals; the notes stay; the same facts twice
+    /// write nothing.
+    @Test func healthWriteLeavesHandRowsSourceAndEditTimeAlone() throws {
+        let context = try makeContext()
+        let today = Calendar.current.startOfDay(for: Date())
+        let diet = Habit(name: "Diet", frequency: "daily", completionStyle: .multiState)
+        diet.gradingKind = .diet
+        diet.gradingSince = today
+        context.insert(diet)
+        try context.save()
+
+        HabitStore.setCompletion(for: diet, on: today, state: 2, in: context)
+        HabitStore.mergeDetails(for: diet, on: today, text: "ate out", book: nil, pages: nil, in: context)
+        let row = try #require(HabitStore.entry(for: diet, on: today))
+        let fixed = Date(timeIntervalSince1970: 1_790_000_000)
+        row.editedAt = fixed
+        try context.save()
+
+        #expect(HabitStore.setHealth(for: diet, on: today, snapshot: coffee, in: context))
+        #expect(row.source == .hand)
+        #expect(row.editedAt == fixed)
+        #expect(row.effectiveCompletionState == .partial)
+        #expect(row.details == .notes(notes: "ate out"))
+        #expect(row.health == coffee)
+
+        // Same facts again → nothing written.
+        #expect(!HabitStore.setHealth(for: diet, on: today, snapshot: coffee, in: context))
+
+        // The meals change → written; everything else still as it was.
+        var lunch = coffee
+        lunch.meals.append(.init(id: "m2", name: "Chicken bowl", calories: 640, protein: 52, carbs: nil, fat: nil, at: nil))
+        #expect(HabitStore.setHealth(for: diet, on: today, snapshot: lunch, in: context))
+        #expect(row.health?.meals.count == 2)
+        #expect(row.source == .hand && row.editedAt == fixed && row.details == .notes(notes: "ate out"))
+
+        // No row → nothing; an empty snapshot → the key goes.
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today)!
+        #expect(!HabitStore.setHealth(for: diet, on: yesterday, snapshot: coffee, in: context))
+        #expect(HabitStore.setHealth(for: diet, on: today, snapshot: HealthSnapshot(), in: context))
+        #expect(row.health == nil && row.details == .notes(notes: "ate out"))
+    }
+
+    /// Only a hand / voice row WITH a grade overrides the grader; a
+    /// details-only row doesn't, and shows as Auto.
+    @Test func detailsOnlyRowsAreNotOverrides() {
+        let today = Date()
+        #expect(!HabitEntry(date: today, completionState: .notDone, source: .hand).isOverride)
+        #expect(HabitEntry(date: today, completionState: .partial, source: .hand).isOverride)
+        #expect(HabitEntry(date: today, completionState: .partial, source: .voice).isOverride)
+        #expect(!HabitEntry(date: today, completionState: .success, source: .auto).isOverride)
+        #expect(GradeWording.mode(.hand) == "Set by you" && GradeWording.mode(.auto) == "Auto")
+    }
+
+    @Test func sheetWordingAndBlankCheck() {
+        #expect(HabitCompletionDetailView.mealNumbers(calories: 168, protein: 30) == "168 cal · 30 g")
+        #expect(HabitCompletionDetailView.mealNumbers(calories: nil, protein: 30.4) == "— cal · 30 g")
+        #expect(HabitCompletionDetailView.sessionNumbers(.init(name: "B", category: "strength", minutes: 23, sets: 13, start: nil)) == "23 min · 13 sets")
+        #expect(HabitCompletionDetailView.sessionNumbers(.init(name: "W", category: "walking", minutes: 66, sets: 0, start: nil)) == "66 min")
+        #expect(HabitCompletionDetailView.isBlank(.workout(types: [], duration: "", intensity: 3, notes: "")))
+        #expect(!HabitCompletionDetailView.isBlank(.workout(types: ["Cardio"], duration: "", intensity: 3, notes: "")))
+        #expect(HabitCompletionDetailView.isBlank(.notes(notes: "")) && !HabitCompletionDetailView.isBlank(.notes(notes: "x")))
     }
 }
 

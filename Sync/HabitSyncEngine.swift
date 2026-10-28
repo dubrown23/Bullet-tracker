@@ -80,6 +80,9 @@ final class HabitSyncEngine {
     private(set) var lastReport: Report?
     /// Keyed by habit id. Cleared and refilled on every run.
     private(set) var liveFacts: [UUID: LiveFacts] = [:]
+    /// Today's sessions / meals per graded habit (bt-0021), so Log Details
+    /// can show the list before the day has a row. Refilled on every run.
+    private(set) var liveHealth: [UUID: HealthSnapshot] = [:]
     private(set) var status: SyncStatus
 
     /// Dustin's rule: only the iPhone grades and only the iPhone syncs.
@@ -330,6 +333,7 @@ final class HabitSyncEngine {
 
         // Grade every habit-day.
         var newLive: [UUID: LiveFacts] = [:]
+        var newLiveHealth: [UUID: HealthSnapshot] = [:]
         for habit in habits where habit.isAutoGraded {
             guard let kind = habit.gradingKind, let habitID = habit.id, let days = daysByHabit[habitID] else { continue }
             for day in days {
@@ -337,10 +341,21 @@ final class HabitSyncEngine {
                 let steps = Self.isGradingDevice ? stepsByDay[day] : nil
                 let isToday = day == today
                 let grade = Self.grade(kind: kind, targets: habit.gradingTargets, facts: facts, steps: steps, isToday: isToday)
+                let snapshot = Self.snapshot(kind: kind, facts: facts)
 
                 if isToday {
                     newLive[habitID] = LiveFacts(proteinGrams: facts?.proteinGrams, calories: facts?.calories,
                                                  workoutMinutes: facts?.workoutMinutes, steps: steps)
+                    if let snapshot { newLiveHealth[habitID] = snapshot }
+                }
+
+                // bt-0021 — dh's list on the day's row (override or not),
+                // only when it changed; state, source and edit time untouched.
+                func writeHealth() {
+                    guard canWrite, factsByDay != nil else { return }
+                    if HabitStore.setHealth(for: habit, on: day, snapshot: snapshot, in: context) {
+                        report.lines.append("\(habit.name ?? "?") \(Self.shortDay(day)): dh list updated")
+                    }
                 }
 
                 let prefix = "\(habit.name ?? "?") \(Self.shortDay(day)): \(Self.describe(facts, steps: steps))"
@@ -350,15 +365,18 @@ final class HabitSyncEngine {
                 }
                 guard Self.isKnown(kind: kind, facts: facts, grade: grade) else {
                     report.lines.append("\(prefix) → not enough known, left as is")
+                    writeHealth()
                     continue
                 }
 
                 let outcome = apply(grade: grade, facts: facts, to: habit, on: day, canWrite: canWrite, in: context)
                 if outcome.wrote { touched.append((habit, day)) }
                 report.lines.append("\(prefix) → \(GradeWording.describe(grade)) · \(outcome.note)")
+                writeHealth()
             }
         }
         liveFacts = newLive
+        liveHealth = newLiveHealth
 
         // 6. Cleanup pass over everything this run touched, plus today for
         //    every graded habit (a duplicate can arrive from the other device
@@ -493,20 +511,57 @@ final class HabitSyncEngine {
         }
     }
 
-    /// Details an automatic Workout row carries: the sessions' names and
-    /// minutes from dh. Any notes already on the row (a voice note) stay.
+    /// Details an automatic Workout row carries (bt-0021 shape): the type
+    /// chips lit from dh's session categories, added to any chip Dustin lit
+    /// himself; the dh total as the duration; his intensity and notes kept.
+    /// Session names no longer go in `types` (they live under `health`), and
+    /// any left there from bt-0019 are dropped.
     static func autoDetails(for habit: Habit, facts: DayFacts?, existing: HabitEntryDetails?) -> HabitEntryDetails? {
         guard habit.detailKind == .workout, let facts, !facts.sessions.isEmpty else { return nil }
         var types: [String] = []
-        for session in facts.sessions where !types.contains(session.name) { types.append(session.name) }
-        let minutes = facts.workoutMinutes ?? facts.sessions.reduce(0) { $0 + $1.minutes }
         var notes = ""
         var intensity = 3
-        if case .workout(_, _, let i, let n)? = existing {
+        if case .workout(let t, _, let i, let n)? = existing {
+            types = t.filter { WorkoutTypeChips.all.contains($0) }
             notes = n
             intensity = i
         }
+        for session in facts.sessions {
+            if let chip = WorkoutTypeChips.chip(forCategory: session.category), !types.contains(chip) {
+                types.append(chip)
+            }
+        }
+        let minutes = facts.workoutMinutes ?? facts.sessions.reduce(0) { $0 + $1.minutes }
         return .workout(types: types, duration: minutes > 0 ? "\(Int(minutes)) min" : "", intensity: intensity, notes: notes)
+    }
+
+    /// bt-0021 — what goes under the row's `health` key for this habit's
+    /// kind: the sessions on a Workout habit, the meals on a Diet habit.
+    /// `nil` when dh has nothing for the day (the key is then removed).
+    /// Dates are cut to whole seconds so the stored copy compares equal.
+    static func snapshot(kind: GradingKind, facts: DayFacts?) -> HealthSnapshot? {
+        guard let facts else { return nil }
+        switch kind {
+        case .workout:
+            let sessions = facts.sessions.map {
+                HealthSnapshot.Session(name: $0.name, category: $0.category, minutes: $0.minutes,
+                                       sets: $0.setCount, start: HealthSnapshot.wholeSecond($0.startedAt))
+            }
+            return sessions.isEmpty ? nil : HealthSnapshot(sessions: sessions)
+        case .diet:
+            let meals = facts.meals.map {
+                HealthSnapshot.Meal(id: $0.id, name: $0.name, calories: $0.calories, protein: $0.protein,
+                                    carbs: $0.carbs, fat: $0.fat, at: HealthSnapshot.wholeSecond($0.loggedAt))
+            }
+            return meals.isEmpty ? nil : HealthSnapshot(meals: meals)
+        }
+    }
+
+    /// Today's dh list for a graded habit, for Log Details when the day has
+    /// no row yet (Diet in progress, Workout before the first session).
+    func liveSnapshot(for habit: Habit) -> HealthSnapshot? {
+        guard let id = habit.id else { return nil }
+        return liveHealth[id]
     }
 
     /// Writes `grade` for the day if this device may and the day's row isn't
@@ -514,7 +569,10 @@ final class HabitSyncEngine {
     private func apply(grade: CompletionState?, facts: DayFacts?, to habit: Habit, on day: Date, canWrite: Bool, in context: ModelContext) -> (wrote: Bool, note: String) {
         let existing = HabitStore.entry(for: habit, on: day)
 
-        if let existing, !existing.isAutomatic {
+        // bt-0021 — only a hand / voice row WITH a grade is an override. A
+        // `notDone` hand row (notes typed before the day was marked) is
+        // graded over, its details kept.
+        if let existing, existing.isOverride {
             return (false, "kept (\(GradeWording.describe(existing.source).lowercased()))")
         }
         guard canWrite else {
@@ -524,6 +582,8 @@ final class HabitSyncEngine {
         switch (grade, existing) {
         case (nil, nil):
             return (false, "blank")
+        case (nil, .some(let e)) where !e.isAutomatic:
+            return (false, "details-only row kept")
         case (nil, .some):
             HabitStore.removeEntry(for: habit, on: day, in: context)
             return (true, "auto row removed")
@@ -809,6 +869,7 @@ final class HabitSyncEngine {
         // still live, and the delete then flows through `@Query` normally.
         lastReport = nil
         liveFacts = [:]
+        liveHealth = [:]
 
         let habits = allHabits(in: context)
         for name in Self.testHabitNames {

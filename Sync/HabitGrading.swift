@@ -121,4 +121,24 @@ enum GradeWording {
         case .voice: return "By voice"
         }
     }
+
+    /// bt-0021 — the mode word on the Today row and in Log Details.
+    static func mode(_ source: EntrySource) -> String {
+        switch source {
+        case .auto: return "Auto"
+        case .hand: return "Set by you"
+        case .voice: return "Set by voice"
+        }
+    }
+
+    /// bt-0021 — the state word beside the mode ("Auto · Done").
+    static func stateWord(_ state: CompletionState) -> String {
+        switch state {
+        case .notDone: return "not marked"
+        case .success: return "Done"
+        case .partial: return "Partial"
+        case .failure: return "Tried"
+        case .rest: return "Rest"
+        }
+    }
 }

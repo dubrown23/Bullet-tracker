@@ -164,19 +164,28 @@ struct TodayHabitRowView: View {
     /// The selected day is a Rest day.
     private var isSelectedDayRest: Bool { state(on: date) == restState }
 
-    /// Live caption under the name: only on today's row of a graded habit,
-    /// and only once a run has produced numbers.
+    /// bt-0021 — who set today: Auto, Set by you, Set by voice. Only on
+    /// today's row of a graded habit on/after its go-live day. A row with
+    /// no grade (details only) still counts as Auto.
+    private var modeText: String? {
+        guard habit.isAutoGraded, calendar.isDateInToday(date), habit.isWithinGrading(date) else { return nil }
+        let entry = entry(on: date)
+        return GradeWording.mode(entry?.isOverride == true ? entry!.source : .auto)
+    }
+
+    /// Live line under the name: the mode (bt-0021), then today's numbers
+    /// once a run has produced them (bt-0018).
     private var liveCaption: String? {
-        guard habit.isAutoGraded, calendar.isDateInToday(date) else { return nil }
-        return engine.caption(for: habit)
+        guard let modeText else { return nil }
+        return [modeText, engine.caption(for: habit)].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// "Back to Automatic" is offered only on or after the go-live day
     /// (Dustin's rule: old rows count as hand, and history is never re-graded)
-    /// and only when the day's row is a hand / voice row.
+    /// and only when the day's row is a hand / voice row with a grade.
     private var canRevertToAutomatic: Bool {
         guard habit.isWithinGrading(date), let entry = entry(on: date) else { return false }
-        return !entry.isAutomatic
+        return entry.isOverride
     }
 
     // MARK: - Body
@@ -213,18 +222,36 @@ struct TodayHabitRowView: View {
             // line under the row so they get the full width ("40 / 180 g ·
             // 600 cal" doesn't fit beside the grid on a folded phone).
             if let liveCaption {
-                Text(liveCaption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .contentTransition(.numericText())
-                    .padding(.leading, glyphWidth + 10)
-                    .accessibilityLabel("Today so far: \(liveCaption)")
+                HStack(spacing: 8) {
+                    Text(liveCaption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .contentTransition(.numericText())
+                        .accessibilityLabel("Today: \(liveCaption)")
+                    // bt-0021 — the way back, on the row itself. Same path
+                    // as the long-press item, which stays.
+                    if canRevertToAutomatic {
+                        Spacer(minLength: 0)
+                        Button("Back to Auto") {
+                            Task { await engine.revertToAutomatic(habit: habit, day: date, in: modelContext) }
+                        }
+                        .font(.caption)
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.mini)
+                        .tint(habitColor)
+                        .accessibilityHint("Clears your grade so the automatic one comes back")
+                    }
+                }
+                .padding(.leading, glyphWidth + 10)
             }
         }
         .contextMenu {
-            if shouldTrackDetails {
+            // bt-0021 — Diet and Workout always have Log Details (the mode,
+            // the dh list), whatever their details kind.
+            if shouldTrackDetails || habit.isAutoGraded {
                 Button("Log Details", systemImage: "info.circle") {
                     detailTarget = DetailTarget(date: date)
                 }

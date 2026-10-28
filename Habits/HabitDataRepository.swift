@@ -230,6 +230,23 @@ enum HabitStore {
         return true
     }
 
+    /// bt-0021 — dh's sessions / meals for the day, under the entry's own
+    /// `health` key. Sets that key and nothing else: `completionState`,
+    /// `source`, `editedAt` and every details key stay exactly as they are,
+    /// so a "Set by you, 2:14 PM" row keeps saying so. Writes only when the
+    /// snapshot differs from what is stored (nothing for iCloud to carry on
+    /// an ordinary open). Never creates a row. Returns true when it wrote.
+    @discardableResult
+    static func setHealth(for habit: Habit, on date: Date, snapshot: HealthSnapshot?, in context: ModelContext) -> Bool {
+        let dayStart = calendar.startOfDay(for: date)
+        guard let existing = entry(for: habit, on: dayStart) else { return false }
+        let wanted = (snapshot?.isEmpty ?? true) ? nil : snapshot
+        guard existing.health != wanted else { return false }
+        existing.health = wanted
+        save(context)
+        return true
+    }
+
     /// Pure merge: appends `text` to the notes line, sets book / pages on a
     /// reading payload. An empty payload becomes the habit's own kind so
     /// the Log Details sheet shows the fields it expects.

@@ -171,14 +171,28 @@ struct DustinHealthClient: Sendable {
 
     struct FactsResponse: Decodable {
         struct Meals: Decodable {
+            /// One meal (bt-0021). dh sends `null` for a number it doesn't know.
+            struct Item: Decodable {
+                let id: String?
+                let name: String?
+                let calories: Double?
+                let protein: Double?
+                let carbs: Double?
+                let fat: Double?
+                let logged_at: String?
+            }
             let count: Double?
             let calories: Double?
             let protein: Double?
             let names: [String]?
+            let items: [Item]?
         }
         struct Session: Decodable {
             let name: String?
             let minutes: Double?
+            let category: String?
+            let set_count: Int?
+            let started_at: String?
         }
         struct Workouts: Decodable {
             let count: Double?
@@ -370,11 +384,28 @@ enum DustinHealthWire {
                 mealNames: meals?.names ?? [],
                 sessions: (workouts?.sessions ?? []).compactMap { s in
                     guard let name = s.name else { return nil }
-                    return DayFacts.Session(name: name, minutes: s.minutes ?? 0)
+                    return DayFacts.Session(name: name, minutes: s.minutes ?? 0, category: s.category,
+                                            setCount: s.set_count ?? 0, startedAt: timestamp(from: s.started_at))
+                },
+                meals: (meals?.items ?? []).compactMap { m in
+                    guard let name = m.name else { return nil }
+                    return DayFacts.Meal(id: m.id, name: name, calories: m.calories, protein: m.protein,
+                                         carbs: m.carbs, fat: m.fat, loggedAt: timestamp(from: m.logged_at))
                 }
             )
         }
         return result
+    }
+
+    /// dh's timestamps are UTC ISO 8601, with or without fractional seconds
+    /// (`2026-10-27T14:05:22.397+00:00` from the meals, `…T15:17:08+00:00`
+    /// from the sessions). Read as an instant; shown local by the views.
+    static func timestamp(from string: String?) -> Date? {
+        guard let string, !string.isEmpty else { return nil }
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: string) { return date }
+        return ISO8601DateFormatter().date(from: string)
     }
 
     static func actions(_ response: DustinHealthClient.InboxResponse, calendar: Calendar = .current) -> [InboxAction] {

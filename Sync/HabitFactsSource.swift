@@ -27,6 +27,24 @@ struct DayFacts: Sendable, Equatable {
     struct Session: Sendable, Equatable {
         let name: String
         let minutes: Double
+        /// dh's `activity_category` ("walking", "strength", …) — lights a
+        /// type chip (bt-0021). `nil` = not reported.
+        var category: String? = nil
+        /// Sets dh logged for the session (bt-0021). The count only.
+        var setCount: Int = 0
+        var startedAt: Date? = nil
+    }
+
+    /// One meal as dh logged it (bt-0021, dh's `items`). A `nil` number
+    /// means dh doesn't know it — shown as a dash, never as 0.
+    struct Meal: Sendable, Equatable {
+        let id: String?
+        let name: String
+        var calories: Double? = nil
+        var protein: Double? = nil
+        var carbs: Double? = nil
+        var fat: Double? = nil
+        var loggedAt: Date? = nil
     }
 
     /// Start of the local day these facts describe.
@@ -39,6 +57,8 @@ struct DayFacts: Sendable, Equatable {
     var mealNames: [String] = []
     /// Sessions in start order (bt-0019, details on a Workout row).
     var sessions: [Session] = []
+    /// Meals in the order logged (bt-0021, the Diet row's list).
+    var meals: [Meal] = []
 }
 
 // MARK: - Sync (the app → dh, once per run)
@@ -259,10 +279,16 @@ struct FakeHealthFacts: HabitFactsSource {
         var day = calendar.startOfDay(for: from)
         let last = calendar.startOfDay(for: to)
         while day <= last {
+            let breakfast = calendar.date(byAdding: .hour, value: 8, to: day)
+            let start = calendar.date(byAdding: .hour, value: 10, to: day)
             result[day] = DayFacts(day: day, proteinGrams: diet.proteinGrams, calories: diet.calories,
                                    workoutMinutes: minutes,
                                    mealNames: ["Fake meal"],
-                                   sessions: minutes.map { [DayFacts.Session(name: "Fake session", minutes: $0)] } ?? [])
+                                   sessions: minutes.map {
+                                       [DayFacts.Session(name: "Fake session", minutes: $0, category: "walking", setCount: 0, startedAt: start)]
+                                   } ?? [],
+                                   meals: [DayFacts.Meal(id: "fake-meal", name: "Fake meal", calories: diet.calories,
+                                                         protein: diet.proteinGrams, carbs: nil, fat: nil, loggedAt: breakfast)])
             guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
             day = next
         }
