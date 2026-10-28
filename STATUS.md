@@ -29,7 +29,7 @@ Harness facts worth knowing: Xcode 27 has no Simulator.app, the Duo simulator on
 ## Open threads
 
 - **The Journal reloads only on a day tap** (`DayJournalView` loads once per launch and on scene-active). Right after the history rewrite it showed stale "No Entries" until a square was tapped; the same staleness shows after a Today toggle. For the Journal reassessment turn.
-- **Both devices are on the `bt-0020` build** (installed 2026-10-28; the iPad skipped `bt-0021` and went straight to this one).
+- **Both devices are on the `bt-0022` build** (installed 2026-10-28 evening, before the phone pass; the rewrite has not been run — the Settings row is waiting). Run destination switched back to the Duo simulator afterwards.
 - **A widget tap still waits for the next app open** (`bt-0020` decided, Dustin agreed): the widget process has no key and no sync code; its `lastWidgetUpdate` stamp makes that next open sync past the throttle. Its own bead if the lag annoys him.
 - **A backup restore drops the `health` block** (`BackupManager` round-trips details through the typed enum). Now step 1 of `bt-0022`, since the wipe is gated on a backup.
 - **Only if it itches: iPad taps reaching voice sooner.** Dustin accepted one sender on 2026-10-28; a follow-up would be "the iPad sends ticks only" — not queued.
