@@ -77,10 +77,7 @@ enum HistoryMigration {
                             calendar: Calendar = .current) async throws -> History {
         let facts = try await source.facts(from: dates.importStart, to: dates.importEnd)
         var history = History(facts: facts, steps: [:], stepsAvailable: false)
-        guard readSteps else {
-            history.notes.append("Steps not read on this device.")
-            return history
-        }
+        guard readSteps else { return history }
         guard HealthSteps.isAvailable else {
             history.notes.append("Steps: Health data not available on this device.")
             return history
@@ -198,7 +195,13 @@ enum HistoryMigration {
             }
         }
         if let workout = habits.first(where: isWorkout) {
-            for row in rebuild(for: workout, history: history, dates: dates).rows {
+            for value in rebuild(for: workout, history: history, dates: dates).rows {
+                // Only here does a row become a model object. Setting
+                // `habit:` on an attached habit auto-inserts the entry, so
+                // the plan above must never build one (see `ImportRow`).
+                let row = HabitEntry(date: value.day, completionState: value.grade, details: value.details,
+                                     habit: workout, source: .auto, editedAt: Date())
+                row.health = value.health
                 context.insert(row)
             }
         }
@@ -209,13 +212,25 @@ enum HistoryMigration {
 
     // MARK: - Pieces
 
+    /// One rebuilt Workout day as plain values. The plan is shown before
+    /// anything is confirmed, so it must not touch the store: a `HabitEntry`
+    /// given an attached `habit` is inserted into that habit's context at
+    /// once (pending until the next save — of anything). Found on the Duo
+    /// simulator: the preview alone put 87 rows into the live context.
+    struct ImportRow: Equatable {
+        let day: Date
+        let grade: CompletionState
+        let details: HabitEntryDetails?
+        let health: HealthSnapshot?
+    }
+
     /// The Workout rows the span becomes: one per day with at least one
     /// session, graded by the same rule the sync uses, carrying dh's
     /// sessions and the day's steps. Meals on those days are ignored.
     static func rebuild(for workout: Habit, history: History?, dates: Dates, calendar: Calendar = .current)
-        -> (rows: [HabitEntry], summary: Rebuild) {
+        -> (rows: [ImportRow], summary: Rebuild) {
         guard let history else { return ([], Rebuild()) }
-        var rows: [HabitEntry] = []
+        var rows: [ImportRow] = []
         var summary = Rebuild()
         let targets = workout.gradingTargets
         for (day, facts) in history.facts.sorted(by: { $0.key < $1.key }) {
@@ -225,11 +240,9 @@ enum HistoryMigration {
             // Minutes are known (there is a session), so the rule always answers.
             let grade = WorkoutGrade.state(minutes: facts.workoutMinutes ?? facts.sessions.reduce(0) { $0 + $1.minutes },
                                            steps: steps, targets: targets) ?? .failure
-            let row = HabitEntry(date: dayStart, completionState: grade,
-                                 details: HabitSyncEngine.autoDetails(for: workout, facts: facts, existing: nil),
-                                 habit: workout, source: .auto, editedAt: Date())
-            row.health = HabitSyncEngine.snapshot(kind: .workout, facts: facts, steps: steps)
-            rows.append(row)
+            rows.append(ImportRow(day: dayStart, grade: grade,
+                                  details: HabitSyncEngine.autoDetails(for: workout, facts: facts, existing: nil),
+                                  health: HabitSyncEngine.snapshot(kind: .workout, facts: facts, steps: steps)))
             summary.sessions += facts.sessions.count
             summary.days += 1
             switch grade {

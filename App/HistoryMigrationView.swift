@@ -248,8 +248,15 @@ struct HistoryMigrationView: View {
 
     private func confirmMessage(_ plan: HistoryMigration.Plan) -> String {
         var parts = ["Delete \(plan.deletedRows) rows before Oct 27."]
-        if plan.keptRows > 0 { parts.append("Keep \(plan.keptRows) Poison rows and \(plan.notesBefore) notes.") }
-        if let r = plan.rebuilt { parts.append("Rebuild Workout: \(r.days) days from \(r.sessions) sessions.") }
+        let keptNames = plan.lines.filter { $0.action == .kept }.map(\.name)
+        var kept: [String] = []
+        if plan.keptRows > 0 { kept.append("\(plan.keptRows) \(keptNames.joined(separator: " / ")) rows") }
+        kept.append("\(plan.notesBefore) notes")
+        parts.append("Keep " + kept.joined(separator: " and ") + ".")
+        if let r = plan.rebuilt {
+            let name = plan.lines.first { if case .rebuilt = $0.action { return true } else { return false } }?.name ?? "Workout"
+            parts.append("Rebuild \(name): \(r.days) days from \(r.sessions) sessions.")
+        }
         parts.append("This can't be undone in the app.")
         return parts.joined(separator: " ")
     }

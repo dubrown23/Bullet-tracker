@@ -840,7 +840,8 @@ struct SyncEngineStep3Tests {
                                         .init(name: "Workout B — Full Body", minutes: 23, category: "strength", setCount: 13)])
         let details = HabitSyncEngine.autoDetails(for: workout, facts: facts,
                                                   existing: .workout(types: ["Incline walk", "Core/Pre-Hab"], duration: "", intensity: 4, notes: "knee"))
-        #expect(details == .workout(types: ["Core/Pre-Hab", "Cardio", "Strength"], duration: "89 min", intensity: 4, notes: "knee"))
+        // bt-0022 — the bare number; the Journal adds " min" itself.
+        #expect(details == .workout(types: ["Core/Pre-Hab", "Cardio", "Strength"], duration: "89", intensity: 4, notes: "knee"))
         #expect(HabitSyncEngine.autoDetails(for: workout, facts: DayFacts(day: today, proteinGrams: nil, calories: nil, workoutMinutes: 0), existing: nil) == nil)
         let diet = Habit(name: "Diet", completionStyle: .multiState)
         #expect(HabitSyncEngine.autoDetails(for: diet, facts: facts, existing: nil) == nil)
@@ -1117,6 +1118,12 @@ struct HistoryMigrationTests {
         #expect(plan.lines[3].action == .rebuilt(.init(sessions: 4, days: 3, done: 1, partial: 1, tried: 1)))
         #expect(plan.notesBefore == 1 && plan.deletedRows == 12 && plan.keptRows == 3 && !plan.workoutMissing)
         #expect(!HistoryMigration.isDone)
+        // The plan is a preview: nothing pending in the store, same row counts
+        // on a second look. (Found on the simulator: building entries with
+        // `habit:` inside the plan auto-inserted 87 rows into the live context.)
+        #expect(!context.hasChanges)
+        #expect(HistoryMigration.rowsBefore(cutoff: dates.cutoff, habitID: workout.id!, in: context).count == 3)
+        #expect(HistoryMigration.plan(habits: all, history: history, dates: dates, in: context) == plan)
 
         try HistoryMigration.perform(habits: all, history: history, dates: dates, in: context)
         #expect(HistoryMigration.isDone)
@@ -1144,7 +1151,7 @@ struct HistoryMigrationTests {
         #expect(first.sessions.first?.activeKcal == 300 && first.sessions.first?.activityType == "Indoor Walk")
         #expect(w[2].health?.sessions.count == 2 && w[2].health?.steps == 2_000)
         if case .workout(let types, let duration, _, _)? = w[0].details {
-            #expect(types.contains("Cardio") && duration == "45 min")
+            #expect(types.contains("Cardio") && duration == "45")
         } else {
             Issue.record("the rebuilt row should carry workout details")
         }

@@ -750,8 +750,12 @@ final class HabitSyncEngine {
                 types.append(chip)
             }
         }
+        // The bare number, like a hand entry ("45"): every reader — the
+        // Journal row, the text and PDF exports, the Log Details chips —
+        // adds the unit itself. bt-0021 stored "45 min" and the Journal
+        // read "45 min min" (found in the bt-0022 simulator pass).
         let minutes = facts.workoutMinutes ?? facts.sessions.reduce(0) { $0 + $1.minutes }
-        return .workout(types: types, duration: minutes > 0 ? "\(Int(minutes)) min" : "", intensity: intensity, notes: notes)
+        return .workout(types: types, duration: minutes > 0 ? "\(Int(minutes))" : "", intensity: intensity, notes: notes)
     }
 
     /// bt-0021 — what goes under the row's `health` key for this habit's
