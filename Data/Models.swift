@@ -122,10 +122,14 @@ enum TargetKey: String, CaseIterable, Sendable, Codable {
     case caloriesMax = "calories_max"
     case workoutMinutesMin = "workout_minutes_min"
     case stepsMin = "steps_min"
+    /// bt-0022 — carbs / fat ceilings in grams (dh `b7d3b5c`). They colour
+    /// the Dashboard rings only; `DietGrade` never reads them.
+    case carbsMaxGrams = "carbs_g"
+    case fatMaxGrams = "fat_g"
 
     var gradingKind: GradingKind {
         switch self {
-        case .proteinMinGrams, .caloriesMin, .caloriesMax: return .diet
+        case .proteinMinGrams, .caloriesMin, .caloriesMax, .carbsMaxGrams, .fatMaxGrams: return .diet
         case .workoutMinutesMin, .stepsMin: return .workout
         }
     }
@@ -137,6 +141,8 @@ enum TargetKey: String, CaseIterable, Sendable, Codable {
         case .caloriesMax: return "calorie ceiling"
         case .workoutMinutesMin: return "workout minutes"
         case .stepsMin: return "steps target"
+        case .carbsMaxGrams: return "carbs ceiling"
+        case .fatMaxGrams: return "fat ceiling"
         }
     }
 }
@@ -242,6 +248,13 @@ struct HealthSnapshot: Codable, Equatable, Sendable {
         var minutes: Double
         var sets: Int
         var start: Date?
+        /// bt-0022 — Watch active calories over the session's linked records;
+        /// `nil` = dh doesn't know (a dash, never 0).
+        var activeKcal: Double? = nil
+        /// bt-0022 — Apple's activity name on the primary Watch record
+        /// ("Indoor Run", "Running", "Hockey"). Names differ by source, so
+        /// anything that lights a chip from this maps by name, never exactly.
+        var activityType: String? = nil
     }
 
     struct Meal: Codable, Equatable, Sendable {
@@ -257,12 +270,20 @@ struct HealthSnapshot: Codable, Equatable, Sendable {
 
     var sessions: [Session] = []
     var meals: [Meal] = []
+    /// bt-0022 — the day's step count from Apple Health, stored on the
+    /// Workout row by the sync so the Dashboard (and the iPad, which has no
+    /// HealthKit) can show it. `nil` = not read that run. A missing key in
+    /// an older stored row decodes as `nil`.
+    var steps: Int? = nil
 
-    var isEmpty: Bool { sessions.isEmpty && meals.isEmpty }
+    var isEmpty: Bool { sessions.isEmpty && meals.isEmpty && steps == nil }
 
     var totalMinutes: Double { sessions.reduce(0) { $0 + $1.minutes } }
+    var totalActiveKcal: Double? { Self.sum(sessions.map(\.activeKcal)) }
     var totalCalories: Double? { Self.sum(meals.map(\.calories)) }
     var totalProtein: Double? { Self.sum(meals.map(\.protein)) }
+    var totalCarbs: Double? { Self.sum(meals.map(\.carbs)) }
+    var totalFat: Double? { Self.sum(meals.map(\.fat)) }
 
     /// Sum of the known values; `nil` when none is known (dh's SQL `sum`
     /// skips nulls the same way).
@@ -318,6 +339,10 @@ final class Habit {
     var targetCalorieHigh: Double?
     var targetWorkoutMinutes: Double?
     var targetSteps: Double?
+    /// bt-0022 — carbs / fat ceilings (grams) for the Dashboard rings. Sent
+    /// to dh like the five above; not part of any grade. Additive, optional.
+    var targetCarbsGrams: Double?
+    var targetFatGrams: Double?
 
     @Relationship(deleteRule: .cascade, inverse: \HabitEntry.habit)
     var entries: [HabitEntry]?
@@ -595,13 +620,19 @@ struct GradingTargets: Equatable, Sendable {
     var calorieCeiling: Double
     var workoutMinutes: Double
     var steps: Double
+    /// bt-0022 — ring ceilings only (the dh website's fixed 180 / 65).
+    /// Defaulted here so existing call sites don't name them.
+    var carbsCeilingGrams: Double = 180
+    var fatCeilingGrams: Double = 65
 
     static let defaults = GradingTargets(
         proteinFloorGrams: 180,
         calorieFloor: 1900,
         calorieCeiling: 2200,
         workoutMinutes: 30,
-        steps: 10_000
+        steps: 10_000,
+        carbsCeilingGrams: 180,
+        fatCeilingGrams: 65
     )
 }
 
@@ -625,8 +656,8 @@ extension Habit {
     /// Whether Rest may be set on this habit (Workout only, by design).
     var offersRest: Bool { gradingKind == .workout }
 
-    /// bt-0019 — the five wire targets, read from and written to the five
-    /// optional columns. `nil` = blank = built-in default.
+    /// bt-0019 — the wire targets, read from and written to the optional
+    /// columns. `nil` = blank = built-in default. (Seven since bt-0022.)
     func target(for key: TargetKey) -> Double? {
         switch key {
         case .proteinMinGrams: return targetProteinGrams
@@ -634,6 +665,8 @@ extension Habit {
         case .caloriesMax: return targetCalorieHigh
         case .workoutMinutesMin: return targetWorkoutMinutes
         case .stepsMin: return targetSteps
+        case .carbsMaxGrams: return targetCarbsGrams
+        case .fatMaxGrams: return targetFatGrams
         }
     }
 
@@ -644,6 +677,8 @@ extension Habit {
         case .caloriesMax: targetCalorieHigh = value
         case .workoutMinutesMin: targetWorkoutMinutes = value
         case .stepsMin: targetSteps = value
+        case .carbsMaxGrams: targetCarbsGrams = value
+        case .fatMaxGrams: targetFatGrams = value
         }
     }
 
@@ -655,7 +690,9 @@ extension Habit {
             calorieFloor: targetCalorieLow ?? d.calorieFloor,
             calorieCeiling: targetCalorieHigh ?? d.calorieCeiling,
             workoutMinutes: targetWorkoutMinutes ?? d.workoutMinutes,
-            steps: targetSteps ?? d.steps
+            steps: targetSteps ?? d.steps,
+            carbsCeilingGrams: targetCarbsGrams ?? d.carbsCeilingGrams,
+            fatCeilingGrams: targetFatGrams ?? d.fatCeilingGrams
         )
     }
 }

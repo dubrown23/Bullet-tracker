@@ -31,7 +31,9 @@ struct AddHabitView: View {
                     targetCalorieLow: $viewModel.targetCalorieLow,
                     targetCalorieHigh: $viewModel.targetCalorieHigh,
                     targetWorkoutMinutes: $viewModel.targetWorkoutMinutes,
-                    targetSteps: $viewModel.targetSteps
+                    targetSteps: $viewModel.targetSteps,
+                    targetCarbsGrams: $viewModel.targetCarbsGrams,
+                    targetFatGrams: $viewModel.targetFatGrams
                 )
             }
             .navigationTitle("New Habit")

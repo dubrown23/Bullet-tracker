@@ -558,7 +558,7 @@ final class HabitSyncEngine {
                 let steps = Self.isGradingDevice ? stepsByDay[day] : nil
                 let isToday = day == today
                 let grade = Self.grade(kind: kind, targets: habit.gradingTargets, facts: facts, steps: steps, isToday: isToday)
-                let snapshot = Self.snapshot(kind: kind, facts: facts)
+                let snapshot = Self.snapshot(kind: kind, facts: facts, steps: steps)
 
                 if isToday {
                     newLive[habitID] = LiveFacts(proteinGrams: facts?.proteinGrams, calories: facts?.calories,
@@ -665,6 +665,8 @@ final class HabitSyncEngine {
                     case .caloriesMax: targets[key] = t.calorieCeiling
                     case .workoutMinutesMin: targets[key] = t.workoutMinutes
                     case .stepsMin: targets[key] = t.steps
+                    case .carbsMaxGrams: targets[key] = t.carbsCeilingGrams
+                    case .fatMaxGrams: targets[key] = t.fatCeilingGrams
                     }
                 }
             }
@@ -756,16 +758,20 @@ final class HabitSyncEngine {
     /// kind: the sessions on a Workout habit, the meals on a Diet habit.
     /// `nil` when dh has nothing for the day (the key is then removed).
     /// Dates are cut to whole seconds so the stored copy compares equal.
-    static func snapshot(kind: GradingKind, facts: DayFacts?) -> HealthSnapshot? {
-        guard let facts else { return nil }
+    /// bt-0022 — the day's steps ride on the Workout snapshot, so a day
+    /// with no session but a step count still gets a block.
+    static func snapshot(kind: GradingKind, facts: DayFacts?, steps: Int? = nil) -> HealthSnapshot? {
         switch kind {
         case .workout:
-            let sessions = facts.sessions.map {
+            let sessions = (facts?.sessions ?? []).map {
                 HealthSnapshot.Session(name: $0.name, category: $0.category, minutes: $0.minutes,
-                                       sets: $0.setCount, start: HealthSnapshot.wholeSecond($0.startedAt))
+                                       sets: $0.setCount, start: HealthSnapshot.wholeSecond($0.startedAt),
+                                       activeKcal: $0.activeKcal, activityType: $0.activityType)
             }
-            return sessions.isEmpty ? nil : HealthSnapshot(sessions: sessions)
+            guard !sessions.isEmpty || steps != nil else { return nil }
+            return HealthSnapshot(sessions: sessions, steps: steps)
         case .diet:
+            guard let facts else { return nil }
             let meals = facts.meals.map {
                 HealthSnapshot.Meal(id: $0.id, name: $0.name, calories: $0.calories, protein: $0.protein,
                                     carbs: $0.carbs, fat: $0.fat, at: HealthSnapshot.wholeSecond($0.loggedAt))

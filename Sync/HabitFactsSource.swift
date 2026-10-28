@@ -33,6 +33,10 @@ struct DayFacts: Sendable, Equatable {
         /// Sets dh logged for the session (bt-0021). The count only.
         var setCount: Int = 0
         var startedAt: Date? = nil
+        /// bt-0022 — Watch active calories; `nil` = dh doesn't know.
+        var activeKcal: Double? = nil
+        /// bt-0022 — Apple's activity name on the primary Watch record.
+        var activityType: String? = nil
     }
 
     /// One meal as dh logged it (bt-0021, dh's `items`). A `nil` number

@@ -175,7 +175,9 @@ class BackupManager {
                 targetCalorieLow: habit.targetCalorieLow,
                 targetCalorieHigh: habit.targetCalorieHigh,
                 targetWorkoutMinutes: habit.targetWorkoutMinutes,
-                targetSteps: habit.targetSteps
+                targetSteps: habit.targetSteps,
+                targetCarbsGrams: habit.targetCarbsGrams,
+                targetFatGrams: habit.targetFatGrams
             )
         }
     }
@@ -305,6 +307,8 @@ class BackupManager {
             habit.targetCalorieHigh = habitData.targetCalorieHigh
             habit.targetWorkoutMinutes = habitData.targetWorkoutMinutes
             habit.targetSteps = habitData.targetSteps
+            habit.targetCarbsGrams = habitData.targetCarbsGrams
+            habit.targetFatGrams = habitData.targetFatGrams
             context.insert(habit)
             habitMap[habitData.id] = habit
         }
@@ -410,6 +414,9 @@ struct HabitData: Codable {
     let targetCalorieHigh: Double?
     let targetWorkoutMinutes: Double?
     let targetSteps: Double?
+    // bt-0022 — ring ceilings; absent in older backups → nil.
+    let targetCarbsGrams: Double?
+    let targetFatGrams: Double?
 
     // Support older backups that don't have all fields
     init(from decoder: Decoder) throws {
@@ -434,11 +441,14 @@ struct HabitData: Codable {
         targetCalorieHigh = try container.decodeIfPresent(Double.self, forKey: .targetCalorieHigh)
         targetWorkoutMinutes = try container.decodeIfPresent(Double.self, forKey: .targetWorkoutMinutes)
         targetSteps = try container.decodeIfPresent(Double.self, forKey: .targetSteps)
+        targetCarbsGrams = try container.decodeIfPresent(Double.self, forKey: .targetCarbsGrams)
+        targetFatGrams = try container.decodeIfPresent(Double.self, forKey: .targetFatGrams)
     }
 
     // Standard initializer for creating backups
     init(id: String, name: String, icon: String, color: String, frequency: String, customDays: String, startDate: Date, notes: String, order: Int, trackDetails: Bool, detailType: String, useMultipleStates: Bool, isNegativeHabit: Bool,
-         gradingKind: String? = nil, gradingSince: Date? = nil, targetProteinGrams: Double? = nil, targetCalorieLow: Double? = nil, targetCalorieHigh: Double? = nil, targetWorkoutMinutes: Double? = nil, targetSteps: Double? = nil) {
+         gradingKind: String? = nil, gradingSince: Date? = nil, targetProteinGrams: Double? = nil, targetCalorieLow: Double? = nil, targetCalorieHigh: Double? = nil, targetWorkoutMinutes: Double? = nil, targetSteps: Double? = nil,
+         targetCarbsGrams: Double? = nil, targetFatGrams: Double? = nil) {
         self.id = id
         self.name = name
         self.icon = icon
@@ -459,6 +469,8 @@ struct HabitData: Codable {
         self.targetCalorieHigh = targetCalorieHigh
         self.targetWorkoutMinutes = targetWorkoutMinutes
         self.targetSteps = targetSteps
+        self.targetCarbsGrams = targetCarbsGrams
+        self.targetFatGrams = targetFatGrams
     }
 }
 

@@ -39,6 +39,8 @@ class HabitFormViewModel {
     var targetCalorieHigh: Double?
     var targetWorkoutMinutes: Double?
     var targetSteps: Double?
+    var targetCarbsGrams: Double?
+    var targetFatGrams: Double?
 
     // MARK: - Private Properties
 
@@ -88,6 +90,8 @@ class HabitFormViewModel {
         targetCalorieHigh = habit.targetCalorieHigh
         targetWorkoutMinutes = habit.targetWorkoutMinutes
         targetSteps = habit.targetSteps
+        targetCarbsGrams = habit.targetCarbsGrams
+        targetFatGrams = habit.targetFatGrams
     }
 
     // MARK: - Save Methods
@@ -139,6 +143,8 @@ class HabitFormViewModel {
         target.targetCalorieHigh = targetCalorieHigh
         target.targetWorkoutMinutes = targetWorkoutMinutes
         target.targetSteps = targetSteps
+        target.targetCarbsGrams = targetCarbsGrams
+        target.targetFatGrams = targetFatGrams
 
         save(context)
     }
@@ -191,6 +197,8 @@ struct EditHabitView: View {
                     targetCalorieHigh: $viewModel.targetCalorieHigh,
                     targetWorkoutMinutes: $viewModel.targetWorkoutMinutes,
                     targetSteps: $viewModel.targetSteps,
+                    targetCarbsGrams: $viewModel.targetCarbsGrams,
+                    targetFatGrams: $viewModel.targetFatGrams,
                     gradingSince: viewModel.gradingSince
                 )
 

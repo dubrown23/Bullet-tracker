@@ -95,6 +95,9 @@ struct HabitFormView: View {
     @Binding var targetCalorieHigh: Double?
     @Binding var targetWorkoutMinutes: Double?
     @Binding var targetSteps: Double?
+    // bt-0022 — ring ceilings for the Dashboard; not part of the grade.
+    @Binding var targetCarbsGrams: Double?
+    @Binding var targetFatGrams: Double?
     /// The habit's current go-live day, for the footer ("since Oct 27").
     var gradingSince: Date? = nil
 
@@ -133,6 +136,8 @@ struct HabitFormView: View {
                 targetRow("Protein at least", value: $targetProteinGrams, unit: "g", placeholder: GradingTargets.defaults.proteinFloorGrams)
                 targetRow("Calories from", value: $targetCalorieLow, unit: "cal", placeholder: GradingTargets.defaults.calorieFloor)
                 targetRow("Calories to", value: $targetCalorieHigh, unit: "cal", placeholder: GradingTargets.defaults.calorieCeiling)
+                targetRow("Carbs up to", value: $targetCarbsGrams, unit: "g", placeholder: GradingTargets.defaults.carbsCeilingGrams)
+                targetRow("Fat up to", value: $targetFatGrams, unit: "g", placeholder: GradingTargets.defaults.fatCeilingGrams)
             case .workout?:
                 targetRow("Workout minutes", value: $targetWorkoutMinutes, unit: "min", placeholder: GradingTargets.defaults.workoutMinutes)
                 targetRow("Steps for partial", value: $targetSteps, unit: "steps", placeholder: GradingTargets.defaults.steps)
@@ -145,6 +150,12 @@ struct HabitFormView: View {
             switch gradingKind {
             case nil:
                 Text("Diet is graded from protein and calories; Workout from minutes and steps. Only the iPhone writes grades.")
+            case .diet?:
+                if let gradingSince {
+                    Text("Grading since \(gradingSince.formatted(.dateTime.month(.abbreviated).day())). Earlier days stay as you set them. Blank = the default shown. Carbs and fat colour the Dashboard rings only; they never change the grade.")
+                } else {
+                    Text("Grading starts today. Earlier days stay as you set them. Blank = the default shown. Carbs and fat colour the Dashboard rings only; they never change the grade.")
+                }
             case .some:
                 if let gradingSince {
                     Text("Grading since \(gradingSince.formatted(.dateTime.month(.abbreviated).day())). Earlier days stay as you set them. Blank = the default shown.")

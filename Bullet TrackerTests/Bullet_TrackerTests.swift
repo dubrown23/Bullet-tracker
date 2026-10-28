@@ -495,7 +495,7 @@ struct DustinHealthWireTests {
           {"day":"2026-10-26","meals":{"count":2,"calories":2050,"protein":190.5,"carbs":100,"fat":60,"names":["Eggs","Chicken"],
              "items":[{"id":"m1","name":"Eggs","calories":450,"protein":30.5,"carbs":2,"fat":30,"logged_at":"2026-10-26T12:05:22.397+00:00"},
                       {"id":"m2","name":"Chicken","calories":null,"protein":160,"carbs":null,"fat":null,"logged_at":"2026-10-26T23:10:00+00:00"}]},
-           "workouts":{"count":1,"minutes":45,"sessions":[{"name":"Incline walk","category":"walking","minutes":45,"set_count":13,"started_at":"2026-10-26T12:00:00+00:00"}]}},
+           "workouts":{"count":1,"minutes":45,"sessions":[{"name":"Incline walk","category":"walking","minutes":45,"set_count":13,"started_at":"2026-10-26T12:00:00+00:00","active_kcal":368.938,"activity_type":"Indoor Walk","activity_code":52}]}},
           {"day":"2026-10-27","meals":{"count":0,"calories":0,"protein":0,"carbs":0,"fat":0,"names":[]},
            "workouts":{"count":0,"minutes":0,"sessions":[]}}
         ]}
@@ -509,7 +509,9 @@ struct DustinHealthWireTests {
         #expect(tracked.mealNames == ["Eggs", "Chicken"])
         // bt-0021 — category, set count and start time ride along.
         let start = try #require(DustinHealthWire.timestamp(from: "2026-10-26T12:00:00+00:00"))
-        #expect(tracked.sessions == [DayFacts.Session(name: "Incline walk", minutes: 45, category: "walking", setCount: 13, startedAt: start)])
+        // bt-0022 — active calories and Apple's activity name too; the code is read but not kept.
+        #expect(tracked.sessions == [DayFacts.Session(name: "Incline walk", minutes: 45, category: "walking", setCount: 13, startedAt: start,
+                                                      activeKcal: 368.938, activityType: "Indoor Walk")])
         // bt-0021 — per-meal items; null is nil (a dash), never 0; fractional seconds parse.
         #expect(tracked.meals.count == 2)
         #expect(tracked.meals[0].name == "Eggs" && tracked.meals[0].calories == 450 && tracked.meals[0].protein == 30.5)
@@ -617,6 +619,12 @@ struct DustinHealthWireTests {
         #expect(habit.target(for: .stepsMin) == nil)
         #expect(TargetKey.proteinMinGrams.gradingKind == .diet)
         #expect(TargetKey.stepsMin.gradingKind == .workout)
+        // bt-0022 — the two ring ceilings belong to Diet and fill from 180 / 65.
+        habit.setTarget(.fatMaxGrams, to: 70)
+        #expect(habit.targetFatGrams == 70 && habit.target(for: .carbsMaxGrams) == nil)
+        #expect(TargetKey.carbsMaxGrams.gradingKind == .diet && TargetKey.fatMaxGrams.rawValue == "fat_g")
+        #expect(habit.gradingTargets.carbsCeilingGrams == 180 && habit.gradingTargets.fatCeilingGrams == 70)
+        #expect(DietGrade.state(proteinGrams: 190, calories: 2000, targets: habit.gradingTargets) == .success) // carbs/fat never grade
         #expect(VoiceGrade.rest.completionState == .rest)
         #expect(VoiceGrade.auto.completionState == nil)
     }
@@ -657,8 +665,34 @@ struct SyncEngineStep3Tests {
         #expect(payload.targets[.proteinMinGrams] == 190)
         #expect(payload.targets[.caloriesMin] == 1900)
         #expect(payload.targets[.stepsMin] == nil)
+        // bt-0022 — carbs / fat go up like the others (defaults when blank).
+        #expect(payload.targets[.carbsMaxGrams] == 180 && payload.targets[.fatMaxGrams] == 65)
         #expect(payload.tickedToday == ["Sauna"])
         #expect(payload.timeZone == "America/New_York")
+    }
+
+    /// bt-0022 — with a Diet and a Workout habit graded, the wire carries
+    /// exactly dh's seven target keys (dh rejects any key it doesn't know,
+    /// `api/bullet.js:59`, and fails the whole sync).
+    @Test func targetsOnTheWireAreExactlyTheSevenKeysDhAccepts() throws {
+        let context = try makeContext()
+        let today = Calendar.current.startOfDay(for: Date())
+        let diet = Habit(name: "Diet", order: 0, completionStyle: .multiState)
+        diet.gradingKind = .diet
+        diet.gradingSince = today
+        diet.targetCarbsGrams = 150
+        let workout = Habit(name: "Workout", order: 1, completionStyle: .multiState)
+        workout.gradingKind = .workout
+        workout.gradingSince = today
+        for h in [diet, workout] { context.insert(h) }
+        try context.save()
+
+        let payload = HabitSyncEngine.payload(habits: [diet, workout], today: today, timeZone: "America/New_York")
+        let data = try JSONEncoder().encode(DustinHealthWire.syncRequest(payload))
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let targets = try #require(object["targets"] as? [String: Double])
+        #expect(Set(targets.keys) == ["protein_min_g", "calories_min", "calories_max", "workout_minutes_min", "steps_min", "carbs_g", "fat_g"])
+        #expect(targets["carbs_g"] == 150 && targets["fat_g"] == 65)
     }
 
     @Test func daysToGradeAddChangedDaysOnOrAfterGoLiveOnly() {
@@ -873,7 +907,7 @@ struct HealthSnapshotTests {
                              sessions: [.init(name: "Workout B — Full Body", minutes: 23, category: "strength", setCount: 13, startedAt: logged)],
                              meals: [.init(id: "m1", name: "1.5 protein coffees", calories: 168, protein: 30, carbs: nil, fat: nil, loggedAt: logged)])
         let diet = HabitSyncEngine.snapshot(kind: .diet, facts: facts)
-        let workout = HabitSyncEngine.snapshot(kind: .workout, facts: facts)
+        let workout = HabitSyncEngine.snapshot(kind: .workout, facts: facts, steps: 8_412)
         let entry = HabitEntry(date: today, completionState: .success)
         entry.health = diet
         #expect(entry.health == diet)
@@ -881,8 +915,19 @@ struct HealthSnapshotTests {
         entry.health = workout
         #expect(entry.health == workout)
         #expect(entry.health?.sessions.first?.sets == 13)
+        // bt-0022 — steps ride on the Workout block and survive the round trip;
+        // a day with steps but no session still gets a block; the Diet block never carries steps.
+        #expect(entry.health?.steps == 8_412)
+        #expect(diet?.steps == nil)
+        let stepsOnly = HabitSyncEngine.snapshot(kind: .workout, facts: DayFacts(day: today, proteinGrams: nil, calories: nil), steps: 3_000)
+        #expect(stepsOnly == HealthSnapshot(sessions: [], steps: 3_000) && stepsOnly?.isEmpty == false)
         #expect(HabitSyncEngine.snapshot(kind: .diet, facts: DayFacts(day: today, proteinGrams: nil, calories: nil)) == nil)
         #expect(HabitSyncEngine.snapshot(kind: .workout, facts: nil) == nil)
+        #expect(HabitSyncEngine.snapshot(kind: .workout, facts: nil, steps: 500)?.steps == 500)
+        // A block stored before bt-0022 has no `steps` key and still decodes.
+        let old = HabitEntry(date: today, completionState: .success)
+        old.detailsJSON = #"{"health":{"meals":[],"sessions":[{"minutes":66,"name":"Walk","sets":0}]}}"#
+        #expect(old.health?.steps == nil && old.health?.sessions.first?.activeKcal == nil && old.health?.totalMinutes == 66)
     }
 
     /// Dustin's test: a hand-set row keeps its source and edit time after a

@@ -193,6 +193,12 @@ struct DustinHealthClient: Sendable {
             let category: String?
             let set_count: Int?
             let started_at: String?
+            // bt-0022 (dh b7d3b5c). `activity_code` is decoded so an
+            // unknown shape never fails the row, but not used: it is on
+            // only 24 of 141 sessions since Aug 1.
+            let active_kcal: Double?
+            let activity_type: String?
+            let activity_code: Int?
         }
         struct Workouts: Decodable {
             let count: Double?
@@ -385,7 +391,8 @@ enum DustinHealthWire {
                 sessions: (workouts?.sessions ?? []).compactMap { s in
                     guard let name = s.name else { return nil }
                     return DayFacts.Session(name: name, minutes: s.minutes ?? 0, category: s.category,
-                                            setCount: s.set_count ?? 0, startedAt: timestamp(from: s.started_at))
+                                            setCount: s.set_count ?? 0, startedAt: timestamp(from: s.started_at),
+                                            activeKcal: s.active_kcal, activityType: s.activity_type)
                 },
                 meals: (meals?.items ?? []).compactMap { m in
                     guard let name = m.name else { return nil }
