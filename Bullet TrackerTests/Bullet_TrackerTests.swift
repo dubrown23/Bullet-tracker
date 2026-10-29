@@ -1156,7 +1156,8 @@ struct HistoryMigrationTests {
         UserDefaults.standard.removeObject(forKey: HistoryMigration.doneKey)
         defer { UserDefaults.standard.removeObject(forKey: HistoryMigration.doneKey) }
 
-        let poison = Habit(name: "Poison", order: 0, completionStyle: .avoidance)
+        // Poison is a simple habit (dh: kind = simple), not avoidance — bt-0024 corrected the fixture.
+        let poison = Habit(name: "Poison", order: 0, completionStyle: .simple)
         let weed = Habit(name: "Weed", order: 1, completionStyle: .avoidance)
         let diet = Habit(name: "Diet", order: 2, completionStyle: .multiState)
         diet.gradingKind = .diet
