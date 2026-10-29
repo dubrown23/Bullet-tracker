@@ -49,6 +49,19 @@ class TodayViewModel {
         habits.filter { HabitFrequencyHelper.shouldTrack($0, on: selectedDate) }
     }
 
+    // bt-0026 — the Today list is two sections: the habits you do, then the
+    // ones you avoid ("Avoiding"), each in display order. An avoidance row's
+    // control means the opposite thing (tap = slipped), so it gets its own
+    // section instead of hiding among the others.
+
+    func positiveHabits(from habits: [Habit]) -> [Habit] {
+        trackableHabits(from: habits).filter { $0.completionStyle != .avoidance }
+    }
+
+    func avoidanceHabits(from habits: [Habit]) -> [Habit] {
+        trackableHabits(from: habits).filter { $0.completionStyle == .avoidance }
+    }
+
     // MARK: - Day Summary (bt-0014)
     //
     // The wording lives on `DaySummary` (`Data/Models.swift`), shared with the
@@ -76,8 +89,17 @@ class TodayViewModel {
                           avoidanceTotal: avoidanceTotal, slips: slips)
     }
 
+    /// bt-0026 — the subtitle counts the habits you do; slips are said by the
+    /// Avoiding section. Nothing when only avoidance habits are scheduled.
     func summaryText(from habits: [Habit]) -> String {
-        summary(from: habits).text(emptyText: "No habits scheduled")
+        let summary = summary(from: habits)
+        if summary.positiveTotal == 0 && summary.avoidanceTotal > 0 { return "" }
+        return summary.positiveText(emptyText: "No habits scheduled")
+    }
+
+    /// bt-0026 — the Avoiding section's trailer: "1 slipped", or nothing.
+    func avoidingTrailerText(from habits: [Habit]) -> String? {
+        summary(from: habits).slipsText
     }
 
     /// True when the header should read as a warning (someone slipped today).
@@ -85,11 +107,17 @@ class TodayViewModel {
         summary(from: habits).slips > 0
     }
 
+    /// The row's flame. bt-0026 — the same rule as the Dashboard: counted
+    /// from yesterday while today is still open, never back past the
+    /// habit's clean start, so the two agree at breakfast.
     func currentStreak(for habit: Habit) -> Int {
         let today = calendar.startOfDay(for: Date())
         guard let yearAgo = calendar.date(byAdding: .day, value: -365, to: today) else { return 0 }
         let entries = HabitStore.entriesByDay(for: habit, from: yearAgo, to: today)
-        return calculationService.calculateCurrentStreak(for: habit, using: entries)
+        return calculationService.calculateCurrentStreak(
+            for: habit, using: entries,
+            allowingOpenToday: true, floor: HistoryMigration.cleanStart(for: habit)
+        )
     }
 
     // MARK: - Day Navigation

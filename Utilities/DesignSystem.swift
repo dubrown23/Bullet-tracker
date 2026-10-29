@@ -11,8 +11,12 @@
 //                   destructive tint.
 //  • Shape        — `AppShape`: continuous corners at 22% of the element size.
 //  • Icon tile    — `HabitIconTile`: an SF Symbol on a tint of its habit colour.
-//  • Seven days   — `DaySquare` + `WeekdayLetterStrip`, shared by the Today
-//                   grid and the Journal date strip.
+//  • Seven days   — `DaySquare` + `WeekdayLetterStrip`: the Journal and
+//                   Dashboard date strips.
+//  • One day      — `DayMark` (what happened, in palette colours only),
+//                   `DayControl` (the round mark-it control) and `DayDot`
+//                   / `DayDotStrip` (quiet history). The Today row (bt-0026);
+//                   the shared style the Journal and Dashboard adopt later.
 //  • Labels       — `.sectionLabel()`: the grouped-list header look (footnote,
 //                   uppercase, secondary) for column/day labels.
 //
@@ -92,6 +96,116 @@ struct DaySquare<Content: View>: View {
             content()
         }
         .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Day mark (bt-0026)
+
+/// What happened on a day, reduced to the five things the palette can say.
+/// Palette colours only: a win is green whatever the habit's colour, so a
+/// red habit's done day never looks like a slip. The habit's colour stays
+/// on its glyph.
+enum DayMark: Equatable {
+    case empty
+    case done
+    case partial
+    /// A multi-state "Tried" or an avoidance slip.
+    case missed
+    case rest
+
+    /// An entry's state → a mark. For an avoidance habit anything logged
+    /// is a slip (`bt-0024`: only slips get marked).
+    init(state: CompletionState?, isAvoidance: Bool) {
+        guard let state, state != .notDone else { self = .empty; return }
+        if isAvoidance { self = .missed; return }
+        switch state {
+        case .success: self = .done
+        case .partial: self = .partial
+        case .failure: self = .missed
+        case .rest: self = .rest
+        case .notDone: self = .empty
+        }
+    }
+
+    /// `nil` for an empty day — callers pick their own grey.
+    var color: Color? {
+        switch self {
+        case .empty: return nil
+        case .done: return AppTheme.success
+        case .partial: return AppTheme.partial
+        case .missed: return AppTheme.failed
+        case .rest: return AppTheme.rest
+        }
+    }
+
+    /// The round control's symbol. An avoidance habit's empty state is a
+    /// slashed circle, so the tap that means "I slipped" doesn't look like
+    /// the tap that means "done".
+    func controlSymbol(isAvoidance: Bool) -> String {
+        switch self {
+        case .empty: return isAvoidance ? "circle.slash" : "circle"
+        case .done, .partial: return "checkmark.circle.fill"
+        case .missed: return "xmark.circle.fill"
+        case .rest: return "moon.circle.fill"
+        }
+    }
+
+    /// Spoken state for VoiceOver.
+    func spokenText(isAvoidance: Bool) -> String {
+        switch self {
+        case .empty: return isAvoidance ? "Clean so far" : "Not done"
+        case .done: return "Done"
+        case .partial: return "Partial"
+        case .missed: return isAvoidance ? "Slipped" : "Tried"
+        case .rest: return "Rest day"
+        }
+    }
+}
+
+/// The one control on a Today row: a round mark like Reminders'. Draws the
+/// selected day's state; the caller wraps it in a 44 pt button. The symbol
+/// swaps in place and bounces when `changeTick` moves.
+struct DayControl: View {
+    let mark: DayMark
+    let isAvoidance: Bool
+    var changeTick: Int = 0
+
+    var body: some View {
+        Image(systemName: mark.controlSymbol(isAvoidance: isAvoidance))
+            .font(.title2)
+            .foregroundStyle(mark.color ?? Color(.systemGray3))
+            .contentTransition(.symbolEffect(.replace))
+            .symbolEffect(.bounce, value: changeTick)
+    }
+}
+
+/// One quiet dot of history. Display only — too small to be a tap target.
+struct DayDot: View {
+    let mark: DayMark
+    var size: CGFloat = 8
+
+    var body: some View {
+        Circle()
+            .fill(mark.color ?? Color(.systemGray4))
+            .frame(width: size, height: size)
+    }
+}
+
+/// A row of `DayDot`s in fixed-width slots, oldest first, so the dots line
+/// up in straight columns from row to row.
+struct DayDotStrip: View {
+    let marks: [DayMark]
+    static let slotWidth: CGFloat = 14
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
+                DayDot(mark: mark)
+                    .frame(width: Self.slotWidth)
+            }
+        }
+        .fixedSize()
+        .accessibilityHidden(true) // the row speaks the six days as one value
     }
 }
 

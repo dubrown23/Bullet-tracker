@@ -219,7 +219,23 @@ struct DaySummary: Equatable {
     let avoidanceTotal: Int
     let slips: Int
 
-    /// The Today subtitle and the widget header, one wording.
+    /// bt-0026 — the Today subtitle: positive habits only ("3 of 3 done" /
+    /// "All 3 done"); slips are said by the Avoiding section's own trailer.
+    /// `emptyText` when nothing positive is scheduled.
+    func positiveText(emptyText: String) -> String {
+        guard positiveTotal > 0 else { return emptyText }
+        return positiveDone == positiveTotal
+            ? "All \(positiveTotal) done"
+            : "\(positiveDone) of \(positiveTotal) done"
+    }
+
+    /// bt-0026 — the Avoiding section's trailer: slips only, nothing when
+    /// there are none. Never "clean" (`bt-0024`: only slips get marked).
+    var slipsText: String? {
+        slips > 0 ? "\(slips) slipped" : nil
+    }
+
+    /// The widget header (and the old one-line Today subtitle), one wording.
     /// `emptyText` is what to say when nothing is scheduled at all.
     func text(emptyText: String) -> String {
         if positiveTotal == 0 && avoidanceTotal == 0 { return emptyText }

@@ -392,6 +392,105 @@ struct AvoidanceScoringTests {
     }
 }
 
+// MARK: - Today row (bt-0026)
+
+/// The Reminders-style row: one round control, six quiet dots, two sections.
+struct TodayRowTests {
+    private let calendar = Calendar.current
+
+    private func day(_ offset: Int) -> Date {
+        calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: Date()))!
+    }
+
+    /// The subtitle counts the habits you do; the Avoiding trailer says
+    /// slips only and never "clean".
+    @Test func subtitleIsPositiveOnlyAndTrailerIsSlipsOnly() {
+        let threeOfFour = DaySummary(positiveDone: 3, positiveTotal: 4, avoidanceTotal: 2, slips: 1)
+        #expect(threeOfFour.positiveText(emptyText: "-") == "3 of 4 done")
+        #expect(threeOfFour.slipsText == "1 slipped")
+        let allClean = DaySummary(positiveDone: 4, positiveTotal: 4, avoidanceTotal: 2, slips: 0)
+        #expect(allClean.positiveText(emptyText: "-") == "All 4 done")
+        #expect(allClean.slipsText == nil, "A clean day says nothing — only slips get marked")
+        #expect(DaySummary(positiveDone: 0, positiveTotal: 0, avoidanceTotal: 2, slips: 2).slipsText == "2 slipped")
+        #expect(DaySummary(positiveDone: 0, positiveTotal: 0, avoidanceTotal: 0, slips: 0).positiveText(emptyText: "-") == "-")
+    }
+
+    /// A day's state → palette colour and control symbol, never the habit's colour.
+    @Test func dayMarkUsesPaletteColoursAndTheRightSymbol() {
+        #expect(DayMark(state: nil, isAvoidance: false) == .empty)
+        #expect(DayMark(state: .notDone, isAvoidance: false) == .empty)
+        #expect(DayMark(state: .success, isAvoidance: false) == .done)
+        #expect(DayMark(state: .partial, isAvoidance: false) == .partial)
+        #expect(DayMark(state: .failure, isAvoidance: false) == .missed)
+        #expect(DayMark(state: .rest, isAvoidance: false) == .rest)
+        // Avoidance: anything logged is a slip (bt-0024).
+        #expect(DayMark(state: .failure, isAvoidance: true) == .missed)
+        #expect(DayMark(state: .success, isAvoidance: true) == .missed)
+        #expect(DayMark(state: nil, isAvoidance: true) == .empty)
+
+        #expect(DayMark.empty.color == nil)
+        #expect(DayMark.done.color == AppTheme.success)
+        #expect(DayMark.partial.color == AppTheme.partial)
+        #expect(DayMark.missed.color == AppTheme.failed)
+        #expect(DayMark.rest.color == AppTheme.rest)
+
+        #expect(DayMark.empty.controlSymbol(isAvoidance: false) == "circle")
+        #expect(DayMark.empty.controlSymbol(isAvoidance: true) == "circle.slash", "An avoidance habit's empty control must not invite a 'done' tap")
+        #expect(DayMark.done.controlSymbol(isAvoidance: false) == "checkmark.circle.fill")
+        #expect(DayMark.partial.controlSymbol(isAvoidance: false) == "checkmark.circle.fill")
+        #expect(DayMark.missed.controlSymbol(isAvoidance: true) == "xmark.circle.fill")
+        #expect(DayMark.rest.controlSymbol(isAvoidance: false) == "moon.circle.fill")
+
+        #expect(DayMark.empty.spokenText(isAvoidance: true) == "Clean so far")
+        #expect(DayMark.missed.spokenText(isAvoidance: true) == "Slipped")
+        #expect(DayMark.missed.spokenText(isAvoidance: false) == "Tried")
+    }
+
+    /// The dots are the six days before the selected day, oldest first; the
+    /// selected day itself is the control, not a dot.
+    @Test func dotWindowIsTheSixDaysBeforeTheSelectedDay() {
+        let forToday = WeekGridMetrics.previousDays(before: day(0), calendar: calendar)
+        #expect(forToday.count == 6)
+        #expect(forToday.first == day(-6))
+        #expect(forToday.last == day(-1))
+        #expect(!forToday.contains(day(0)))
+        // Stepping back three days moves the whole window with it.
+        let forPast = WeekGridMetrics.previousDays(before: day(-3), calendar: calendar)
+        #expect(forPast == [day(-9), day(-8), day(-7), day(-6), day(-5), day(-4)])
+    }
+
+    /// The list is two sections — the habits you do, then Avoiding — each in
+    /// display order.
+    @Test @MainActor func sectionsSplitAvoidanceAndKeepOrder() {
+        let diet = Habit(name: "Diet", frequency: "daily", completionStyle: .simple)
+        let weed = Habit(name: "Weed", frequency: "daily", completionStyle: .avoidance)
+        let reading = Habit(name: "Reading", frequency: "daily", completionStyle: .multiState)
+        let alcohol = Habit(name: "Alcohol", frequency: "daily", completionStyle: .avoidance)
+        let viewModel = TodayViewModel()
+        let all = [diet, weed, reading, alcohol]
+        #expect(viewModel.positiveHabits(from: all).map(\.name) == ["Diet", "Reading"])
+        #expect(viewModel.avoidanceHabits(from: all).map(\.name) == ["Weed", "Alcohol"])
+    }
+
+    /// A past day's caption numbers come from the stored `health` block, in
+    /// the same words as the engine's live caption.
+    @Test func pastDayCaptionReadsTheStoredHealthBlock() {
+        let diet = Habit(name: "Diet", frequency: "daily", completionStyle: .simple)
+        diet.gradingKind = .diet
+        let meals = HealthSnapshot(meals: [.init(id: "a", name: "A", calories: 1_500, protein: 100),
+                                           .init(id: "b", name: "B", calories: 606, protein: 18.5)])
+        #expect(TodayHabitRowView.numbers(from: meals, habit: diet) == "118 / \(Int(diet.gradingTargets.proteinFloorGrams)) g · 2,106 cal")
+        #expect(TodayHabitRowView.numbers(from: HealthSnapshot(), habit: diet) == nil)
+
+        let workout = Habit(name: "Workout", frequency: "daily", completionStyle: .simple)
+        workout.gradingKind = .workout
+        let session = HealthSnapshot(sessions: [.init(name: "Walk", category: "walking", minutes: 45, sets: 0, start: nil)], steps: 6_120)
+        #expect(TodayHabitRowView.numbers(from: session, habit: workout) == "45 min · 6,120 steps")
+        #expect(TodayHabitRowView.numbers(from: HealthSnapshot(sessions: [], steps: 3_000), habit: workout) == "3,000 steps")
+        #expect(TodayHabitRowView.numbers(from: HealthSnapshot(), habit: workout) == nil)
+    }
+}
+
 // MARK: - Grading rules (bt-0017 / bt-0018)
 
 struct GradingRuleTests {
