@@ -43,6 +43,12 @@ struct HabitDetailDashboardView: View {
         return AppTheme.accent
     }
 
+    /// bt-0024 — avoidance: the page reads as a slip rate, no streaks.
+    private var isSlipScored: Bool {
+        guard let habit else { return false }
+        return HabitWinRule.isSlipScored(style: habit.completionStyle)
+    }
+
     var body: some View {
         Group {
             if let habit = habit {
@@ -67,53 +73,69 @@ struct HabitDetailDashboardView: View {
                         .padding(.vertical, 4)
                     }
 
-                    Section("Statistics") {
-                        LabeledContent("Completion Rate") {
-                            Text("\(viewModel.completionRate)%")
-                                .font(.system(.body, design: .rounded, weight: .bold))
-                        }
-                        LabeledContent("Days Completed") {
-                            Text("\(viewModel.completedDays) of \(viewModel.totalDays)")
-                                .font(.system(.body, design: .rounded))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Section("Streaks") {
-                        Label {
-                            HStack {
-                                Text("Current")
-                                Spacer()
-                                Text("\(viewModel.currentStreak) days")
-                                    .font(.system(.body, design: .rounded, weight: .semibold))
+                    // bt-0024 — an avoidance habit is scored by its slips: a
+                    // slip rate and the slip days, no streaks.
+                    if isSlipScored {
+                        Section("Statistics") {
+                            LabeledContent("Slip Rate") {
+                                Text("\(viewModel.completionRate)% slipped")
+                                    .font(.system(.body, design: .rounded, weight: .bold))
                             }
-                        } icon: {
-                            Image(systemName: "flame.fill")
-                                .foregroundStyle(AppTheme.accent)
-                        }
-
-                        Label {
-                            HStack {
-                                Text("Best")
-                                Spacer()
-                                Text("\(viewModel.bestStreak) days")
-                                    .font(.system(.body, design: .rounded, weight: .semibold))
+                            LabeledContent("Slipped") {
+                                Text("\(viewModel.completedDays) of \(viewModel.totalDays) days")
+                                    .font(.system(.body, design: .rounded))
+                                    .foregroundStyle(.secondary)
                             }
-                        } icon: {
-                            Image(systemName: "trophy.fill")
-                                .foregroundStyle(AppTheme.partial)
+                        }
+                    } else {
+                        Section("Statistics") {
+                            LabeledContent("Completion Rate") {
+                                Text("\(viewModel.completionRate)%")
+                                    .font(.system(.body, design: .rounded, weight: .bold))
+                            }
+                            LabeledContent("Days Completed") {
+                                Text("\(viewModel.completedDays) of \(viewModel.totalDays)")
+                                    .font(.system(.body, design: .rounded))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
 
-                        Label {
-                            HStack {
-                                Text("Total Completions")
-                                Spacer()
-                                Text("\(viewModel.completedDays)")
-                                    .font(.system(.body, design: .rounded, weight: .semibold))
+                        Section("Streaks") {
+                            Label {
+                                HStack {
+                                    Text("Current")
+                                    Spacer()
+                                    Text("\(viewModel.currentStreak) days")
+                                        .font(.system(.body, design: .rounded, weight: .semibold))
+                                }
+                            } icon: {
+                                Image(systemName: "flame.fill")
+                                    .foregroundStyle(AppTheme.accent)
                             }
-                        } icon: {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(AppTheme.success)
+
+                            Label {
+                                HStack {
+                                    Text("Best")
+                                    Spacer()
+                                    Text("\(viewModel.bestStreak) days")
+                                        .font(.system(.body, design: .rounded, weight: .semibold))
+                                }
+                            } icon: {
+                                Image(systemName: "trophy.fill")
+                                    .foregroundStyle(AppTheme.partial)
+                            }
+
+                            Label {
+                                HStack {
+                                    Text("Total Completions")
+                                    Spacer()
+                                    Text("\(viewModel.completedDays)")
+                                        .font(.system(.body, design: .rounded, weight: .semibold))
+                                }
+                            } icon: {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(AppTheme.success)
+                            }
                         }
                     }
 
@@ -174,11 +196,13 @@ struct HabitDetailDashboardView: View {
                             }
                         }
 
-                        // Heatmap
+                        // Heatmap — an avoidance habit's cells are its slips in
+                        // the failed red, clean days grey (bt-0024).
                         ContributionHeatmapView(
                             dates: viewModel.heatmapDates,
                             completionData: viewModel.dailyCompletion,
-                            habitColor: habitColor
+                            habitColor: isSlipScored ? AppTheme.failed : habitColor,
+                            countedDaysWord: isSlipScored ? "slipped" : "completed"
                         )
                         .padding(.vertical, 4)
                     }
@@ -260,6 +284,9 @@ class HabitDetailViewModel {
             for: habit, using: entries, from: heatmapStart, to: endDay
         )
 
+        // Any row lights a cell (pre-existing; bt-0023 puts positive habits
+        // through the win rule). For an avoidance habit a row *is* a slip,
+        // so this already draws exactly the slip days (bt-0024).
         var completion: [Date: Double] = [:]
         for date in dates {
             let dayStart = calendar.startOfDay(for: date)

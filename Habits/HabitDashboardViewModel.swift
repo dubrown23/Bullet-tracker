@@ -49,6 +49,9 @@ struct HabitStatData: Identifiable {
     let completedCount: Int
     let totalDays: Int
     let currentStreak: Int
+    /// bt-0024 — avoidance: `completionRate` is the slip rate (lower is
+    /// better) and `completedCount` the slip days. Read "10% slipped · 3 days".
+    let isSlipRate: Bool
 }
 
 // MARK: - Dashboard View Model
@@ -99,10 +102,16 @@ class HabitDashboardViewModel {
                     completionRate: stat.completionRate,
                     completedCount: stat.completedCount,
                     totalDays: stat.expectedDays,
-                    currentStreak: stat.currentStreak
+                    currentStreak: stat.currentStreak,
+                    isSlipRate: stat.isSlipRate
                 )
             }
-            .sorted { $0.completionRate > $1.completionRate }
+            // Best first on both scales: done rates high → low, then the
+            // avoidance habits by slip rate low → high (bt-0024).
+            .sorted { a, b in
+                if a.isSlipRate != b.isSlipRate { return !a.isSlipRate }
+                return a.isSlipRate ? a.completionRate < b.completionRate : a.completionRate > b.completionRate
+            }
 
         overallCompletionRate = batch.totalExpected > 0
             ? Int((Double(batch.totalCompleted) / Double(batch.totalExpected)) * 100)

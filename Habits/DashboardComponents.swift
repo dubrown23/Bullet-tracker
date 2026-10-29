@@ -13,6 +13,9 @@ struct ContributionHeatmapView: View {
     let dates: [Date]
     let completionData: [Date: Double]
     var habitColor: Color = Color(hex: "#4CAF50")
+    /// What a full cell means, for VoiceOver: "completed", or "slipped" for
+    /// an avoidance habit (bt-0024).
+    var countedDaysWord: String = "completed"
 
     private let dayLabelWidth: CGFloat = 16
     private let monthLabelHeight: CGFloat = 16
@@ -170,7 +173,7 @@ struct ContributionHeatmapView: View {
             // One VoiceOver element with a useful summary instead of ~90 unlabeled squares.
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Activity heatmap")
-            .accessibilityValue("\(completedDayCount) of \(dates.count) days completed")
+            .accessibilityValue("\(completedDayCount) of \(dates.count) days \(countedDaysWord)")
         }
     }
 

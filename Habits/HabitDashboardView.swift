@@ -157,9 +157,10 @@ struct HabitDashboardView: View {
 
                 Spacer()
 
-                Text("\(stat.completionRate)%")
+                Text(rateText(stat))
                     .font(.system(.subheadline, design: .rounded, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
 
                 if showsChevron {
                     Image(systemName: "chevron.forward")
@@ -169,13 +170,22 @@ struct HabitDashboardView: View {
             }
 
             // Progress bar — the system control, tinted with the habit colour
-            // (replaces a hand-drawn GeometryReader bar).
+            // (replaces a hand-drawn GeometryReader bar). An avoidance habit's
+            // bar is its slip rate in the failed red, so a long bar reads as
+            // bad (bt-0024).
             ProgressView(value: Double(stat.completionRate), total: 100)
-                .tint(Color(hex: stat.color))
-                .accessibilityHidden(true) // the "NN%" text already says it
+                .tint(stat.isSlipRate ? AppTheme.failed : Color(hex: stat.color))
+                .accessibilityHidden(true) // the rate text already says it
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
+    }
+
+    /// "67%" for a positive habit; "10% slipped · 3 days" for an avoidance
+    /// habit (bt-0024) — never a success rate for something you don't do.
+    private func rateText(_ stat: HabitStatData) -> String {
+        guard stat.isSlipRate else { return "\(stat.completionRate)%" }
+        return "\(stat.completionRate)% slipped · \(stat.completedCount) day\(stat.completedCount == 1 ? "" : "s")"
     }
 }
 

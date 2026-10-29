@@ -158,8 +158,13 @@ enum TargetKey: String, CaseIterable, Sendable, Codable {
 //   simple      → checked
 //   multiState  → success or partial ("Tried" is an honest miss, not a win);
 //                 a Rest day is neutral — see `isNeutral` (bt-0018)
-//   avoidance   → no slip that day; today counts as clean so far; future days
-//                 can't be wins yet
+//   avoidance   → never a win (bt-0024). An avoidance habit is scored by its
+//                 slips, not its clean days: a clean day is nothing (empty
+//                 square, no streak), a slip is a mark, and the rate shown
+//                 beside a good habit's done rate is the *slip rate* — slip
+//                 days over scored days, lower is better. Before bt-0024 a
+//                 day with no row was a win, which after the bt-0022 wipe
+//                 read as a 365-day Weed streak.
 
 enum HabitWinRule {
     static func isWin(style: CompletionStyle, state: CompletionState?, isFuture: Bool) -> Bool {
@@ -169,8 +174,20 @@ enum HabitWinRule {
         case .multiState:
             return state == .success || state == .partial
         case .avoidance:
-            return !isFuture && (state == nil || state == .notDone)
+            return false
         }
+    }
+
+    /// bt-0024 — the one switch: this style is scored by slips (avoidance),
+    /// so it has no wins, no streaks, and its rate is a slip rate.
+    static func isSlipScored(style: CompletionStyle) -> Bool {
+        style == .avoidance
+    }
+
+    /// bt-0024 — a slip: an avoidance habit with anything logged that day
+    /// (`.failure` from a tap; legacy rows stored `.success`, still a slip).
+    static func isSlip(style: CompletionStyle, state: CompletionState?) -> Bool {
+        isSlipScored(style: style) && isLogged(state: state)
     }
 
     /// bt-0018 — a day that counts as neither win nor miss. Streaks skip it
@@ -185,6 +202,37 @@ enum HabitWinRule {
     /// row visuals, not scores.
     static func isLogged(state: CompletionState?) -> Bool {
         state != nil && state != .notDone
+    }
+}
+
+// MARK: - Day Summary (bt-0014; wording shared with the widget since bt-0024)
+//
+// Positive habits (simple + multi-state) and avoidance habits are different
+// kinds of thing, so the header never folds them into one number:
+// "5 of 8 done" / "All 8 done" / "5 of 8 done · 1 slip". A clean avoidance
+// day adds nothing (bt-0024 — the old "· 3 clean" tail is gone). Rest days
+// are left out of "N of M".
+
+struct DaySummary: Equatable {
+    let positiveDone: Int
+    let positiveTotal: Int
+    let avoidanceTotal: Int
+    let slips: Int
+
+    /// The Today subtitle and the widget header, one wording.
+    /// `emptyText` is what to say when nothing is scheduled at all.
+    func text(emptyText: String) -> String {
+        if positiveTotal == 0 && avoidanceTotal == 0 { return emptyText }
+        var parts: [String] = []
+        if positiveTotal > 0 {
+            parts.append(positiveDone == positiveTotal
+                         ? "All \(positiveTotal) done"
+                         : "\(positiveDone) of \(positiveTotal) done")
+        }
+        if slips > 0 {
+            parts.append("\(slips) slip\(slips == 1 ? "" : "s")")
+        }
+        return parts.joined(separator: " · ")
     }
 }
 

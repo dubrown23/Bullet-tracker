@@ -34,24 +34,18 @@ struct HabitWidgetEntry: TimelineEntry {
     let slips: Int
 
     var isEmpty: Bool { habits.isEmpty }
-    var clean: Int { avoidanceTotal - slips }
 
     var progress: Double {
         guard positiveTotal > 0 else { return 0 }
         return Double(positiveDone) / Double(positiveTotal)
     }
 
-    /// "5 of 8 done · 3 clean" — same wording as the app's Today header.
+    /// "5 of 8 done · 1 slip" — the app's Today header wording (`DaySummary`,
+    /// shared via `Models.swift`); a clean avoidance day adds nothing (bt-0024).
     var summaryText: String {
-        if positiveTotal == 0 && avoidanceTotal == 0 { return "No habits today" }
-        var parts: [String] = []
-        if positiveTotal > 0 {
-            parts.append(positiveDone == positiveTotal ? "All \(positiveTotal) done" : "\(positiveDone) of \(positiveTotal) done")
-        }
-        if avoidanceTotal > 0 {
-            parts.append(slips == 0 ? "\(clean) clean" : "\(slips) slip\(slips == 1 ? "" : "s")")
-        }
-        return parts.joined(separator: " · ")
+        DaySummary(positiveDone: positiveDone, positiveTotal: positiveTotal,
+                   avoidanceTotal: avoidanceTotal, slips: slips)
+            .text(emptyText: "No habits today")
     }
 }
 
@@ -378,10 +372,11 @@ struct SmallHabitWidget: View {
             }
             .frame(width: ringSize, height: ringSize)
 
-            if entry.avoidanceTotal > 0 {
-                Text(entry.slips == 0 ? "\(entry.clean) clean" : "\(entry.slips) slip\(entry.slips == 1 ? "" : "s")")
+            // bt-0024 — a slip is said, a clean day is nothing.
+            if entry.slips > 0 {
+                Text("\(entry.slips) slip\(entry.slips == 1 ? "" : "s")")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(entry.slips == 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(AppTheme.failed))
+                    .foregroundStyle(AppTheme.failed)
             } else {
                 Text(entry.progress >= 1.0 ? "All done" : "\(entry.positiveTotal - entry.positiveDone) to go")
                     .font(.caption.weight(.medium))

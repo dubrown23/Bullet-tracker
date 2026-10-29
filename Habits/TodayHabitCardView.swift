@@ -350,13 +350,12 @@ struct TodayHabitRowView: View {
         let dayState = state(on: day)
         let isSelected = calendar.isDate(day, inSameDayAs: date)
 
-        // Avoidance: a past tracked day with no slip is a win → filled.
-        let isCleanAvoidanceWin = isNegativeHabit && dayState == 0 && !isSelected && isEditable(day)
-
+        // bt-0024 — an avoidance habit marks slips only: a clean day is an
+        // empty square (it used to fill in the habit colour as a "win").
         return Button {
             toggle(on: day)
         } label: {
-            dayCell(state: dayState, isSelected: isSelected, isCleanAvoidanceWin: isCleanAvoidanceWin)
+            dayCell(state: dayState, isSelected: isSelected)
                 .opacity(isEditable(day) ? 1 : 0.35)
                 .frame(width: metrics.slotWidth, height: WeekGridMetrics.hitHeight)
                 .contentShape(Rectangle())
@@ -370,12 +369,10 @@ struct TodayHabitRowView: View {
 
     /// Shared `DaySquare` (bt-0015): same square family as the Journal strip.
     @ViewBuilder
-    private func dayCell(state dayState: Int, isSelected: Bool, isCleanAvoidanceWin: Bool) -> some View {
+    private func dayCell(state dayState: Int, isSelected: Bool) -> some View {
         let size = metrics.cellSize
 
-        if isCleanAvoidanceWin {
-            DaySquare(size: size, style: .filled(habitColor))
-        } else if dayState != 0 {
+        if dayState != 0 {
             DaySquare(size: size, style: .filled(color(forState: dayState))) {
                 if isSelected {
                     Image(systemName: symbol(forState: dayState))

@@ -224,20 +224,26 @@ struct HabitWinRuleTests {
         #expect(!HabitWinRule.isWin(style: .multiState, state: nil, isFuture: false))
     }
 
-    @Test func avoidanceWinsWhenNothingWasLogged() {
-        // No entry = didn't slip = a win (today counts as clean so far).
-        #expect(HabitWinRule.isWin(style: .avoidance, state: nil, isFuture: false))
-        #expect(HabitWinRule.isWin(style: .avoidance, state: .notDone, isFuture: false))
-    }
-
-    @Test func avoidanceSlipIsNotAWin() {
+    /// bt-0024 — an avoidance habit is never a win: a clean day is nothing
+    /// (it used to be a win, which read as a 365-day Weed streak).
+    @Test func avoidanceIsNeverAWin() {
+        #expect(!HabitWinRule.isWin(style: .avoidance, state: nil, isFuture: false))
+        #expect(!HabitWinRule.isWin(style: .avoidance, state: .notDone, isFuture: false))
         #expect(!HabitWinRule.isWin(style: .avoidance, state: .failure, isFuture: false))
-        // Legacy slips were stored as `.success`; still a slip.
-        #expect(!HabitWinRule.isWin(style: .avoidance, state: .success, isFuture: false))
+        #expect(!HabitWinRule.isWin(style: .avoidance, state: nil, isFuture: true))
     }
 
-    @Test func avoidanceFutureDaysAreNotWinsYet() {
-        #expect(!HabitWinRule.isWin(style: .avoidance, state: nil, isFuture: true))
+    @Test func avoidanceIsScoredBySlips() {
+        #expect(HabitWinRule.isSlipScored(style: .avoidance))
+        #expect(!HabitWinRule.isSlipScored(style: .simple))
+        #expect(!HabitWinRule.isSlipScored(style: .multiState))
+        #expect(HabitWinRule.isSlip(style: .avoidance, state: .failure))
+        // Legacy slips were stored as `.success`; still a slip.
+        #expect(HabitWinRule.isSlip(style: .avoidance, state: .success))
+        #expect(!HabitWinRule.isSlip(style: .avoidance, state: nil))
+        #expect(!HabitWinRule.isSlip(style: .avoidance, state: .notDone))
+        // A positive habit's miss is not a slip.
+        #expect(!HabitWinRule.isSlip(style: .multiState, state: .failure))
     }
 
     @Test func loggedMeansAnyNonEmptyState() {
@@ -301,6 +307,88 @@ struct RestStreakTests {
         let habit = Habit(name: "Workout", frequency: "daily", completionStyle: .multiState)
         let e = entries([-4: .success, -3: .rest, -2: .success, -1: .success, 0: .failure])
         #expect(service.calculateBestStreak(for: habit, using: e, from: day(-4), to: day(0)) == 3)
+    }
+}
+
+// MARK: - Avoidance scoring (bt-0024)
+//
+// Only slips get marked. A clean day is nothing: no streak, no win. The rate
+// is a slip rate (slip days / scored days), and the overall figure is
+// positive habits only.
+
+struct AvoidanceScoringTests {
+    private let calendar = Calendar.current
+    private let service = HabitCalculationService.shared
+
+    private func day(_ offset: Int) -> Date {
+        calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: Date()))!
+    }
+
+    private func entries(_ states: [Int: CompletionState]) -> [Date: HabitEntry] {
+        var result: [Date: HabitEntry] = [:]
+        for (offset, state) in states {
+            result[day(offset)] = HabitEntry(date: day(offset), completionState: state)
+        }
+        return result
+    }
+
+    /// The bug that surfaced after the bt-0022 wipe: a year of clean days
+    /// read as a 365-day streak. Now 0, slip or no slip.
+    @Test func avoidanceHasNoStreaks() {
+        let weed = Habit(name: "Weed", frequency: "daily", completionStyle: .avoidance)
+        #expect(service.calculateCurrentStreak(for: weed, using: [:]) == 0)
+        #expect(service.calculateCurrentStreak(for: weed, using: entries([-3: .failure])) == 0)
+        #expect(service.calculateBestStreak(for: weed, using: [:], from: day(-30), to: day(0)) == 0)
+    }
+
+    @Test func avoidanceRateIsSlipDaysOverScoredDays() {
+        let weed = Habit(name: "Weed", frequency: "daily", completionStyle: .avoidance)
+        // 10 days, slips on three of them → 3 of 10, 30%.
+        let e = entries([-8: .failure, -4: .success, -1: .failure])
+        let rate = service.calculateCompletionRate(for: weed, using: e, from: day(-9), to: day(0))
+        #expect(rate.completed == 3)
+        #expect(rate.expected == 10)
+        #expect(abs(rate.rate - 0.3) < 0.0001)
+        // No slips → 0%, not 100%.
+        let clean = service.calculateCompletionRate(for: weed, using: [:], from: day(-9), to: day(0))
+        #expect(clean.completed == 0 && clean.expected == 10 && clean.rate == 0)
+    }
+
+    @Test func batchStatsKeepSlipsOutOfTheOverallFigure() {
+        let sauna = Habit(name: "Sauna", frequency: "daily", completionStyle: .simple)
+        let weed = Habit(name: "Weed", frequency: "daily", completionStyle: .avoidance)
+        let saunaID = sauna.id!, weedID = weed.id!
+        // Sauna done 2 of 4 days; Weed slipped 1 of 4.
+        let all: [UUID: [Date: HabitEntry]] = [
+            saunaID: entries([-3: .success, -1: .success]),
+            weedID: entries([-2: .failure]),
+        ]
+        let batch = service.calculateBatchStats(for: [sauna, weed], allEntries: all, from: day(-3), to: day(0))
+        let weedStat = batch.habitStats.first { $0.habitId == weedID }!
+        let saunaStat = batch.habitStats.first { $0.habitId == saunaID }!
+        #expect(weedStat.isSlipRate && weedStat.completedCount == 1 && weedStat.expectedDays == 4 && weedStat.completionRate == 25)
+        #expect(!saunaStat.isSlipRate && saunaStat.completionRate == 50)
+        // Overall: Sauna only. A slip never lowers it.
+        #expect(batch.totalCompleted == 2 && batch.totalExpected == 4)
+        #expect(weedStat.currentStreak == 0)
+        // The all-habits streak ignores Weed: Sauna done yesterday but not today → 0,
+        // and with Sauna done today → 1 regardless of Weed's slip.
+        #expect(service.calculateOverallCurrentStreak(for: [sauna, weed], using: all) == 0)
+        var withToday = all
+        withToday[saunaID] = entries([-1: .success, 0: .success])
+        withToday[weedID] = entries([0: .failure])
+        #expect(service.calculateOverallCurrentStreak(for: [sauna, weed], using: withToday) == 2)
+    }
+
+    /// The Today header and the widget line: a clean day adds nothing, a
+    /// slip is said.
+    @Test func daySummaryNamesSlipsAndNeverCleanDays() {
+        #expect(DaySummary(positiveDone: 5, positiveTotal: 8, avoidanceTotal: 2, slips: 0).text(emptyText: "-") == "5 of 8 done")
+        #expect(DaySummary(positiveDone: 5, positiveTotal: 8, avoidanceTotal: 2, slips: 1).text(emptyText: "-") == "5 of 8 done · 1 slip")
+        #expect(DaySummary(positiveDone: 8, positiveTotal: 8, avoidanceTotal: 2, slips: 2).text(emptyText: "-") == "All 8 done · 2 slips")
+        // Only avoidance habits scheduled and clean: nothing to say.
+        #expect(DaySummary(positiveDone: 0, positiveTotal: 0, avoidanceTotal: 2, slips: 0).text(emptyText: "-") == "")
+        #expect(DaySummary(positiveDone: 0, positiveTotal: 0, avoidanceTotal: 0, slips: 0).text(emptyText: "-") == "-")
     }
 }
 

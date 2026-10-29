@@ -308,7 +308,11 @@ struct JournalPDFGenerator {
         drawDivider(at: yPos - 5)
         yPos += 5
 
-        let sortedHabits = stats.habitStats.sorted { $0.completionRate > $1.completionRate }
+        // Done rates high → low, then avoidance habits by slip rate low → high (bt-0024).
+        let sortedHabits = stats.habitStats.sorted { a, b in
+            if a.isNegativeHabit != b.isNegativeHabit { return !a.isNegativeHabit }
+            return a.isNegativeHabit ? a.completionRate < b.completionRate : a.completionRate > b.completionRate
+        }
 
         for habitStat in sortedHabits {
             if yPos > pageHeight - 80 {
@@ -319,9 +323,15 @@ struct JournalPDFGenerator {
             let displayName = habitStat.name.count > 25 ? String(habitStat.name.prefix(22)) + "..." : habitStat.name
             displayName.draw(at: CGPoint(x: col1, y: yPos), withAttributes: TextStyle.tableRow)
 
-            let rateText = String(format: "%.0f%%", habitStat.completionRate * 100)
+            // bt-0024 — an avoidance habit's rate is its slip rate, said so:
+            // "10% slipped", and its Done column reads "3 slips".
+            let percent = String(format: "%.0f%%", habitStat.completionRate * 100)
+            let rateText = habitStat.isNegativeHabit ? "\(percent) slipped" : percent
             rateText.draw(at: CGPoint(x: col2, y: yPos), withAttributes: TextStyle.tableRow)
-            "\(habitStat.completed)".draw(at: CGPoint(x: col3, y: yPos), withAttributes: TextStyle.tableRow)
+            let doneText = habitStat.isNegativeHabit
+                ? "\(habitStat.completed) slip\(habitStat.completed == 1 ? "" : "s")"
+                : "\(habitStat.completed)"
+            doneText.draw(at: CGPoint(x: col3, y: yPos), withAttributes: TextStyle.tableRow)
             "\(habitStat.expected)".draw(at: CGPoint(x: col4, y: yPos), withAttributes: TextStyle.tableRow)
 
             yPos += 18
@@ -351,8 +361,9 @@ struct JournalPDFGenerator {
         let allHabits = ((try? modelContext.fetch(FetchDescriptor<Habit>(sortBy: [SortDescriptor(\.order), SortDescriptor(\.name)]))) ?? [])
         let totalHabits = allHabits.count
 
-        // Wins per habit via the shared rule (bt-0014) — avoidance days count
-        // when *nothing* was logged, so this can't come from raw entry counts.
+        // Per habit via the shared rule (bt-0014): wins for a positive habit,
+        // slip days for an avoidance habit (bt-0024 — its `completed` is slips
+        // and its rate a slip rate; it stays out of the overall figure).
         let entriesByHabit = HabitStore.allEntriesByDay(for: allHabits, from: startDate, to: endDate)
         let service = HabitCalculationService.shared
 
@@ -380,16 +391,19 @@ struct JournalPDFGenerator {
             let completionRate = result.rate
 
             if expected > 0 {
+                let isSlipRate = HabitWinRule.isSlipScored(style: habit.completionStyle)
                 habitStats.append(HabitStat(
                     name: habit.name ?? "Unknown",
                     completed: completed,
                     expected: expected,
                     completionRate: completionRate,
-                    isNegativeHabit: habit.completionStyle == .avoidance
+                    isNegativeHabit: isSlipRate
                 ))
 
-                totalExpected += expected
-                totalActual += completed
+                if !isSlipRate {
+                    totalExpected += expected
+                    totalActual += completed
+                }
             }
         }
 

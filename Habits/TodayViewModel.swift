@@ -51,18 +51,9 @@ class TodayViewModel {
 
     // MARK: - Day Summary (bt-0014)
     //
-    // Positive habits (simple + multi-state) and avoidance habits are different
-    // kinds of thing, so the header never folds them into one number.
-    // "5 of 8 done · 3 clean"  /  "5 of 8 done · 1 slip"  /  "All 8 done".
-
-    struct DaySummary {
-        let positiveDone: Int
-        let positiveTotal: Int
-        let avoidanceTotal: Int
-        let slips: Int
-
-        var clean: Int { avoidanceTotal - slips }
-    }
+    // The wording lives on `DaySummary` (`Data/Models.swift`), shared with the
+    // widget: "5 of 8 done" / "All 8 done" / "5 of 8 done · 1 slip". A clean
+    // avoidance day adds nothing (bt-0024).
 
     func summary(from habits: [Habit]) -> DaySummary {
         var positiveDone = 0, positiveTotal = 0, avoidanceTotal = 0, slips = 0
@@ -86,21 +77,7 @@ class TodayViewModel {
     }
 
     func summaryText(from habits: [Habit]) -> String {
-        let s = summary(from: habits)
-        if s.positiveTotal == 0 && s.avoidanceTotal == 0 { return "No habits scheduled" }
-
-        var parts: [String] = []
-        if s.positiveTotal > 0 {
-            parts.append(s.positiveDone == s.positiveTotal
-                         ? "All \(s.positiveTotal) done"
-                         : "\(s.positiveDone) of \(s.positiveTotal) done")
-        }
-        if s.avoidanceTotal > 0 {
-            parts.append(s.slips == 0
-                         ? "\(s.clean) clean"
-                         : "\(s.slips) slip\(s.slips == 1 ? "" : "s")")
-        }
-        return parts.joined(separator: " · ")
+        summary(from: habits).text(emptyText: "No habits scheduled")
     }
 
     /// True when the header should read as a warning (someone slipped today).

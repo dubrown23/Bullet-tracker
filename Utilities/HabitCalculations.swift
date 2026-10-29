@@ -198,9 +198,17 @@ final class HabitCalculationService {
 
     // MARK: - Streak Calculations (Entry-Aware)
 
+    /// bt-0024 — a slip-scored habit (avoidance) has no streaks anywhere: a
+    /// clean day is nothing to count, so Current and Best are always 0 and the
+    /// Today row shows no flame. One check, shared by the three streak walks.
+    private func hasStreaks(_ habit: Habit) -> Bool {
+        !HabitWinRule.isSlipScored(style: habit.completionStyle)
+    }
+
     /// Calculates current streak using pre-fetched entries — no persistence access.
     /// Unscheduled days and Rest days are skipped, not broken on.
     func calculateCurrentStreak(for habit: Habit, using entries: [Date: HabitEntry]) -> Int {
+        guard hasStreaks(habit) else { return 0 }
         var streak = 0
         var currentDate = calendar.startOfDay(for: Date())
         let maxDays = 365
@@ -226,6 +234,7 @@ final class HabitCalculationService {
 
     /// Calculates best streak using pre-fetched entries — no persistence access
     func calculateBestStreak(for habit: Habit, using entries: [Date: HabitEntry], from startDate: Date, to endDate: Date) -> Int {
+        guard hasStreaks(habit) else { return 0 }
         var bestStreak = 0
         var currentStreak = 0
         var currentDate = startDate
@@ -246,8 +255,11 @@ final class HabitCalculationService {
         return bestStreak
     }
 
-    /// Calculates overall current streak (all habits complete) using pre-fetched entries
+    /// Calculates overall current streak (all habits complete) using pre-fetched entries.
+    /// Slip-scored habits (bt-0024) take no part: a clean Weed day neither
+    /// extends nor breaks the run.
     func calculateOverallCurrentStreak(for habits: [Habit], using allEntries: [UUID: [Date: HabitEntry]]) -> Int {
+        let habits = habits.filter(hasStreaks)
         guard !habits.isEmpty else { return 0 }
 
         var streak = 0
@@ -283,7 +295,22 @@ final class HabitCalculationService {
 
     // MARK: - Completion Rate (Entry-Aware)
 
-    /// Calculates completion rate using pre-fetched entries — no persistence access
+    /// bt-0024 — the day that counts toward a habit's rate: a win for a
+    /// positive habit, a slip for an avoidance habit. Readers label the
+    /// result by `HabitWinRule.isSlipScored(style:)`.
+    private func countsTowardRate(_ habit: Habit, in entries: [Date: HabitEntry], on date: Date) -> Bool {
+        guard isScored(habit, in: entries, on: date) else { return false }
+        if HabitWinRule.isSlipScored(style: habit.completionStyle) {
+            return HabitWinRule.isSlip(style: habit.completionStyle,
+                                       state: entries[calendar.startOfDay(for: date)]?.effectiveCompletionState)
+        }
+        return isWin(for: habit, in: entries, on: date)
+    }
+
+    /// Calculates completion rate using pre-fetched entries — no persistence access.
+    /// For a slip-scored habit (bt-0024) `completed` is the number of **slip
+    /// days** and `rate` the slip rate (lower is better); `expected` is the
+    /// scored days either way.
     func calculateCompletionRate(for habit: Habit, using entries: [Date: HabitEntry], from startDate: Date, to endDate: Date) -> (completed: Int, expected: Int, rate: Double) {
         let expected = calculateExpectedDays(for: habit, using: entries, from: startDate, to: endDate)
         guard expected > 0 else { return (0, 0, 0) }
@@ -292,7 +319,7 @@ final class HabitCalculationService {
         var currentDate = startDate
 
         while currentDate <= endDate {
-            if isScored(habit, in: entries, on: currentDate) && isWin(for: habit, in: entries, on: currentDate) {
+            if countsTowardRate(habit, in: entries, on: currentDate) {
                 completed += 1
             }
             guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
@@ -307,6 +334,9 @@ final class HabitCalculationService {
 
     /// Calculate stats for multiple habits from pre-fetched entries.
     /// `allEntries` must cover BOTH the requested period and the 365-day streak lookback.
+    /// bt-0024: a slip-scored habit's row carries its slip days and slip rate
+    /// (`isSlipRate`), and stays out of `totalCompleted` / `totalExpected` —
+    /// the overall figure is positive habits only, and a slip never lowers it.
     func calculateBatchStats(
         for habits: [Habit],
         allEntries: [UUID: [Date: HabitEntry]],
@@ -323,11 +353,11 @@ final class HabitCalculationService {
             guard let habitId = habit.id else { continue }
             let entriesForHabit = allEntries[habitId] ?? [:]
 
-            // Count completed days within the requested period only
+            // Count the days that count (wins, or slips for avoidance) within the requested period only
             var completedDays = 0
             var currentDate = startDate
             while currentDate <= endDate {
-                if isScored(habit, in: entriesForHabit, on: currentDate) && isWin(for: habit, in: entriesForHabit, on: currentDate) {
+                if countsTowardRate(habit, in: entriesForHabit, on: currentDate) {
                     completedDays += 1
                 }
                 guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
@@ -338,6 +368,7 @@ final class HabitCalculationService {
             let rate = expectedDays > 0 ? Int((Double(completedDays) / Double(expectedDays)) * 100) : 0
             let streak = calculateCurrentStreak(for: habit, using: entriesForHabit)
             maxStreak = max(maxStreak, streak)
+            let isSlipRate = HabitWinRule.isSlipScored(style: habit.completionStyle)
 
             stats.append(HabitStatResult(
                 habitId: habitId,
@@ -347,18 +378,23 @@ final class HabitCalculationService {
                 completionRate: rate,
                 completedCount: completedDays,
                 expectedDays: expectedDays,
-                currentStreak: streak
+                currentStreak: streak,
+                isSlipRate: isSlipRate
             ))
 
-            totalCompleted += completedDays
-            totalExpected += expectedDays
+            if !isSlipRate {
+                totalCompleted += completedDays
+                totalExpected += expectedDays
+            }
         }
 
         return (stats, totalCompleted, totalExpected, maxStreak)
     }
 
     /// Build heatmap data (fraction of scheduled habits completed per day) from pre-fetched entries.
+    /// Positive habits only (bt-0024): a slip-scored habit has no "completed".
     func buildHeatmapData(for habits: [Habit], allEntries: [UUID: [Date: HabitEntry]], from startDate: Date, to endDate: Date) -> [Date: Double] {
+        let habits = habits.filter(hasStreaks)
         guard !habits.isEmpty else { return [:] }
 
         var rates: [Date: Double] = [:]
@@ -400,4 +436,7 @@ struct HabitStatResult {
     let completedCount: Int
     let expectedDays: Int
     let currentStreak: Int
+    /// bt-0024 — true for an avoidance habit: `completionRate` is a slip rate
+    /// (lower is better) and `completedCount` is slip days.
+    let isSlipRate: Bool
 }
