@@ -4,7 +4,7 @@
 
 A quick way to enter data and see it visually — simple, fast, a "quick hit": pop in, tap to log, glance at the patterns. Built for long-term personal tracking, not for other users. Kept deliberately minimal.
 
-Long-term, the plan is to merge this with **Dustin's Health** (dh — the voice-first health logger Dustin already uses for meals). That merge started 2026-10-26 with a settled design (shared note in dustin-system: `memory/in_flight/habits-voice-dh-bullet-2026-10-26.md`): voice lands in dh as day facts + an inbox of actions; **Bullet stays the master copy of habits and holds every grading rule**; dh only reports facts. Step 0 (`bt-0017`) proved the pipeline with fake data; Step 2 (`bt-0018`, 2026-10-27) gave the app the rules it needs before real data arrives — a neutral Rest grade, targets as habit settings, "in progress" today, and hand grades that win over automatic ones until put back on auto, with only the iPhone writing automatic grades. **Step 3 (`bt-0019`, live 2026-10-27) is the real sync:** the iPhone talks to dh's app endpoint with a key kept in its Keychain, sends the habit list, targets and today's taps, pulls changed days, meal and workout facts and the voice inbox, grades with its own rules and confirms back; Diet and Workout are graded from real data from that day forward, and the iPad only shows. **A design pass the same evening (`bt-0021`) made the two graded rows legible:** the Today caption says who set the day (Auto / Set by you / Set by voice) with Back to Auto on the row, and Log Details shows dh's meals and workout sessions from a `health` key kept beside, never inside, the notes. **`bt-0020` (2026-10-28) closed the loop from the tap side:** a hand tap on today sends itself a few seconds later, a burst of taps is one send, leaving the app sends at once, and a tap can never be hidden by the on-open throttle — so "what's left today" by voice is right without a pull-down; still iPhone only. **`bt-0022` (2026-10-28) laid the data for the Dashboard that replaces the dh website** — backup keeps dh's `health` block, steps are stored per day, carbs / fat targets live on Diet, and a one-time rewrite gave every habit a clean start on 2026-10-27 except Poison, with Workout rebuilt from dh's sessions back to Aug 1 — and **`bt-0024` the same evening fixed how a negative habit reads: only slips get marked, and its rate is a slip rate.** **`bt-0023` (shipped 2026-10-29) is that Dashboard:** one day like the website on top — Eaten vs Burned, where burned is Apple Health's active + resting total read by Bullet itself and the sessions' calories are never added to it, a calorie band, three rings, the driver line, meals and training with a warning that is never silent when sessions add up to more than Health's active energy — and the habit trends underneath; a one-time refresh carried dh's corrected session calories onto the stored rows. The dh website dashboard can now be turned off. The app itself was dialed in first (the 2026-10-24/25 Duo + design-language wave) before taking this on.
+Long-term, the plan is to merge this with **Dustin's Health** (dh — the voice-first health logger Dustin already uses for meals). That merge started 2026-10-26 with a settled design (shared note in dustin-system: `memory/in_flight/habits-voice-dh-bullet-2026-10-26.md`): voice lands in dh as day facts + an inbox of actions; **Bullet stays the master copy of habits and holds every grading rule**; dh only reports facts. Step 0 (`bt-0017`) proved the pipeline with fake data; Step 2 (`bt-0018`, 2026-10-27) gave the app the rules it needs before real data arrives — a neutral Rest grade, targets as habit settings, "in progress" today, and hand grades that win over automatic ones until put back on auto, with only the iPhone writing automatic grades. **Step 3 (`bt-0019`, live 2026-10-27) is the real sync:** the iPhone talks to dh's app endpoint with a key kept in its Keychain, sends the habit list, targets and today's taps, pulls changed days, meal and workout facts and the voice inbox, grades with its own rules and confirms back; Diet and Workout are graded from real data from that day forward, and the iPad only shows. **A design pass the same evening (`bt-0021`) made the two graded rows legible:** the Today caption says who set the day (Auto / Set by you / Set by voice) with Back to Auto on the row, and Log Details shows dh's meals and workout sessions from a `health` key kept beside, never inside, the notes. **`bt-0020` (2026-10-28) closed the loop from the tap side:** a hand tap on today sends itself a few seconds later, a burst of taps is one send, leaving the app sends at once, and a tap can never be hidden by the on-open throttle — so "what's left today" by voice is right without a pull-down; still iPhone only. **`bt-0022` (2026-10-28) laid the data for the Dashboard that replaces the dh website** — backup keeps dh's `health` block, steps are stored per day, carbs / fat targets live on Diet, and a one-time rewrite gave every habit a clean start on 2026-10-27 except Poison, with Workout rebuilt from dh's sessions back to Aug 1 — and **`bt-0024` the same evening fixed how a negative habit reads: only slips get marked, and its rate is a slip rate.** **`bt-0023` (shipped 2026-10-29) is that Dashboard:** one day like the website on top — Eaten vs Burned, where burned is Apple Health's active + resting total read by Bullet itself and the sessions' calories are never added to it, a calorie band, three rings, the driver line, meals and training with a warning that is never silent when sessions add up to more than Health's active energy — and the habit trends underneath; a one-time refresh carried dh's corrected session calories onto the stored rows. The dh website dashboard was turned off on 2026-10-29. **`bt-0026` (2026-10-29) remade the Today row as a checklist** once the Dashboard was live: a round control on the left is the one way to mark a day, six quiet dots are the history you look at, the row opens Log Details, and avoidance habits sit in their own Avoiding section — the Reminders shape, chosen from four layouts mocked side by side on the simulator. The app itself was dialed in first (the 2026-10-24/25 Duo + design-language wave) before taking this on.
 
 ## Origin
 
@@ -614,3 +614,48 @@ Bullet and 0 on the website, and Aug 24's walk reads 483.8 in Bullet against
   meals, Burned 3,189 (1,030 active + 2,159 resting), incline walk 457 cal,
   Workout B 142 cal. **Shipped.** The cleanup item (pre-Oct 27 burned on
   rest days) became `bt-0025`.
+
+### `bt-0026` (shipped 2026-10-29) — Today row — one round control on the left, six quiet dots on the right
+
+**Summary:** **The Today row is a Reminders-style checklist.** One round control on the left (`DayControl`: `circle` / `checkmark.circle.fill` / `xmark.circle.fill` / `moon.circle.fill`, a slashed circle for an avoidance habit's empty state, 44 pt, symbol-replace bounce) is the **only** way to mark the selected day — simple toggles, multi-state cycles done → partial → tried → clear, avoidance toggles "slipped". Palette colours only (`DayMark`: a win is green whatever the habit's colour; the habit's colour stays on its glyph). Glyph + name at full width, wrapping to two lines before truncating. **Six quiet dots** (`DayDotStrip`, display only, Dustin's call: too small to tap safely) are the six days before the selected day in straight columns; the flame + streak sit in a fixed slot, counted from yesterday while today is open and never past the habit's clean start, the Dashboard's rule. **Tapping the row opens Log Details.** A graded habit's caption (mode + numbers, Back to Auto) is its own full-width line for every day from go-live — today's numbers live from the engine, a past day's from the stored `health` block — so rows keep their height when stepping days. **Avoidance habits are their own section, "Avoiding"**, whose trailer says "1 slipped" or nothing (`DaySummary.slipsText`; the subtitle is positive habits only, `positiveText`; the widget keeps the one-line wording). The pinned weekday-letter strip is gone with the grid; `WeekGridMetrics` keeps `windowDays` for the date strips and gained `previousDays`. The large title's accessibility label used to lag a day behind the text; re-identifying the `NavigationStack` on the title fixed it. 109 tests (5 new). Simulator pass on the Duo (three fixes on the spot) and the iPad; **Dustin's phone pass 9 of 9.** `DayControl` / `DayDot` beside `DaySquare` are the shared style the Journal and Dashboard turns adopt next.
+
+**Why:**
+
+The row's job and its layout disagreed. Dustin logs mostly by voice, so the
+Today screen is for a glance and the occasional correction; the thing he
+does on it is mark today, and today was the smallest, rightmost of seven
+identical squares (`bt-0013`'s week grid). Six squares of history carried
+the same weight as the one control; the row read as a tiny chart with a
+name attached, not a checklist. Apple's checklists put one big round
+control on the left and nothing competing beside the name (Reminders).
+Seen on the simulator the same morning, all consequences of the grid: names
+truncating on the folded Duo; a done day filled in the habit's colour, so a
+red habit's done days looked like slips; the weekday letters floating above
+the card; rows changing height between days; "All 3 done" over four rows;
+an avoidance habit's empty square inviting the tap that means "I slipped";
+Log Details reachable only by long-press; the title saying "Yesterday"
+while VoiceOver said "Today".
+
+**The mock-up, the plan, the build notes and the phone script** — in the bead body, kept in git before roll-off (`git log --all -- .beads/active/bt-0026.md`, then `git show <commit>:.beads/active/bt-0026.md`).
+
+**Decision log:**
+
+- 2026-10-29 — Dustin, before the Dashboard turn: are the Today squares
+  Apple's? (No — ours, from system materials; nothing in the toolkit does a
+  seven-day check grid.) He wanted circles and said something was still
+  off. Cold look at the simulator; four layouts (Current, Reminders-only,
+  control + dots, circle grid) on a throwaway Developer screen with the
+  same fake data. **He picked option 2.**
+- 2026-10-29 — activation with three calls: the row opens Log Details (the
+  control is the only way to mark); the dots are display-only; the
+  Avoiding trailer counts slips only, never "clean". Plus: the control and
+  dots are the shared style the Journal and Dashboard adopt later.
+- 2026-10-29 — built in plan order, 109 tests. Simulator pass: stale
+  VoiceOver title (fixed by `.id` on the `NavigationStack`; on the `List`
+  it did nothing), "Test Workout" truncating (two lines now), a dot tap
+  opening Log Details (kept — nothing flips). The fake dh re-ticks Test
+  Sauna seconds after an uncheck on the simulator; `FakeHealthFacts`'
+  permanent inbox tick, not the row. iPad Air sim clean in both
+  orientations (a captioned row's partner sits 8 pt lower — `PairedRows`
+  centres the pair, pre-existing). **Phone pass 9 of 9.** Mock deleted.
+  **Shipped.**
