@@ -4,7 +4,7 @@
 
 A quick way to enter data and see it visually — simple, fast, a "quick hit": pop in, tap to log, glance at the patterns. Built for long-term personal tracking, not for other users. Kept deliberately minimal.
 
-Long-term, the plan is to merge this with **Dustin's Health** (dh — the voice-first health logger Dustin already uses for meals). That merge started 2026-10-26 with a settled design (shared note in dustin-system: `memory/in_flight/habits-voice-dh-bullet-2026-10-26.md`): voice lands in dh as day facts + an inbox of actions; **Bullet stays the master copy of habits and holds every grading rule**; dh only reports facts. Step 0 (`bt-0017`) proved the pipeline with fake data; Step 2 (`bt-0018`, 2026-10-27) gave the app the rules it needs before real data arrives — a neutral Rest grade, targets as habit settings, "in progress" today, and hand grades that win over automatic ones until put back on auto, with only the iPhone writing automatic grades. **Step 3 (`bt-0019`, live 2026-10-27) is the real sync:** the iPhone talks to dh's app endpoint with a key kept in its Keychain, sends the habit list, targets and today's taps, pulls changed days, meal and workout facts and the voice inbox, grades with its own rules and confirms back; Diet and Workout are graded from real data from that day forward, and the iPad only shows. **A design pass the same evening (`bt-0021`) made the two graded rows legible:** the Today caption says who set the day (Auto / Set by you / Set by voice) with Back to Auto on the row, and Log Details shows dh's meals and workout sessions from a `health` key kept beside, never inside, the notes. **`bt-0020` (2026-10-28) closed the loop from the tap side:** a hand tap on today sends itself a few seconds later, a burst of taps is one send, leaving the app sends at once, and a tap can never be hidden by the on-open throttle — so "what's left today" by voice is right without a pull-down; still iPhone only. The app itself was dialed in first (the 2026-10-24/25 Duo + design-language wave) before taking this on.
+Long-term, the plan is to merge this with **Dustin's Health** (dh — the voice-first health logger Dustin already uses for meals). That merge started 2026-10-26 with a settled design (shared note in dustin-system: `memory/in_flight/habits-voice-dh-bullet-2026-10-26.md`): voice lands in dh as day facts + an inbox of actions; **Bullet stays the master copy of habits and holds every grading rule**; dh only reports facts. Step 0 (`bt-0017`) proved the pipeline with fake data; Step 2 (`bt-0018`, 2026-10-27) gave the app the rules it needs before real data arrives — a neutral Rest grade, targets as habit settings, "in progress" today, and hand grades that win over automatic ones until put back on auto, with only the iPhone writing automatic grades. **Step 3 (`bt-0019`, live 2026-10-27) is the real sync:** the iPhone talks to dh's app endpoint with a key kept in its Keychain, sends the habit list, targets and today's taps, pulls changed days, meal and workout facts and the voice inbox, grades with its own rules and confirms back; Diet and Workout are graded from real data from that day forward, and the iPad only shows. **A design pass the same evening (`bt-0021`) made the two graded rows legible:** the Today caption says who set the day (Auto / Set by you / Set by voice) with Back to Auto on the row, and Log Details shows dh's meals and workout sessions from a `health` key kept beside, never inside, the notes. **`bt-0020` (2026-10-28) closed the loop from the tap side:** a hand tap on today sends itself a few seconds later, a burst of taps is one send, leaving the app sends at once, and a tap can never be hidden by the on-open throttle — so "what's left today" by voice is right without a pull-down; still iPhone only. **`bt-0022` (2026-10-28) laid the data for the Dashboard that replaces the dh website** — backup keeps dh's `health` block, steps are stored per day, carbs / fat targets live on Diet, and a one-time rewrite gave every habit a clean start on 2026-10-27 except Poison, with Workout rebuilt from dh's sessions back to Aug 1 — and **`bt-0024` the same evening fixed how a negative habit reads: only slips get marked, and its rate is a slip rate.** The app itself was dialed in first (the 2026-10-24/25 Duo + design-language wave) before taking this on.
 
 ## Origin
 
@@ -468,3 +468,103 @@ Wanted (Dustin, 2026-10-27): after any hand tap — on Today, in Log Details, or
 - 2026-10-28 — **device pass on DBd with real data, one action at a time; shipped.** A: Pills tapped, "what's left today" by voice no longer listed it, no pull-down. C: five fast taps on Pills → one run ("after a tap", count +1). E: tap then lock inside 3 s, ask voice from the lock screen after ten seconds → correct; Developer said "leaving the app"; the run's report carried "Steps: Health data not accessible" because iOS seals Health while locked — cosmetic and honest, a locked run can't downgrade a day (unknown steps = left as is). G: Diet tap → "after a tap" +1, Back to Auto → "Back to Auto" +1, not +2. F: airplane mode + tap + lock; on return the line read **"open · tap waiting · 10:04:08 AM" with "1 run since launch"** — iOS had killed the app in the background, and the on-disk tap date still forced the first open to send ("1 ticked today" = Pills). D: iPad tap, ten seconds, Settings → Dustin's Health unchanged, no time stamp. Final build on both devices; destination back on the Duo simulator.
   - Two things learned walking the pass with Dustin texting from the phone: every switch back to the app after two minutes is a normal "open" run that overwrites the Last run line, so the reason must be read inside the app before switching away; and "voice should not list Pills" needs saying as "Pills is done in the app, so voice leaves it out" — the double negative confused him twice.
   - Dustin asked whether iPhone-only sync still makes sense. Kept, for two reasons he accepted: dh replaces its ticked list on every sync, so a second sender with a stale iCloud copy could un-tick what the phone just ticked; and the steps that grade Workout live on the phone. The cost (an iPad tap reaches voice only on the phone's next sync) stands; if it itches, a follow-up is "iPad sends ticks only, never a list older than the phone's last".
+
+### `bt-0022` (shipped 2026-10-28) — Dashboard history — the data the new Dashboard stands on
+
+**Summary:** **First bead for the Dashboard that replaces the dh website.** Four things the data couldn't do: (1) **backup round-trips the stored details string** (the legacy wire shape plus the `health` key) instead of re-encoding through the typed enum, so dh's meals and sessions survive a restore — proven to fail on the old `BackupManager`; (2) the sync **stores steps per day** on the Workout row's `health` block (`HealthSnapshot.steps`, written through `setHealth`, so state / source / edit time are untouched); (3) **carbs and fat targets** on the Diet habit (`targetCarbsGrams` / `targetFatGrams`, defaults 180 / 65, rings only, not the win rule), sent to dh with the other five keys and backed up; (4) a one-time, phone-only **Prepare Dashboard History** screen (Settings → Data Management) that is blocked until a backup is saved to Files, shows a counts table per habit, and on one confirm **wipes every habit's rows before 2026-10-27 except Poison (kept whole) and rebuilds Workout from dh's completed sessions alone, Aug 1 → Oct 26** — a row only on session days, `source = auto`, graded by the Workout rule with HealthKit steps and the current minutes target, sessions + steps in the `health` block, meals in the same facts ignored, Journal notes never touched; it hides itself once run. Logic is pure over a `ModelContext` (`Sync/HistoryMigration.swift`, the plan is plain values so previewing inserts nothing); step 0 proved the 87-day facts call from the Mac (138 sessions, all eight new per-session fields). Decoded dh's new `active_kcal` / `activity_type` / `activity_code`. 85 tests (4 new). Two simulator passes caught the preview auto-inserting rows and "45 min min"; the phone pass ran the rewrite on DBd and the iPad carried it. Exposed Weed's 365-day streak → `bt-0024`.
+
+**Why:**
+
+Dustin is removing the dustin-health website dashboard
+(`public/dashboard.html`, `lib/dashboard-data.js`). The Bullet Dashboard
+replaces it, so it has to show one day's nutrition and training the way the
+site did, plus habit trends. Three things the data can't do today:
+
+1. **Backup drops the `health` block.** `BackupManager.fetchHabitEntries`
+   writes `entry.details` through the typed enum, so dh's meals / sessions
+   never make the round trip. The Dashboard's history now depends on that
+   block, and the wipe below is gated on a backup, so this ships first.
+2. **Steps aren't stored.** The sync reads steps from Apple Health for the
+   7-day window on every run but only uses them to grade. The Dashboard
+   wants steps per day, on the iPad too (no HealthKit there).
+3. **No history before go-live for Workout, and the wrong history for
+   everything else.** Dustin's decision: a clean start on 2026-10-27 for
+   every habit except Poison (kept whole) and Workout (dh's record alone,
+   from 2026-08-01).
+
+**Decisions (Dustin, 2026-10-28):**
+
+| Habit | Before Oct 27 |
+|---|---|
+| Poison | Everything kept |
+| Workout | Deleted, then rebuilt from dh for Aug 1 → Oct 26: a row only on days dh has a session, graded by the Workout rule. No-session days blank. Nothing before Aug 1. |
+| Every other habit (Food, Weed, Alcohol, …) | Deleted |
+| Journal notes | Kept, never touched |
+
+- Habit list, order, colours, settings and targets all stay.
+- Everything from Oct 27 on stays exactly as it is. **Go-live stays Oct 27.**
+- Imported Workout days: steps lift a short-session day to Partial (same
+  rule as today); the **current** minutes target applies to the whole span.
+- Carbs and fat targets are **owned by Bullet** on the Diet habit and sent
+  up to dh like protein and calories. They colour rings only; not part of
+  the win rule.
+- Day picker on the Dashboard: the shared 7-square strip (for `bt-0023`).
+- The wipe cannot be undone in the app: backup first, counts on screen,
+  one confirm.
+
+**The plan (steps 0–6 with the facts proof), the build log and the pass script** — in the bead body, kept in git before roll-off (`git log --all -- .beads/active/bt-0022.md`, then `git show <commit>:.beads/active/bt-0022.md`).
+
+**Decision log:**
+
+- 2026-10-28 — design pass with Dustin (the table above); step 0 facts
+  proof passed from the Mac; dh shipped carbs / fat targets and the new
+  session fields the same day, so nothing waited on dh.
+- 2026-10-28 — built in plan order, 85 tests; two simulator passes found
+  the preview inserting rows and "45 min min", both fixed with tests.
+- 2026-10-28 evening — phone pass on DBd: the rewrite ran (the chat
+  walking it died mid-pass; the result proved steps 3–5), Journal Sept 15
+  shows the rebuilt Workout, Today unchanged, the iPad carried it with
+  Poison's history intact. **Shipped.** Follow-ups queued: `bt-0024`
+  (Weed's 365-day streak, decided as "only slips get marked") and, for
+  the Journal turn, Log Details from a Journal day. Poison is a **simple**
+  habit; the test fixture that modelled it as avoidance was corrected in
+  `bt-0024`.
+
+### `bt-0024` (shipped 2026-10-28) — Avoidance habits — only slips get marked
+
+**Summary:** **Dustin's rule for a negative habit (Weed, Alcohol — not Poison, which is simple): a clean day is nothing, a slip is a mark, and the rate is a slip rate.** `HabitWinRule.isWin(.avoidance)` is now always false; `isSlipScored(style:)` / `isSlip(style:state:)` are the one switch every reader uses. The three streak walks return 0 for a slip-scored habit and the all-habits streak skips them, so the flame never shows and the Streaks section is hidden. `calculateCompletionRate` / `calculateBatchStats` count **slip days over scored days** for avoidance (`HabitStatResult.isSlipRate`) and keep them out of the overall totals, so the overall Completion % is positive habits only and a slip never lowers it. Readers label by style: the Dashboard row reads **"N% slipped · N days"** with a bar in the failed red (avoidance habits listed after the positive ones, best first on both scales), the detail page reads Slip Rate / Slipped · N of M days with the heatmap's cells in red and a "slipped" VoiceOver noun, the PDF reads "N% slipped" with "N slips" in the Done column. The Today grid no longer fills a clean day; the header wording moved to a shared `DaySummary` in `Models.swift` (the widget uses the same copy) and the "· N clean" tail is gone while "· N slip(s)" stays. 91 tests (4 new, 3 rewritten). Simulator pass 6/6, Dustin's pass on DBd with real data. Why the bead exists: the `bt-0022` wipe exposed Weed with a 365-day streak, but the reading was wrong before the wipe too.
+
+**Why:**
+
+Dustin's decision after the `bt-0022` phone pass, replacing "stop the
+streak at Oct 27": for an avoidance habit (Weed and Alcohol — **not
+Poison**, which is a simple habit; dh's habits table reads `kind = simple`
+for Poison, `avoid` for the other two) **only slips get marked**. A clean day shows nothing: no green square, no streak
+flame. The wipe exposed the old reading — Weed shows a 365-day streak
+because `HabitWinRule` (bt-0014) counts a day with no row as a win and
+the streak walks back a year — but the reading was wrong before the wipe
+too: a year of "wins" for not doing something is not the picture he wants.
+
+```
+Weed — Mon Tue Wed Thu Fri Sat Sun
+Now:   ■   ■   ✕   ■   ■   ■   ■   🔥 365
+Want:  ·   ·   ✕   ·   ·   ·   ·
+```
+
+Not waiting for the Dashboard rewrite (`bt-0023`): this is its own small
+bead, and `bt-0023` builds on it.
+
+**Where a clean avoidance day read as a win, the mock-up, Dustin's answer (the slip rate), the build log and the pass script** — in the bead body, kept in git before roll-off (`git log --all -- .beads/active/bt-0024.md`, then `git show <commit>:.beads/active/bt-0024.md`).
+
+**Decision log:**
+
+- 2026-10-28 — queued from Dustin's call after the `bt-0022` phone pass
+  (Weed 🔥 365). Design pass: nine places listed, mock-up, one question
+  (do clean days score?). His answer, after two wrong readings on my side
+  (A/B, then a 97% clean rate): **a slip rate**, slip days over scored
+  days, labelled "N% slipped · N days", shown wherever a good habit shows
+  its rate; clean days never marked; overall % positive habits only.
+- 2026-10-28 — go, built, 91 tests, simulator pass 6/6, installed on DBd
+  and the iPad, Dustin's pass on real data (Weed row and detail read
+  right). **Shipped.** Wrap: Poison wording corrected (simple, not
+  avoidance) in the bead, STATUS and the bt-0022 test fixture.
