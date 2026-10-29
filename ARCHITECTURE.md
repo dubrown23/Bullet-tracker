@@ -4,7 +4,7 @@
 
 A quick way to enter data and see it visually — simple, fast, a "quick hit": pop in, tap to log, glance at the patterns. Built for long-term personal tracking, not for other users. Kept deliberately minimal.
 
-Long-term, the plan is to merge this with **Dustin's Health** (dh — the voice-first health logger Dustin already uses for meals). That merge started 2026-10-26 with a settled design (shared note in dustin-system: `memory/in_flight/habits-voice-dh-bullet-2026-10-26.md`): voice lands in dh as day facts + an inbox of actions; **Bullet stays the master copy of habits and holds every grading rule**; dh only reports facts. Step 0 (`bt-0017`) proved the pipeline with fake data; Step 2 (`bt-0018`, 2026-10-27) gave the app the rules it needs before real data arrives — a neutral Rest grade, targets as habit settings, "in progress" today, and hand grades that win over automatic ones until put back on auto, with only the iPhone writing automatic grades. **Step 3 (`bt-0019`, live 2026-10-27) is the real sync:** the iPhone talks to dh's app endpoint with a key kept in its Keychain, sends the habit list, targets and today's taps, pulls changed days, meal and workout facts and the voice inbox, grades with its own rules and confirms back; Diet and Workout are graded from real data from that day forward, and the iPad only shows. **A design pass the same evening (`bt-0021`) made the two graded rows legible:** the Today caption says who set the day (Auto / Set by you / Set by voice) with Back to Auto on the row, and Log Details shows dh's meals and workout sessions from a `health` key kept beside, never inside, the notes. **`bt-0020` (2026-10-28) closed the loop from the tap side:** a hand tap on today sends itself a few seconds later, a burst of taps is one send, leaving the app sends at once, and a tap can never be hidden by the on-open throttle — so "what's left today" by voice is right without a pull-down; still iPhone only. **`bt-0022` (2026-10-28) laid the data for the Dashboard that replaces the dh website** — backup keeps dh's `health` block, steps are stored per day, carbs / fat targets live on Diet, and a one-time rewrite gave every habit a clean start on 2026-10-27 except Poison, with Workout rebuilt from dh's sessions back to Aug 1 — and **`bt-0024` the same evening fixed how a negative habit reads: only slips get marked, and its rate is a slip rate.** The app itself was dialed in first (the 2026-10-24/25 Duo + design-language wave) before taking this on.
+Long-term, the plan is to merge this with **Dustin's Health** (dh — the voice-first health logger Dustin already uses for meals). That merge started 2026-10-26 with a settled design (shared note in dustin-system: `memory/in_flight/habits-voice-dh-bullet-2026-10-26.md`): voice lands in dh as day facts + an inbox of actions; **Bullet stays the master copy of habits and holds every grading rule**; dh only reports facts. Step 0 (`bt-0017`) proved the pipeline with fake data; Step 2 (`bt-0018`, 2026-10-27) gave the app the rules it needs before real data arrives — a neutral Rest grade, targets as habit settings, "in progress" today, and hand grades that win over automatic ones until put back on auto, with only the iPhone writing automatic grades. **Step 3 (`bt-0019`, live 2026-10-27) is the real sync:** the iPhone talks to dh's app endpoint with a key kept in its Keychain, sends the habit list, targets and today's taps, pulls changed days, meal and workout facts and the voice inbox, grades with its own rules and confirms back; Diet and Workout are graded from real data from that day forward, and the iPad only shows. **A design pass the same evening (`bt-0021`) made the two graded rows legible:** the Today caption says who set the day (Auto / Set by you / Set by voice) with Back to Auto on the row, and Log Details shows dh's meals and workout sessions from a `health` key kept beside, never inside, the notes. **`bt-0020` (2026-10-28) closed the loop from the tap side:** a hand tap on today sends itself a few seconds later, a burst of taps is one send, leaving the app sends at once, and a tap can never be hidden by the on-open throttle — so "what's left today" by voice is right without a pull-down; still iPhone only. **`bt-0022` (2026-10-28) laid the data for the Dashboard that replaces the dh website** — backup keeps dh's `health` block, steps are stored per day, carbs / fat targets live on Diet, and a one-time rewrite gave every habit a clean start on 2026-10-27 except Poison, with Workout rebuilt from dh's sessions back to Aug 1 — and **`bt-0024` the same evening fixed how a negative habit reads: only slips get marked, and its rate is a slip rate.** **`bt-0023` (shipped 2026-10-29) is that Dashboard:** one day like the website on top — Eaten vs Burned, where burned is Apple Health's active + resting total read by Bullet itself and the sessions' calories are never added to it, a calorie band, three rings, the driver line, meals and training with a warning that is never silent when sessions add up to more than Health's active energy — and the habit trends underneath; a one-time refresh carried dh's corrected session calories onto the stored rows. The dh website dashboard can now be turned off. The app itself was dialed in first (the 2026-10-24/25 Duo + design-language wave) before taking this on.
 
 ## Origin
 
@@ -568,3 +568,49 @@ bead, and `bt-0023` builds on it.
   and the iPad, Dustin's pass on real data (Weed row and detail read
   right). **Shipped.** Wrap: Poison wording corrected (simple, not
   avoidance) in the bead, STATUS and the bt-0022 test fixture.
+
+### `bt-0023` (shipped 2026-10-29) — Dashboard rewrite — one day like the dh website, trends underneath
+
+**Summary:** **The Dashboard that replaces the dh website dashboard.** Top half, for the day picked in a shared 7-square strip (`Habits/DateStripBar.swift`, the Journal's picker as one piece, app target only): the Diet / Workout mode captions, **Eaten vs Burned** side by side, a calorie band bar, three system `Gauge` rings (carbs / fat over target turn red, protein never does), the website's biggest-driver line, the meals, the training with steps. **Burned is Apple Health's daily total and nothing else** — `HealthSteps` now reads Active Energy + Resting Energy per local day (`HealthBurn`) the way it reads steps, the engine stores them on the Workout row's `HealthSnapshot` (`activeBurnKcal` / `restingBurnKcal`, iPhone only, iCloud carries them to the iPad), and dh's per-session `active_kcal` shows per session only. **The one check that is never silent:** when a day's sessions add up to more than Health's Active Energy, the Training block says so with both numbers. Bottom half: Week / Month, a habits-won-per-day bar with the period before for comparison (a slip is a red mark above the day, never a point lost), one row per habit in Today order with a `MiniDayStrip` that shrinks thirty squares to fit, counts ("5 of 7" / "1 of 7 slipped"), trend arrow and streak (from yesterday while today is open), and Protein / Calories / Minutes / Steps / Burned sparklines from the stored rows. Swift Charts, first use. Pure rules in `Habits/DashboardModel.swift`. **Refetch once:** Settings → Data Management → *Refresh Workout Calories* (`Sync/HealthRefetch.swift`, `App/HealthRefetchView.swift`) rewrote the stored sessions Aug 1 → today with dh-0019's corrected calories and added each day's burn, through `setHealth` only — the regular sync could never reach those rows because changed days before go-live are dropped. Detail page: heatmap through the win rule, Best since the habit's clean start (`HistoryMigration.cleanStart(for:)`: Poison its own start, Workout Aug 1, the rest Oct 27), one range control clamped to it, Edit in a toolbar that never minimises. 104 tests (13 new). Simulator pass on the Duo and the iPad; phone pass on DBd side by side with the website.
+
+**Why:**
+
+The Dashboard tab showed a rolling percentage and two streak tiles that read
+0 most of the day. Today answers "what do I do now", the Journal "what
+happened that day"; the Dashboard should answer **"am I slipping, and
+where?"** — and, with Dustin retiring the dh website dashboard, do its job
+too: one day's calories, protein / carbs / fat against targets, the
+biggest-driver line, meals and training. Found in the code and fixed here:
+"Best Streak" was the largest *current* streak; the per-habit heatmap
+coloured any entry, bypassing the win rule; "Days Completed" and "Total
+Completions" were the same number; the detail page's 12-week window counted
+days before the Oct 27 clean start (Weed "0 of 84 days").
+
+Dustin's five additions after dh-0019 (2026-10-28): daily burn from Apple
+Health, read by Bullet like steps; **the daily burn is Health's total only,
+workout calories are never added**; a check on screen when sessions exceed
+Health's active energy; a one-time refetch of the stored sessions Aug 1 →
+today; and two expected website differences — a missing number is a dash in
+Bullet and 0 on the website, and Aug 24's walk reads 483.8 in Bullet against
+1189.8 on the website.
+
+**The mock-up, the rules, the build notes and the phone script** — in the bead body, kept in git before roll-off (`git log --all -- .beads/active/bt-0023.md`, then `git show <commit>:.beads/active/bt-0023.md`).
+
+**Decision log:**
+
+- 2026-10-28 — design pass (the page, the rules, the pass test); queued
+  behind `bt-0022` with a soft gate on dh's calories-burned fix.
+- 2026-10-28 late — dh-0019 cleared the gate; Dustin folded in the five
+  points above plus a cleanup note (burned before Oct 27 sits only on
+  training days, so trends over that span lean high). Go.
+- 2026-10-28 late → 10-29 early — built in plan order, 104 tests.
+  Simulator pass on the Duo (five layout misses fixed on the spot: wrapping
+  captions, a lone bar filling its chart, Edit minimising away, "1 days",
+  thirty squares past the row insets) and the iPad (Week / Month,
+  landscape). Installed on DBd and the iPad.
+- 2026-10-29 morning — a false alarm ("old UI" on the iPad was the
+  unchanged Journal tab). **Phone pass passed:** Oct 27 matches the
+  website — Eaten 2,106, protein 118.5 / carbs 217.9 / fat 77.6, four
+  meals, Burned 3,189 (1,030 active + 2,159 resting), incline walk 457 cal,
+  Workout B 142 cal. **Shipped.** The cleanup item (pre-Oct 27 burned on
+  rest days) became `bt-0025`.
