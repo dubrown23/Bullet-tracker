@@ -17,6 +17,10 @@
 		77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */; };
 		772A40B23092B01000A8673E /* HistoryMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772A40B13092B01000A8673E /* HistoryMigration.swift */; };
 		772A40B43092B03400A8673E /* HistoryMigrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772A40B33092B03400A8673E /* HistoryMigrationView.swift */; };
+		772A40B63092E1A000A8673E /* HealthRefetch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772A40B53092E1A000A8673E /* HealthRefetch.swift */; };
+		772A40B83092E1BE00A8673E /* HealthRefetchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772A40B73092E1BE00A8673E /* HealthRefetchView.swift */; };
+		772A40BA3092E23B00A8673E /* DashboardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772A40B93092E23B00A8673E /* DashboardModel.swift */; };
+		772A40BC3092E3E900A8673E /* DateStripBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772A40BB3092E3E900A8673E /* DateStripBar.swift */; };
 		772D05842EB3A2DC00186D04 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 772D05832EB3A2DC00186D04 /* WidgetKit.framework */; };
 		772D05862EB3A2DC00186D04 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 772D05852EB3A2DC00186D04 /* SwiftUI.framework */; };
 		772D05972EB3A2DD00186D04 /* BulletTrackerWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 772D05812EB3A2DC00186D04 /* BulletTrackerWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -103,6 +107,10 @@
 		77166BC82DF3CC7A0071BED6 /* IconSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconSelectorView.swift; sourceTree = "<group>"; };
 		772A40B13092B01000A8673E /* HistoryMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryMigration.swift; sourceTree = "<group>"; };
 		772A40B33092B03400A8673E /* HistoryMigrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryMigrationView.swift; sourceTree = "<group>"; };
+		772A40B53092E1A000A8673E /* HealthRefetch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthRefetch.swift; sourceTree = "<group>"; };
+		772A40B73092E1BE00A8673E /* HealthRefetchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthRefetchView.swift; sourceTree = "<group>"; };
+		772A40B93092E23B00A8673E /* DashboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardModel.swift; sourceTree = "<group>"; };
+		772A40BB3092E3E900A8673E /* DateStripBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateStripBar.swift; sourceTree = "<group>"; };
 		772D05812EB3A2DC00186D04 /* BulletTrackerWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BulletTrackerWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		772D05832EB3A2DC00186D04 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		772D05852EB3A2DC00186D04 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -229,6 +237,8 @@
 				772F01252F903D6800AA7F11 /* TodayViewModel.swift */,
 				772F01272F903D6800AA7F11 /* TodayHabitCardView.swift */,
 				772F01292F903D6900AA7F11 /* TodayView.swift */,
+				772A40B93092E23B00A8673E /* DashboardModel.swift */,
+				772A40BB3092E3E900A8673E /* DateStripBar.swift */,
 			);
 			path = Habits;
 			sourceTree = "<group>";
@@ -307,6 +317,7 @@
 				77BE079C308FFED300A3E8D7 /* HabitSyncEngine.swift */,
 				77BE07BF309116BE00A3E8D7 /* DustinHealthSource.swift */,
 				772A40B13092B01000A8673E /* HistoryMigration.swift */,
+				772A40B53092E1A000A8673E /* HealthRefetch.swift */,
 			);
 			path = Sync;
 			sourceTree = "<group>";
@@ -329,6 +340,7 @@
 				77BE079D308FFF2100A3E8D7 /* DeveloperSyncView.swift */,
 				77BE07C1309116D100A3E8D7 /* HealthSyncSettingsView.swift */,
 				772A40B33092B03400A8673E /* HistoryMigrationView.swift */,
+				772A40B73092E1BE00A8673E /* HealthRefetchView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -503,6 +515,7 @@
 			files = (
 				772F012D2F91152400AA7F11 /* EditNoteView.swift in Sources */,
 				77BE07C0309116BE00A3E8D7 /* DustinHealthSource.swift in Sources */,
+				772A40B83092E1BE00A8673E /* HealthRefetchView.swift in Sources */,
 				77166BC92DF3CC7A0071BED6 /* IconSelectorView.swift in Sources */,
 				77B535992DD62DB6008BBCD8 /* BackupRestoreViewModel.swift in Sources */,
 				77A9E554308D03FF000C0F07 /* AdaptiveLayout.swift in Sources */,
@@ -517,6 +530,7 @@
 				772A40B23092B01000A8673E /* HistoryMigration.swift in Sources */,
 				770A78BC2F8FBAF600AC52AC /* JournalPDFGenerator.swift in Sources */,
 				77DB37D42DEBFBB4004E2ED9 /* Constants.swift in Sources */,
+				772A40BA3092E23B00A8673E /* DashboardModel.swift in Sources */,
 				77DB37DA2DEBFBB4004E2ED9 /* Bullet_TrackerApp.swift in Sources */,
 				77D9A52D2F2A5AAF0019C64C /* HabitDashboardViewModel.swift in Sources */,
 				770AC4D62FB3E4BC00E99F98 /* DataStore.swift in Sources */,
@@ -531,11 +545,13 @@
 				77D9A52F2F2A5AAF0019C64C /* HabitDetailDashboardView.swift in Sources */,
 				772A40B43092B03400A8673E /* HistoryMigrationView.swift in Sources */,
 				77D9A51F2F294BBB0019C64C /* HabitDashboardView.swift in Sources */,
+				772A40B63092E1A000A8673E /* HealthRefetch.swift in Sources */,
 				77DB37E02DEBFBB4004E2ED9 /* ContentView.swift in Sources */,
 				77DB37E12DEBFBB4004E2ED9 /* HabitCompletionDetailView.swift in Sources */,
 				770AC4D22FB3E12900E99F98 /* Models.swift in Sources */,
 				77D9A5272F2952730019C64C /* DayJournalView.swift in Sources */,
 				774843FF2EB2D27A007F3B9B /* HabitDataRepository.swift in Sources */,
+				772A40BC3092E3E900A8673E /* DateStripBar.swift in Sources */,
 				77DB37E62DEBFBB4004E2ED9 /* Color+Hex.swift in Sources */,
 				77A9E566308EAC81000C0F07 /* DesignSystem.swift in Sources */,
 				77D9A5292F29A1B60019C64C /* HabitCalculations.swift in Sources */,

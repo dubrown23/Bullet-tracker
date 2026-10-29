@@ -6,7 +6,8 @@
 //  (dustin-health when a key is stored on the iPhone; the fake from the
 //  Developer screen; none = steps only):
 //
-//    1. steps from Apple Health for every day that will be graded
+//    1. steps + calories burned (active + resting, bt-0023) from Apple
+//       Health for every day that will be graded
 //    2. op=sync  — send habits, targets, time zone, today's hand ticks;
 //                  take dh's value for any target it held (voice wins)
 //    3. op=changes — which past days' facts changed since the last run
@@ -511,6 +512,8 @@ final class HabitSyncEngine {
         }
 
         var stepsByDay: [Date: Int] = [:]
+        // bt-0023 — the day's burn from Health rides on the Workout row too.
+        var burnByDay: [Date: HealthBurn] = [:]
         var readsHealth = HealthSteps.isAvailable
         #if DEBUG
         if testOverride != nil { readsHealth = false }
@@ -520,6 +523,7 @@ final class HabitSyncEngine {
                 try await HealthSteps.shared.requestAuthorization()
                 for day in allDays.sorted() {
                     stepsByDay[day] = try await HealthSteps.shared.steps(on: day)
+                    burnByDay[day] = try await HealthSteps.shared.burn(on: day)
                 }
                 report.stepsToday = stepsByDay[today]
             } catch {
@@ -528,6 +532,15 @@ final class HabitSyncEngine {
         } else {
             report.errors.append("Steps: Health data not available on this device")
         }
+        #if DEBUG
+        // bt-0023 — under the fake source the simulator has no Health
+        // samples, so the fake supplies a burn too: 100 active + 1,500
+        // resting. Smaller than the fake session's 212 active cal on
+        // purpose, so the sessions-over-Health warning is forced on screen.
+        if source is FakeHealthFacts {
+            for day in allDays { burnByDay[day] = HealthBurn(activeKcal: 100, restingKcal: 1_500) }
+        }
+        #endif
 
         // `nil` = facts not loaded (no source, or the fetch failed): rows
         // are then left exactly as they are.
@@ -556,9 +569,10 @@ final class HabitSyncEngine {
             for day in days {
                 let facts = factsByDay?[day]
                 let steps = Self.isGradingDevice ? stepsByDay[day] : nil
+                let burn = Self.isGradingDevice ? burnByDay[day] : nil
                 let isToday = day == today
                 let grade = Self.grade(kind: kind, targets: habit.gradingTargets, facts: facts, steps: steps, isToday: isToday)
-                let snapshot = Self.snapshot(kind: kind, facts: facts, steps: steps)
+                let snapshot = Self.snapshot(kind: kind, facts: facts, steps: steps, burn: burn)
 
                 if isToday {
                     newLive[habitID] = LiveFacts(proteinGrams: facts?.proteinGrams, calories: facts?.calories,
@@ -764,7 +778,8 @@ final class HabitSyncEngine {
     /// Dates are cut to whole seconds so the stored copy compares equal.
     /// bt-0022 — the day's steps ride on the Workout snapshot, so a day
     /// with no session but a step count still gets a block.
-    static func snapshot(kind: GradingKind, facts: DayFacts?, steps: Int? = nil) -> HealthSnapshot? {
+    /// bt-0023 — so does the day's burn from Health (active + resting kcal).
+    static func snapshot(kind: GradingKind, facts: DayFacts?, steps: Int? = nil, burn: HealthBurn? = nil) -> HealthSnapshot? {
         switch kind {
         case .workout:
             let sessions = (facts?.sessions ?? []).map {
@@ -772,8 +787,10 @@ final class HabitSyncEngine {
                                        sets: $0.setCount, start: HealthSnapshot.wholeSecond($0.startedAt),
                                        activeKcal: $0.activeKcal, activityType: $0.activityType)
             }
-            guard !sessions.isEmpty || steps != nil else { return nil }
-            return HealthSnapshot(sessions: sessions, steps: steps)
+            let hasBurn = burn?.isEmpty == false
+            guard !sessions.isEmpty || steps != nil || hasBurn else { return nil }
+            return HealthSnapshot(sessions: sessions, steps: steps,
+                                  activeBurnKcal: burn?.activeKcal, restingBurnKcal: burn?.restingKcal)
         case .diet:
             guard let facts else { return nil }
             let meals = facts.meals.map {

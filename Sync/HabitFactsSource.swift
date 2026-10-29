@@ -288,11 +288,17 @@ struct FakeHealthFacts: HabitFactsSource {
             result[day] = DayFacts(day: day, proteinGrams: diet.proteinGrams, calories: diet.calories,
                                    workoutMinutes: minutes,
                                    mealNames: ["Fake meal"],
+                                   // bt-0023 — 212 active cal on the session: more than the
+                                   // fake Health burn the engine supplies under the fake
+                                   // (100 active), so the Dashboard's sessions-over-Health
+                                   // warning is forced on the simulator. Carbs over the 180
+                                   // ceiling force the driver line the same way.
                                    sessions: minutes.map {
-                                       [DayFacts.Session(name: "Fake session", minutes: $0, category: "walking", setCount: 0, startedAt: start)]
+                                       [DayFacts.Session(name: "Fake session", minutes: $0, category: "walking", setCount: 0,
+                                                         startedAt: start, activeKcal: 212, activityType: "Walking")]
                                    } ?? [],
                                    meals: [DayFacts.Meal(id: "fake-meal", name: "Fake meal", calories: diet.calories,
-                                                         protein: diet.proteinGrams, carbs: nil, fat: nil, loggedAt: breakfast)])
+                                                         protein: diet.proteinGrams, carbs: 191, fat: 58, loggedAt: breakfast)])
             guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
             day = next
         }

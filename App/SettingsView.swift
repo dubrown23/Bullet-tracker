@@ -169,6 +169,8 @@ struct SettingsView: View {
     /// bt-0022 — seconds since 1970 once the history rewrite has run; the
     /// row below hides itself after that.
     @AppStorage(HistoryMigration.doneKey) private var historyRewrittenAt: Double = 0
+    /// bt-0023 — same shape: the one-time session refresh hides itself once run.
+    @AppStorage(HealthRefetch.doneKey) private var healthRefetchedAt: Double = 0
 
     var body: some View {
         NavigationStack {
@@ -263,6 +265,14 @@ struct SettingsView: View {
             if historyRewrittenAt == 0 {
                 NavigationLink(destination: HistoryMigrationView()) {
                     Label("Prepare Dashboard History", systemImage: "clock.arrow.circlepath")
+                }
+            }
+
+            // bt-0023 — one-time, gone once run: dh's corrected session
+            // calories + the day's burn from Health onto the stored rows.
+            if healthRefetchedAt == 0 {
+                NavigationLink(destination: HealthRefetchView()) {
+                    Label("Refresh Workout Calories", systemImage: "flame")
                 }
             }
 

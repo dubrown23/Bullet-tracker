@@ -2,10 +2,38 @@
 //  HabitDetailDashboardView.swift
 //  Bullet Tracker
 //
-//  Detail view for individual habit statistics
+//  Detail page for one habit. bt-0023 fixes what the Dashboard pass found:
+//  the heatmap now goes through the win rule (a Tried day is no longer full
+//  colour; an avoidance habit's cells are its slips, bt-0024), Best is the
+//  best run since the habit's clean start rather than inside the visible
+//  range, the duplicate "Total Completions" row is gone, one range control
+//  replaces the arrows + month menu + stepper and never starts before the
+//  clean start (Weed read "0 of 84 days" when it did), and Edit is in the
+//  toolbar.
 //
 
 import SwiftUI
+
+// MARK: - Range
+
+enum HabitDetailRange: String, CaseIterable, Identifiable {
+    case fourWeeks = "4 weeks"
+    case twelveWeeks = "12 weeks"
+    case all = "All"
+
+    var id: String { rawValue }
+
+    /// Start of the range ending `today`, clamped to the habit's clean start.
+    func start(today: Date, cleanStart: Date, calendar: Calendar = .current) -> Date {
+        let todayStart = calendar.startOfDay(for: today)
+        let clean = calendar.startOfDay(for: cleanStart)
+        switch self {
+        case .fourWeeks: return max(clean, calendar.date(byAdding: .day, value: -27, to: todayStart) ?? todayStart)
+        case .twelveWeeks: return max(clean, calendar.date(byAdding: .day, value: -83, to: todayStart) ?? todayStart)
+        case .all: return min(clean, todayStart)
+        }
+    }
+}
 
 // MARK: - Habit Detail Dashboard View
 
@@ -13,29 +41,11 @@ struct HabitDetailDashboardView: View {
     let habit: Habit?
 
     @State private var viewModel = HabitDetailViewModel()
+    @State private var range: HabitDetailRange = .twelveWeeks
+    @State private var showingEdit = false
     @ScaledMetric(relativeTo: .title2) private var tileSize: CGFloat = 44
-    @State private var rangeEnd: Date = Calendar.current.startOfDay(for: Date())
-    @State private var rangeStart: Date = Calendar.current.date(
-        byAdding: .day, value: -83,
-        to: Calendar.current.startOfDay(for: Date())
-    )!
 
     private let calendar = Calendar.current
-
-    private var weekCount: Int {
-        let days = calendar.dateComponents([.day], from: rangeStart, to: rangeEnd).day ?? 0
-        return max(1, (days + 7) / 7)
-    }
-
-    private var dateRangeText: String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "MMM d"
-        return "\(fmt.string(from: rangeStart)) – \(fmt.string(from: rangeEnd))"
-    }
-
-    private var isAtToday: Bool {
-        rangeEnd >= calendar.startOfDay(for: Date())
-    }
 
     /// Falls back to the app accent (not iOS blue) when a habit has no colour.
     private var habitColor: Color {
@@ -47,6 +57,13 @@ struct HabitDetailDashboardView: View {
     private var isSlipScored: Bool {
         guard let habit else { return false }
         return HabitWinRule.isSlipScored(style: habit.completionStyle)
+    }
+
+    private var rangeText: String {
+        let days = viewModel.heatmapDates.count
+        guard let first = viewModel.heatmapDates.first, let last = viewModel.heatmapDates.last else { return "" }
+        let fmt = Date.FormatStyle.dateTime.month(.abbreviated).day()
+        return "\(first.formatted(fmt)) – \(last.formatted(fmt)) · \(days) \(days == 1 ? "day" : "days")"
     }
 
     var body: some View {
@@ -71,6 +88,18 @@ struct HabitDetailDashboardView: View {
                             }
                         }
                         .padding(.vertical, 4)
+                    }
+
+                    // One range control; the footer shows the clamp.
+                    Section {
+                        Picker("Range", selection: $range) {
+                            ForEach(HabitDetailRange.allCases) { r in
+                                Text(r.rawValue).tag(r)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    } footer: {
+                        Text(rangeText)
                     }
 
                     // bt-0024 — an avoidance habit is scored by its slips: a
@@ -100,12 +129,12 @@ struct HabitDetailDashboardView: View {
                             }
                         }
 
-                        Section("Streaks") {
+                        Section {
                             Label {
                                 HStack {
                                     Text("Current")
                                     Spacer()
-                                    Text("\(viewModel.currentStreak) days")
+                                    Text(Self.dayCount(viewModel.currentStreak))
                                         .font(.system(.body, design: .rounded, weight: .semibold))
                                 }
                             } icon: {
@@ -117,87 +146,23 @@ struct HabitDetailDashboardView: View {
                                 HStack {
                                     Text("Best")
                                     Spacer()
-                                    Text("\(viewModel.bestStreak) days")
+                                    Text(Self.dayCount(viewModel.bestStreak))
                                         .font(.system(.body, design: .rounded, weight: .semibold))
                                 }
                             } icon: {
                                 Image(systemName: "trophy.fill")
                                     .foregroundStyle(AppTheme.partial)
                             }
-
-                            Label {
-                                HStack {
-                                    Text("Total Completions")
-                                    Spacer()
-                                    Text("\(viewModel.completedDays)")
-                                        .font(.system(.body, design: .rounded, weight: .semibold))
-                                }
-                            } icon: {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(AppTheme.success)
-                            }
+                        } header: {
+                            Text("Streaks")
+                        } footer: {
+                            Text("Best is the longest run since \(viewModel.cleanStart.formatted(.dateTime.month(.abbreviated).day())), whatever the range above.")
                         }
                     }
 
                     Section("Activity") {
-                        // Navigation + month picker
-                        HStack {
-                            Button("Earlier", systemImage: "chevron.left") {
-                                rangeStart = calendar.date(byAdding: .day, value: -7, to: rangeStart)!
-                                rangeEnd = calendar.date(byAdding: .day, value: -7, to: rangeEnd)!
-                            }
-                            .labelStyle(.iconOnly)
-                            .buttonStyle(.borderless)
-
-                            Spacer()
-
-                            Menu {
-                                Button("Today") {
-                                    let today = calendar.startOfDay(for: Date())
-                                    let duration = calendar.dateComponents([.day], from: rangeStart, to: rangeEnd).day ?? 83
-                                    rangeEnd = today
-                                    rangeStart = calendar.date(byAdding: .day, value: -duration, to: today)!
-                                }
-                                Divider()
-                                ForEach(0..<12, id: \.self) { i in
-                                    let monthDate = calendar.date(byAdding: .month, value: -i, to: Date())!
-                                    Button(monthDisplayName(for: monthDate)) {
-                                        selectMonth(monthDate)
-                                    }
-                                }
-                            } label: {
-                                // Plain menu label; the old conditional tint made
-                                // it look disabled in dark mode (bt-0012 audit).
-                                Text(dateRangeText)
-                                    .font(.subheadline)
-                            }
-
-                            Spacer()
-
-                            Button("Later", systemImage: "chevron.right") {
-                                let today = calendar.startOfDay(for: Date())
-                                let newEnd = min(calendar.date(byAdding: .day, value: 7, to: rangeEnd)!, today)
-                                rangeStart = calendar.date(byAdding: .day, value: 7, to: rangeStart)!
-                                rangeEnd = newEnd
-                            }
-                            .labelStyle(.iconOnly)
-                            .buttonStyle(.borderless)
-                            .disabled(isAtToday)
-                        }
-
-                        // Week count stepper
-                        Stepper("\(weekCount) weeks") {
-                            if weekCount < 52 {
-                                rangeStart = calendar.date(byAdding: .day, value: -7, to: rangeStart)!
-                            }
-                        } onDecrement: {
-                            if weekCount > 2 {
-                                rangeStart = calendar.date(byAdding: .day, value: 7, to: rangeStart)!
-                            }
-                        }
-
-                        // Heatmap — an avoidance habit's cells are its slips in
-                        // the failed red, clean days grey (bt-0024).
+                        // Heatmap through the win rule — an avoidance habit's
+                        // cells are its slips in the failed red (bt-0024).
                         ContributionHeatmapView(
                             dates: viewModel.heatmapDates,
                             completionData: viewModel.dailyCompletion,
@@ -214,34 +179,32 @@ struct HabitDetailDashboardView: View {
         }
         .navigationTitle(habit?.name ?? "Details")
         .navigationBarTitleDisplayMode(.inline)
+        // Edit is the only way in, so the bar never minimises away
+        // (found on the Duo simulator render: scrolled, the button was gone).
+        .keepNavigationBarVisible()
+        .toolbar {
+            if habit != nil {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Edit") { showingEdit = true }
+                }
+            }
+        }
+        .sheet(isPresented: $showingEdit, onDismiss: reloadData) {
+            if let habit { EditHabitView(habit: habit) }
+        }
         .onAppear { reloadData() }
-        .onChange(of: rangeStart) { reloadData() }
-        .onChange(of: rangeEnd) { reloadData() }
+        .onChange(of: range) { reloadData() }
     }
 
     private func reloadData() {
         if let habit = habit {
-            viewModel.loadData(for: habit, from: rangeStart, to: rangeEnd)
+            viewModel.loadData(for: habit, range: range)
         }
     }
 
-    // MARK: - Month Selection
-
-    private func monthDisplayName(for date: Date) -> String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "MMMM yyyy"
-        return fmt.string(from: date)
-    }
-
-    private func selectMonth(_ monthDate: Date) {
-        let comps = calendar.dateComponents([.year, .month], from: monthDate)
-        guard let monthStart = calendar.date(from: comps),
-              let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthStart),
-              let monthEnd = calendar.date(byAdding: .day, value: -1, to: nextMonth) else { return }
-
-        let today = calendar.startOfDay(for: Date())
-        rangeStart = monthStart
-        rangeEnd = min(monthEnd, today)
+    /// "1 day" / "6 days".
+    static func dayCount(_ n: Int) -> String {
+        "\(n) \(n == 1 ? "day" : "days")"
     }
 }
 
@@ -257,50 +220,64 @@ class HabitDetailViewModel {
     var bestStreak: Int = 0
     var heatmapDates: [Date] = []
     var dailyCompletion: [Date: Double] = [:]
+    var cleanStart: Date = Date()
 
     private let calendar = Calendar.current
     private let calculationService = HabitCalculationService.shared
 
-    func loadData(for habit: Habit, from startDate: Date, to endDate: Date) {
-        let heatmapStart = calendar.startOfDay(for: startDate)
-        let endDay = calendar.startOfDay(for: endDate)
+    func loadData(for habit: Habit, range: HabitDetailRange, today: Date = Date()) {
+        let endDay = calendar.startOfDay(for: today)
+        let clean = HistoryMigration.cleanStart(for: habit, calendar: calendar)
+        cleanStart = clean
+        let rangeStart = range.start(today: endDay, cleanStart: clean, calendar: calendar)
 
         // Heatmap day list.
         var dates: [Date] = []
-        var currentDate = heatmapStart
+        var currentDate = rangeStart
         while currentDate <= endDay {
             dates.append(currentDate)
             guard let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
             currentDate = nextDate
         }
 
-        // Fetch entries covering both the visible range and the 365-day streak lookback.
-        let today = calendar.startOfDay(for: Date())
-        let streakStart = calendar.date(byAdding: .day, value: -365, to: today) ?? heatmapStart
-        let fetchStart = min(streakStart, heatmapStart)
-        let entries = HabitStore.entriesByDay(for: habit, from: fetchStart, to: endDay)
+        // One fetch from the clean start: the range, Best and the streak
+        // lookback all live inside it.
+        let entries = HabitStore.entriesByDay(for: habit, from: min(clean, rangeStart), to: endDay)
 
         let completionResult = calculationService.calculateCompletionRate(
-            for: habit, using: entries, from: heatmapStart, to: endDay
+            for: habit, using: entries, from: rangeStart, to: endDay
         )
 
-        // Any row lights a cell (pre-existing; bt-0023 puts positive habits
-        // through the win rule). For an avoidance habit a row *is* a slip,
-        // so this already draws exactly the slip days (bt-0024).
-        var completion: [Date: Double] = [:]
-        for date in dates {
-            let dayStart = calendar.startOfDay(for: date)
-            let state = entries[dayStart]?.effectiveCompletionState ?? .notDone
-            completion[dayStart] = state != .notDone ? 1.0 : 0.0
-        }
-
+        dailyCompletion = Self.heatmap(for: habit, entries: entries, dates: dates, today: endDay, calendar: calendar)
         completionRate = completionResult.expected > 0 ? Int(completionResult.rate * 100) : 0
         completedDays = completionResult.completed
         totalDays = completionResult.expected
-        currentStreak = calculationService.calculateCurrentStreak(for: habit, using: entries)
-        bestStreak = calculationService.calculateBestStreak(for: habit, using: entries, from: heatmapStart, to: endDay)
+        currentStreak = calculationService.calculateCurrentStreak(for: habit, using: entries, allowingOpenToday: true, floor: clean)
+        bestStreak = calculationService.calculateBestStreak(for: habit, using: entries, from: clean, to: endDay)
         heatmapDates = dates
-        dailyCompletion = completion
+    }
+
+    /// bt-0023 — the cell value through the win rule: a positive habit's win
+    /// is full colour, a Rest day a light tint, a Tried or empty day grey; an
+    /// avoidance habit's slips are full colour and nothing else is (bt-0024).
+    static func heatmap(for habit: Habit, entries: [Date: HabitEntry], dates: [Date], today: Date,
+                        calendar: Calendar = .current) -> [Date: Double] {
+        var completion: [Date: Double] = [:]
+        let todayStart = calendar.startOfDay(for: today)
+        for date in dates {
+            let dayStart = calendar.startOfDay(for: date)
+            let state = entries[dayStart]?.effectiveCompletionState
+            if HabitWinRule.isSlipScored(style: habit.completionStyle) {
+                completion[dayStart] = HabitWinRule.isSlip(style: habit.completionStyle, state: state) ? 1.0 : 0.0
+            } else if HabitWinRule.isWin(style: habit.completionStyle, state: state, isFuture: dayStart > todayStart) {
+                completion[dayStart] = 1.0
+            } else if HabitWinRule.isNeutral(state: state) {
+                completion[dayStart] = 0.4
+            } else {
+                completion[dayStart] = 0.0
+            }
+        }
+        return completion
     }
 }
 

@@ -323,10 +323,24 @@ struct HealthSnapshot: Codable, Equatable, Sendable {
     /// HealthKit) can show it. `nil` = not read that run. A missing key in
     /// an older stored row decodes as `nil`.
     var steps: Int? = nil
+    /// bt-0023 — the day's calories burned from Apple Health (Active Energy
+    /// and Resting Energy, kcal), stored on the Workout row beside the steps.
+    /// **The daily burn is Health's total and nothing else**: dh's per-session
+    /// `activeKcal` is already inside it and is never added on top. `nil` =
+    /// Health had no reading (a dash, never 0); a missing key decodes as `nil`.
+    var activeBurnKcal: Double? = nil
+    var restingBurnKcal: Double? = nil
 
-    var isEmpty: Bool { sessions.isEmpty && meals.isEmpty && steps == nil }
+    var isEmpty: Bool {
+        sessions.isEmpty && meals.isEmpty && steps == nil && activeBurnKcal == nil && restingBurnKcal == nil
+    }
+
+    /// Active + resting from Health; `nil` when neither is known.
+    var totalBurnKcal: Double? { Self.sum([activeBurnKcal, restingBurnKcal]) }
 
     var totalMinutes: Double { sessions.reduce(0) { $0 + $1.minutes } }
+    /// The sessions' own active calories added up — for the per-session rows
+    /// and the sessions-over-Health check only (bt-0023), never the day's burn.
     var totalActiveKcal: Double? { Self.sum(sessions.map(\.activeKcal)) }
     var totalCalories: Double? { Self.sum(meals.map(\.calories)) }
     var totalProtein: Double? { Self.sum(meals.map(\.protein)) }

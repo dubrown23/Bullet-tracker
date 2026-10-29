@@ -207,13 +207,27 @@ final class HabitCalculationService {
 
     /// Calculates current streak using pre-fetched entries — no persistence access.
     /// Unscheduled days and Rest days are skipped, not broken on.
-    func calculateCurrentStreak(for habit: Habit, using entries: [Date: HabitEntry]) -> Int {
+    ///
+    /// bt-0023 — `allowingOpenToday`: while today is still open (nothing
+    /// logged yet) the walk starts from yesterday, so a 6-day run reads 6 at
+    /// breakfast instead of 0. A Tried / slipped today still breaks it.
+    /// `floor`: the walk never goes back past this day (a habit's clean start).
+    func calculateCurrentStreak(for habit: Habit, using entries: [Date: HabitEntry],
+                                allowingOpenToday: Bool = false, floor: Date? = nil) -> Int {
         guard hasStreaks(habit) else { return 0 }
         var streak = 0
         var currentDate = calendar.startOfDay(for: Date())
         let maxDays = 365
+        let floorDay = floor.map { calendar.startOfDay(for: $0) }
+
+        if allowingOpenToday, isScored(habit, in: entries, on: currentDate),
+           !HabitWinRule.isLogged(state: entries[currentDate]?.effectiveCompletionState),
+           let yesterday = calendar.date(byAdding: .day, value: -1, to: currentDate) {
+            currentDate = yesterday
+        }
 
         for _ in 0..<maxDays {
+            if let floorDay, currentDate < floorDay { break }
             if !isScored(habit, in: entries, on: currentDate) {
                 guard let previousDay = calendar.date(byAdding: .day, value: -1, to: currentDate) else { break }
                 currentDate = previousDay

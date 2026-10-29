@@ -157,6 +157,19 @@ enum HistoryMigration {
         habit.gradingKind == .workout
     }
 
+    /// bt-0023 — the first day a habit's history is real. Poison kept
+    /// everything, so its own start date; a graded habit's rows before go-live
+    /// were rebuilt from dh (Workout, Aug 1) or wiped (Diet), so go-live or
+    /// the import start; every other habit lost its rows before the cutoff,
+    /// so the cutoff. Ranges and streaks on the Dashboard never look back
+    /// past this day (Weed read "0 of 84 days" when they did).
+    static func cleanStart(for habit: Habit, dates: Dates = .standard(), calendar: Calendar = .current) -> Date {
+        let started = habit.startDate.map { calendar.startOfDay(for: $0) }
+        if isKeptWhole(habit) { return started ?? dates.cutoff }
+        if isWorkout(habit) { return max(started ?? dates.importStart, dates.importStart) }
+        return max(started ?? dates.cutoff, dates.cutoff)
+    }
+
     /// What the rewrite would do, with counts, before anything changes.
     /// `history == nil` (not loaded yet) plans the deletes and leaves the
     /// Workout line as a rebuild of zero.
