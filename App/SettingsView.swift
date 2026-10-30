@@ -171,6 +171,8 @@ struct SettingsView: View {
     @AppStorage(HistoryMigration.doneKey) private var historyRewrittenAt: Double = 0
     /// bt-0023 — same shape: the one-time session refresh hides itself once run.
     @AppStorage(HealthRefetch.doneKey) private var healthRefetchedAt: Double = 0
+    /// bt-0025 — same shape: the one-time burned-calories backfill (Aug 1 → Oct 26).
+    @AppStorage(BurnBackfill.doneKey) private var burnBackfilledAt: Double = 0
 
     var body: some View {
         NavigationStack {
@@ -273,6 +275,14 @@ struct SettingsView: View {
             if healthRefetchedAt == 0 {
                 NavigationLink(destination: HealthRefetchView()) {
                     Label("Refresh Workout Calories", systemImage: "flame")
+                }
+            }
+
+            // bt-0025 — one-time, gone once run: each day's burn from Health
+            // onto the rest days before go-live that have no Workout row.
+            if burnBackfilledAt == 0 {
+                NavigationLink(destination: BurnBackfillView()) {
+                    Label("Backfill Burned Calories", systemImage: "bolt.heart")
                 }
             }
 

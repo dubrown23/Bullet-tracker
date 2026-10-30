@@ -251,6 +251,28 @@ enum HabitStore {
         return true
     }
 
+    /// bt-0025 — like `setHealth`, but a day with no row gets one: `.notDone`,
+    /// `source = .auto`, no details, only the `health` block — a holder for
+    /// a rest day's calories burned before the Oct 27 go-live. Such a row is
+    /// not logged (the win rule, streaks and rates ignore it), not an
+    /// override, hidden by the Journal's notDone-and-no-details filter, an
+    /// empty dot on Today; the Dashboard reads its burn. Used by the one-time
+    /// backfill only; no `didWrite` (nothing to sync, nothing on the widget).
+    /// Returns true when it wrote.
+    @discardableResult
+    static func setHealthCreatingRow(for habit: Habit, on date: Date, snapshot: HealthSnapshot?, in context: ModelContext) -> Bool {
+        let dayStart = calendar.startOfDay(for: date)
+        if entry(for: habit, on: dayStart) != nil {
+            return setHealth(for: habit, on: dayStart, snapshot: snapshot, in: context)
+        }
+        guard let snapshot, !snapshot.isEmpty else { return false }
+        let row = HabitEntry(date: dayStart, completionState: .notDone, habit: habit, source: .auto, editedAt: Date())
+        row.health = snapshot
+        context.insert(row)
+        save(context)
+        return true
+    }
+
     /// Pure merge: appends `text` to the notes line, sets book / pages on a
     /// reading payload. An empty payload becomes the habit's own kind so
     /// the Log Details sheet shows the fields it expects.

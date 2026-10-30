@@ -446,17 +446,18 @@ struct TodayRowTests {
         #expect(DayMark.missed.spokenText(isAvoidance: false) == "Tried")
     }
 
-    /// The dots are the six days before the selected day, oldest first; the
-    /// selected day itself is the control, not a dot.
+    /// The dots are the six days before the selected day, yesterday first
+    /// (2026-10-30: time runs one way from the control); the selected day
+    /// itself is the control, not a dot.
     @Test func dotWindowIsTheSixDaysBeforeTheSelectedDay() {
         let forToday = WeekGridMetrics.previousDays(before: day(0), calendar: calendar)
         #expect(forToday.count == 6)
-        #expect(forToday.first == day(-6))
-        #expect(forToday.last == day(-1))
+        #expect(forToday.first == day(-1))
+        #expect(forToday.last == day(-6))
         #expect(!forToday.contains(day(0)))
         // Stepping back three days moves the whole window with it.
         let forPast = WeekGridMetrics.previousDays(before: day(-3), calendar: calendar)
-        #expect(forPast == [day(-9), day(-8), day(-7), day(-6), day(-5), day(-4)])
+        #expect(forPast == [day(-4), day(-5), day(-6), day(-7), day(-8), day(-9)])
     }
 
     /// The list is two sections — the habits you do, then Avoiding — each in
@@ -497,8 +498,16 @@ struct GradingRuleTests {
     @Test func dietUsesTheHabitsTargets() {
         let defaults = GradingTargets.defaults
         #expect(DietGrade.state(proteinGrams: 190, calories: 2050, targets: defaults) == .success)
-        #expect(DietGrade.state(proteinGrams: 190, calories: 1500, targets: defaults) == .partial)
-        #expect(DietGrade.state(proteinGrams: 100, calories: 1200, targets: defaults) == .failure)
+        // 2026-10-30: the calorie floor no longer grades — under 1,900 with
+        // protein hit is Done, and under 1,900 with protein missed is Partial.
+        #expect(DietGrade.state(proteinGrams: 190, calories: 1500, targets: defaults) == .success)
+        #expect(DietGrade.state(proteinGrams: 100, calories: 1200, targets: defaults) == .partial)
+        // The ceiling still grades: at it is a hit, over it is a miss.
+        #expect(DietGrade.state(proteinGrams: 190, calories: 2200, targets: defaults) == .success)
+        #expect(DietGrade.state(proteinGrams: 190, calories: 2201, targets: defaults) == .partial)
+        #expect(DietGrade.state(proteinGrams: 100, calories: 2500, targets: defaults) == .failure)
+        // Missing calories are a miss, not "under the ceiling".
+        #expect(DietGrade.state(proteinGrams: 190, calories: nil, targets: defaults) == .partial)
         #expect(DietGrade.state(proteinGrams: nil, calories: nil, targets: defaults) == .failure)
         // Raise the protein floor to 200 → the same 190 g day is only Partial.
         var raised = defaults
@@ -654,9 +663,15 @@ struct HabitStoreWriteTests {
     @Test func engineGradeAppliesInProgressAndUnknownRules() {
         let today = Calendar.current.startOfDay(for: Date())
         let t = GradingTargets.defaults
-        let neither = DayFacts(day: today, proteinGrams: 100, calories: 1200)
+        // Neither hit: protein under the floor and calories over the ceiling
+        // (under the floor stopped being a miss 2026-10-30).
+        let neither = DayFacts(day: today, proteinGrams: 100, calories: 2500)
         #expect(HabitSyncEngine.grade(kind: .diet, targets: t, facts: neither, steps: nil, isToday: true) == nil)
         #expect(HabitSyncEngine.grade(kind: .diet, targets: t, facts: neither, steps: nil, isToday: false) == .failure)
+        // Under the floor with protein missed: calories hit, so Partial today and after.
+        let lowDay = DayFacts(day: today, proteinGrams: 100, calories: 1200)
+        #expect(HabitSyncEngine.grade(kind: .diet, targets: t, facts: lowDay, steps: nil, isToday: true) == .partial)
+        #expect(HabitSyncEngine.grade(kind: .diet, targets: t, facts: lowDay, steps: nil, isToday: false) == .partial)
         #expect(HabitSyncEngine.grade(kind: .diet, targets: t, facts: nil, steps: nil, isToday: false) == nil)
         #expect(HabitSyncEngine.grade(kind: .workout, targets: t, facts: nil, steps: 4000, isToday: false) == nil)
         #expect(HabitSyncEngine.grade(kind: .workout, targets: t, facts: nil, steps: 12000, isToday: true) == .partial)
@@ -750,16 +765,25 @@ struct DustinHealthWireTests {
     }
 
     @Test func syncRequestSendsExplicitNullDetailKind() throws {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
         let payload = HabitSyncPayload(
             habits: [.init(name: "Read", kind: "simple", detailKind: "reading_log"), .init(name: "Sauna", kind: "simple", detailKind: nil)],
-            targets: [.proteinMinGrams: 180], timeZone: "America/New_York", tickedToday: ["Sauna"])
+            targets: [.proteinMinGrams: 180], timeZone: "America/New_York",
+            tickedDays: [yesterday: ["Read"], today: ["Sauna"]])
         let data = try JSONEncoder().encode(DustinHealthWire.syncRequest(payload))
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         let habits = try #require(object["habits"] as? [[String: Any]])
         #expect(habits[0]["detail_kind"] as? String == "reading_log")
         #expect(habits[1]["detail_kind"] is NSNull)
         #expect((object["targets"] as? [String: Double])?["protein_min_g"] == 180)
-        #expect(object["ticked_today"] as? [String] == ["Sauna"])
+        #expect(object["ticked_today"] == nil, "dropped once dh's per-day side went live")
+        // 2026-10-30 — ticked_days keyed by the app's local day string.
+        let days = try #require(object["ticked_days"] as? [String: [String]])
+        #expect(days[DustinHealthWire.string(from: yesterday, calendar: calendar)] == ["Read"])
+        #expect(days[DustinHealthWire.string(from: today, calendar: calendar)] == ["Sauna"])
+        #expect(days.count == 2)
     }
 
     @Test func rangesSplitAtGapsAndAtTheCap() {
@@ -843,8 +867,25 @@ struct SyncEngineStep3Tests {
         for h in [diet, read, weed, sauna, dupe] { context.insert(h) }
         try context.save()
         HabitStore.setCompletion(for: sauna, on: today, state: 1, in: context)
+        // 2026-10-30 — past days ride along: a tap two days ago, a voice
+        // tick yesterday, a slip yesterday, an automatic grade three days
+        // ago. Any mark counts, the one rule ticked_today has always used.
+        let calendar = Calendar.current
+        func day(_ offset: Int) -> Date { calendar.date(byAdding: .day, value: offset, to: today)! }
+        HabitStore.setCompletion(for: sauna, on: day(-2), state: 1, in: context)
+        HabitStore.setCompletion(for: read, on: day(-1), state: 1, source: .voice, in: context)
+        HabitStore.setCompletion(for: weed, on: day(-1), state: 3, in: context)
+        HabitStore.setCompletion(for: diet, on: day(-3), state: 2, source: .auto, in: context)
+        HabitStore.setCompletion(for: sauna, on: day(-8), state: 1, in: context) // outside the window
 
         let payload = HabitSyncEngine.payload(habits: [diet, read, weed, sauna, dupe], today: today, timeZone: "America/New_York")
+        #expect(payload.tickedDays.count == 7, "all seven days, empty ones included")
+        #expect(payload.tickedDays[day(-6)] == [])
+        #expect(payload.tickedDays[day(-3)] == ["Diet"])
+        #expect(payload.tickedDays[day(-2)] == ["Sauna"])
+        #expect(payload.tickedDays[day(-1)] == ["Read", "Weed"], "habit order, voice tick and slip both count")
+        #expect(payload.tickedDays[today] == ["Sauna"])
+        #expect(payload.tickedDays[day(-8)] == nil && payload.tickedDays[day(1)] == nil)
         #expect(payload.habits.map(\.name) == ["Diet", "Read", "Weed", "Sauna"])
         #expect(payload.habits.map(\.kind) == ["graded", "simple", "avoid", "simple"])
         #expect(payload.habits[1].detailKind == "reading_log")
@@ -854,7 +895,6 @@ struct SyncEngineStep3Tests {
         #expect(payload.targets[.stepsMin] == nil)
         // bt-0022 — carbs / fat go up like the others (defaults when blank).
         #expect(payload.targets[.carbsMaxGrams] == 180 && payload.targets[.fatMaxGrams] == 65)
-        #expect(payload.tickedToday == ["Sauna"])
         #expect(payload.timeZone == "America/New_York")
     }
 
@@ -1501,6 +1541,8 @@ final class CountingSource: HabitFactsSource, @unchecked Sendable {
     let isLive = false
     private(set) var syncCalls = 0
     private(set) var lastPayload: HabitSyncPayload?
+    /// Handed out by the next `pendingActions()` call, then cleared.
+    var pendingOnce: [InboxAction] = []
 
     func sync(_ payload: HabitSyncPayload) async throws -> HabitSyncReply {
         syncCalls += 1
@@ -1509,7 +1551,10 @@ final class CountingSource: HabitFactsSource, @unchecked Sendable {
     }
     func changedDays(since: String?) async throws -> ChangedDays { ChangedDays(days: [], nextSince: "counting") }
     func facts(from: Date, to: Date) async throws -> [Date: DayFacts] { [:] }
-    func pendingActions() async throws -> [InboxAction] { [] }
+    func pendingActions() async throws -> [InboxAction] {
+        defer { pendingOnce = [] }
+        return pendingOnce
+    }
     func confirmApplied(_ ids: [String]) async throws -> AckResult { AckResult(applied: ids.count, notApplied: []) }
 }
 
@@ -1570,22 +1615,62 @@ struct QuietSyncTests {
         try await Task.sleep(for: .seconds(1))
 
         #expect(rig.source.syncCalls == 1)
-        #expect(rig.source.lastPayload?.tickedToday == ["Pills"])
+        #expect(rig.source.lastPayload?.tickedDays[today] == ["Pills"])
         #expect(HabitSyncEngine.shared.lastReport?.reason == .afterTap)
     }
 
-    @Test func autoVoiceAndPastDayWritesSendNothing() async throws {
+    @Test func autoAndVoiceWritesSendNothing() async throws {
         let rig = try await makeRig()
         defer { tearDown() }
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today)!
 
         HabitStore.setCompletion(for: rig.pills, on: today, state: 1, source: .auto, in: rig.context)
         HabitStore.setCompletion(for: rig.pills, on: today, state: 1, source: .voice, in: rig.context)
         HabitStore.removeEntry(for: rig.pills, on: today, source: .auto, in: rig.context)
-        HabitStore.setCompletion(for: rig.pills, on: yesterday, state: 1, in: rig.context)
         try await Task.sleep(for: .milliseconds(700))
 
         #expect(rig.source.syncCalls == 0)
+    }
+
+    /// 2026-10-30 — a hand tap on a past day sends like a today tap, and the
+    /// payload carries it under that day (so fixing yesterday and then asking
+    /// voice is right straight away). Until this day a past-day tap waited
+    /// for the next run.
+    @Test func aPastDayTapSendsLikeATodayTap() async throws {
+        let rig = try await makeRig()
+        defer { tearDown() }
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today)!
+
+        HabitStore.setCompletion(for: rig.pills, on: yesterday, state: 1, in: rig.context)
+        try await Task.sleep(for: .seconds(1))
+
+        #expect(rig.source.syncCalls == 1)
+        #expect(HabitSyncEngine.shared.lastReport?.reason == .afterTap)
+        #expect(rig.source.lastPayload?.tickedDays[yesterday] == ["Pills"])
+        #expect(rig.source.lastPayload?.tickedDays[today] == [])
+    }
+
+    /// 2026-10-30 — the tick lists go up at the start of a run, before the
+    /// inbox. Once a voice tick is confirmed dh trusts the app's list for
+    /// that day, so a run that applied a tick, untick or grade sends the
+    /// lists again at its end; a note-only run does not.
+    @Test func aRunThatAppliesAVoiceTickSendsTheListsAgain() async throws {
+        let rig = try await makeRig()
+        defer { tearDown() }
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today)!
+
+        rig.source.pendingOnce = [InboxAction(id: "v1", kind: .tick(note: nil, book: nil, pages: nil), habitName: "Pills", day: yesterday)]
+        await HabitSyncEngine.shared.refresh(in: rig.context, force: true)
+        #expect(rig.source.syncCalls == 2, "once at the start, once more after the voice tick")
+        #expect(rig.source.lastPayload?.tickedDays[yesterday] == ["Pills"])
+
+        rig.source.pendingOnce = [InboxAction(id: "v2", kind: .note(text: "fine", book: nil, pages: nil), habitName: "Pills", day: yesterday)]
+        await HabitSyncEngine.shared.refresh(in: rig.context, force: true)
+        #expect(rig.source.syncCalls == 3, "a note changes no list, so one send")
+
+        rig.source.pendingOnce = [InboxAction(id: "v3", kind: .untick, habitName: "Pills", day: yesterday)]
+        await HabitSyncEngine.shared.refresh(in: rig.context, force: true)
+        #expect(rig.source.syncCalls == 5, "an untick sends again too")
+        #expect(rig.source.lastPayload?.tickedDays[yesterday] == [])
     }
 
     @Test func aStartingRunDropsTheWaitingOne() async throws {
@@ -1598,7 +1683,7 @@ struct QuietSyncTests {
         await HabitSyncEngine.shared.refresh(in: rig.context, force: true)
 
         #expect(rig.source.syncCalls == 1)
-        #expect(rig.source.lastPayload?.tickedToday == ["Pills"])
+        #expect(rig.source.lastPayload?.tickedDays[today] == ["Pills"])
         try await Task.sleep(for: .milliseconds(700))
         #expect(rig.source.syncCalls == 1, "the waiting quiet sync must not run as a second send")
     }
@@ -1631,12 +1716,12 @@ struct QuietSyncTests {
 
     @Test func quietSyncDecisionTable() {
         typealias E = HabitSyncEngine
-        #expect(E.shouldQuietSync(isPhone: true, hasKey: true, source: .hand, isToday: true))
-        #expect(!E.shouldQuietSync(isPhone: false, hasKey: true, source: .hand, isToday: true), "iPad")
-        #expect(!E.shouldQuietSync(isPhone: true, hasKey: false, source: .hand, isToday: true), "no key")
-        #expect(!E.shouldQuietSync(isPhone: true, hasKey: true, source: .auto, isToday: true), "grader")
-        #expect(!E.shouldQuietSync(isPhone: true, hasKey: true, source: .voice, isToday: true), "voice")
-        #expect(!E.shouldQuietSync(isPhone: true, hasKey: true, source: .hand, isToday: false), "yesterday")
+        // 2026-10-30 — the day no longer matters: a past-day tap sends too.
+        #expect(E.shouldQuietSync(isPhone: true, hasKey: true, source: .hand))
+        #expect(!E.shouldQuietSync(isPhone: false, hasKey: true, source: .hand), "iPad")
+        #expect(!E.shouldQuietSync(isPhone: true, hasKey: false, source: .hand), "no key")
+        #expect(!E.shouldQuietSync(isPhone: true, hasKey: true, source: .auto), "grader")
+        #expect(!E.shouldQuietSync(isPhone: true, hasKey: true, source: .voice), "voice")
     }
 
     @Test func leavingTheAppSendsTheWaitingTapNow() async throws {
@@ -1977,6 +2062,92 @@ struct DashboardTests {
         #expect(HealthRefetch.rebuilt(before: nil, facts: nil, steps: nil, burn: nil) == nil)
         #expect(HealthRefetch.rebuilt(before: nil, facts: nil, steps: 3_000, burn: HealthBurn(activeKcal: 400, restingKcal: 1_900))
                 == HealthSnapshot(steps: 3_000, activeBurnKcal: 400, restingBurnKcal: 1_900))
+    }
+}
+
+// MARK: - bt-0025 — Burned backfill on rest days before go-live
+
+@MainActor
+struct BurnBackfillTests {
+    private func makeContext() throws -> ModelContext {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: Habit.self, HabitEntry.self, Note.self, configurations: config)
+        return ModelContext(container)
+    }
+
+    private let calendar = Calendar.current
+    private func day(_ month: Int, _ d: Int) -> Date {
+        calendar.startOfDay(for: calendar.date(from: DateComponents(year: 2026, month: month, day: d))!)
+    }
+
+    @Test func standardSpanIsAug1ToOct26() {
+        let days = BurnBackfill.standardDays(calendar: calendar)
+        #expect(days.first == day(8, 1) && days.last == day(10, 26) && days.count == 87)
+    }
+
+    /// A row with a burn is left alone; a row without one gets just its burn
+    /// (grade, source, sessions, steps as they were); a rest day with no row
+    /// gets an empty automatic row holding only the burn; a day Health had
+    /// nothing for is counted, not written; both averages are right; the
+    /// Dashboard's Burned series then reads the rest day.
+    @Test func planAndPerformFillOnlyWhatIsMissing() throws {
+        let context = try makeContext()
+        let workout = Habit(name: "Workout", order: 0, completionStyle: .multiState)
+        workout.gradingKind = .workout
+        workout.gradingSince = day(10, 27)
+        context.insert(workout)
+        try context.save()
+
+        // Aug 5: trained, burn known. Aug 6: trained, set by hand, no burn. Aug 7 + 8: rest days, no row.
+        HabitStore.setCompletion(for: workout, on: day(8, 5), state: 1, source: .auto, in: context)
+        HabitStore.setHealth(for: workout, on: day(8, 5),
+                             snapshot: HealthSnapshot(sessions: [.init(name: "Run", category: "running", minutes: 30, sets: 0, start: nil)],
+                                                      steps: 8_000, activeBurnKcal: 900, restingBurnKcal: 2_100), in: context)
+        HabitStore.setCompletion(for: workout, on: day(8, 6), state: 1, in: context)
+        HabitStore.setHealth(for: workout, on: day(8, 6),
+                             snapshot: HealthSnapshot(sessions: [.init(name: "Lift", category: "strength", minutes: 45, sets: 12, start: nil)],
+                                                      steps: 5_000), in: context)
+        let days = [day(8, 5), day(8, 6), day(8, 7), day(8, 8)]
+        let rows = HabitStore.entriesByDay(for: workout, from: day(8, 5), to: day(8, 8))
+        #expect(BurnBackfill.daysNeedingBurn(rows: rows, days: days) == [day(8, 6), day(8, 7), day(8, 8)])
+
+        var readings = BurnBackfill.Readings()
+        readings.healthAvailable = true
+        readings.burn[day(8, 6)] = HealthBurn(activeKcal: 700, restingKcal: 2_100)
+        readings.burn[day(8, 7)] = HealthBurn(activeKcal: 300, restingKcal: 2_000)
+        // Aug 8: Health had nothing.
+        let plan = BurnBackfill.plan(rows: rows, days: days, readings: readings)
+        #expect(plan.spanDays == 4 && plan.daysWithBurn == 1 && plan.rowsMissingBurn == 1 && plan.rowlessDays == 2 && plan.unreadDays == 1)
+        #expect(plan.adds.map(\.day) == [day(8, 6), day(8, 7)])
+        #expect(plan.rowsFilled == 1 && plan.rowsCreated == 1)
+        #expect(plan.averageBefore == 3_000)
+        #expect(plan.averageAfter == 2_700) // (3,000 + 2,800 + 2,300) / 3
+
+        BurnBackfill.perform(habit: workout, plan: plan, in: context)
+        #expect(BurnBackfill.isDone)
+        UserDefaults.standard.removeObject(forKey: BurnBackfill.doneKey)
+
+        // Aug 5: untouched.
+        let aug5 = try #require(HabitStore.entry(for: workout, on: day(8, 5)))
+        #expect(aug5.health?.totalBurnKcal == 3_000 && aug5.health?.sessions.count == 1 && aug5.source == .auto)
+        // Aug 6: burn only — the hand grade, the sessions and the steps stay.
+        let aug6 = try #require(HabitStore.entry(for: workout, on: day(8, 6)))
+        #expect(aug6.effectiveCompletionState == .success && aug6.source == .hand && aug6.isOverride)
+        #expect(aug6.health?.sessions.first?.name == "Lift" && aug6.health?.steps == 5_000)
+        #expect(aug6.health?.activeBurnKcal == 700 && aug6.health?.restingBurnKcal == 2_100)
+        // Aug 7: a new empty automatic row that holds only the burn.
+        let aug7 = try #require(HabitStore.entry(for: workout, on: day(8, 7)))
+        #expect(aug7.effectiveCompletionState == .notDone && aug7.source == .auto && !aug7.isOverride)
+        #expect(!HabitWinRule.isLogged(state: aug7.effectiveCompletionState))
+        #expect(aug7.details == nil && aug7.health?.sessions.isEmpty == true && aug7.health?.totalBurnKcal == 2_300)
+        // Aug 8: still no row.
+        #expect(HabitStore.entry(for: workout, on: day(8, 8)) == nil)
+
+        // The Dashboard's Burned series now reads the rest day.
+        let after = HabitStore.entriesByDay(for: workout, from: day(8, 5), to: day(8, 8))
+        let series = DashboardTrends.trainingSeries(workoutRows: after, days: days, targets: .defaults, calendar: calendar)
+        #expect(series.burned.points.map(\.value) == [3_000, 2_800, 2_300, nil])
+        #expect(series.burned.average == 2_700)
     }
 }
 

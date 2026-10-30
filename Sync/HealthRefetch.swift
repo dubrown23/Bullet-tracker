@@ -214,3 +214,159 @@ enum HealthRefetch {
         return plan
     }
 }
+
+// MARK: - bt-0025 — Burned on rest days before go-live
+
+/// bt-0025 — the one-time backfill of calories burned for Aug 1 → Oct 26.
+/// Before the Oct 27 go-live a Workout row exists only on training days
+/// (`bt-0022` rebuilt them from dh's sessions), so the Dashboard's Burned
+/// trend over that span leaned high: rest days were missing, not zero.
+/// Dustin's call (2026-10-30): read each day's active + resting from Apple
+/// Health (`HealthSteps.burn`, the same total the sync stores) and keep it
+/// on that day. A rest day gets a new Workout row with no state (`.notDone`,
+/// `source = .auto`, only the `health` block — `HabitStore.setHealthCreatingRow`).
+/// A day that has a row but no burn gets just its burn filled; grade, source,
+/// notes and sessions are untouched. Days from Oct 27 on are never read or
+/// written. Pure over a `ModelContext` like the refresh above.
+@MainActor
+enum BurnBackfill {
+
+    /// Seconds since 1970 once the backfill has run; the Settings row hides
+    /// itself after that.
+    static let doneKey = "burnBackfillDoneAt"
+
+    static var isDone: Bool { UserDefaults.standard.double(forKey: doneKey) > 0 }
+
+    // MARK: Span
+
+    /// Aug 1 → Oct 26, 2026, fixed: the days the history rewrite left
+    /// without a Workout row on rest days.
+    static func standardDays(calendar: Calendar = .current) -> [Date] {
+        guard let start = calendar.date(from: DateComponents(year: 2026, month: 8, day: 1)),
+              let end = calendar.date(from: DateComponents(year: 2026, month: 10, day: 26)) else { return [] }
+        return days(from: calendar.startOfDay(for: start), to: calendar.startOfDay(for: end), calendar: calendar)
+    }
+
+    static func days(from start: Date, to end: Date, calendar: Calendar = .current) -> [Date] {
+        var result: [Date] = []
+        var day = start
+        while day <= end {
+            result.append(day)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        return result
+    }
+
+    // MARK: What Health says
+
+    struct Readings: Sendable {
+        /// Days Health had a reading for (an empty reading is left out).
+        var burn: [Date: HealthBurn] = [:]
+        var healthAvailable = false
+        var notes: [String] = []
+    }
+
+    /// The days worth asking Health about: no row, or a row without a burn.
+    static func daysNeedingBurn(rows: [Date: HabitEntry], days: [Date]) -> [Date] {
+        days.filter { rows[$0]?.health?.totalBurnKcal == nil }
+    }
+
+    /// Burn for each day from Apple Health. A Health failure is noted; the
+    /// plan then adds nothing.
+    static func load(days: [Date]) async -> Readings {
+        var readings = Readings()
+        guard HealthSteps.isAvailable else {
+            readings.notes.append("Health data not available on this device.")
+            return readings
+        }
+        do {
+            try await HealthSteps.shared.requestAuthorization()
+            for day in days {
+                let burn = try await HealthSteps.shared.burn(on: day)
+                if !burn.isEmpty { readings.burn[day] = burn }
+            }
+            readings.healthAvailable = true
+        } catch {
+            readings.notes.append("Health: \(error.localizedDescription)")
+        }
+        return readings
+    }
+
+    // MARK: The plan
+
+    /// One day that gains a burn.
+    struct Add: Equatable, Identifiable {
+        let day: Date
+        let burn: HealthBurn
+        /// A rest day with no row: the write creates one.
+        let createsRow: Bool
+        var id: Date { day }
+    }
+
+    struct Plan: Equatable {
+        var spanDays = 0
+        /// Days whose row already carries a burn — left exactly as they are.
+        var daysWithBurn = 0
+        /// Days with a Workout row but no burn (Dustin's addition): burn only.
+        var rowsMissingBurn = 0
+        /// Days with no row at all: a new empty automatic row.
+        var rowlessDays = 0
+        /// Days that needed a burn but Health had nothing for.
+        var unreadDays = 0
+        var adds: [Add] = []
+        /// Mean `totalBurnKcal` over the span's days with a reading, before
+        /// and after the adds — the answer to "what did the backfill do".
+        var averageBefore: Double?
+        var averageAfter: Double?
+
+        var rowsFilled: Int { adds.filter { !$0.createsRow }.count }
+        var rowsCreated: Int { adds.filter(\.createsRow).count }
+    }
+
+    static func plan(rows: [Date: HabitEntry], days: [Date], readings: Readings) -> Plan {
+        var plan = Plan()
+        var before: [Double] = []
+        var added: [Double] = []
+        plan.spanDays = days.count
+        for day in days {
+            let row = rows[day]
+            if let total = row?.health?.totalBurnKcal {
+                plan.daysWithBurn += 1
+                before.append(total)
+                continue
+            }
+            if row == nil { plan.rowlessDays += 1 } else { plan.rowsMissingBurn += 1 }
+            guard let burn = readings.burn[day], let total = burn.totalKcal else {
+                plan.unreadDays += 1
+                continue
+            }
+            plan.adds.append(Add(day: day, burn: burn, createsRow: row == nil))
+            added.append(total)
+        }
+        plan.averageBefore = mean(before)
+        plan.averageAfter = mean(before + added)
+        return plan
+    }
+
+    static func mean(_ values: [Double]) -> Double? {
+        values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+    }
+
+    // MARK: The write
+
+    /// Puts each add's burn into the day's Health block — a row's existing
+    /// block keeps its sessions and steps, a rowless day gets an empty
+    /// automatic row — then stamps the done flag.
+    @discardableResult
+    static func perform(habit: Habit, plan: Plan, in context: ModelContext) -> Plan {
+        for add in plan.adds {
+            var snapshot = HabitStore.entry(for: habit, on: add.day)?.health ?? HealthSnapshot()
+            snapshot.activeBurnKcal = add.burn.activeKcal
+            snapshot.restingBurnKcal = add.burn.restingKcal
+            HabitStore.setHealthCreatingRow(for: habit, on: add.day, snapshot: snapshot, in: context)
+        }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: doneKey)
+        return plan
+    }
+}

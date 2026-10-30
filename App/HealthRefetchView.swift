@@ -189,3 +189,152 @@ struct HealthRefetchView: View {
     }
     .modelContainer(for: [Habit.self, HabitEntry.self, Note.self], inMemory: true)
 }
+
+// MARK: - bt-0025 — Settings → Data Management → "Backfill Burned Calories"
+
+/// One-time, iPhone only (it reads Apple Health). Shows the counts first —
+/// days in the span, days with a burn already, rows missing a burn (or
+/// "None"), rest days with no row, the Burned average before → after —
+/// then one tap. The logic is `BurnBackfill`; this screen only shows and
+/// confirms it.
+struct BurnBackfillView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: [SortDescriptor(\Habit.order)]) private var habits: [Habit]
+
+    @State private var readings: BurnBackfill.Readings?
+    @State private var plan: BurnBackfill.Plan?
+    @State private var isLoading = false
+    @State private var result: BurnBackfill.Plan?
+
+    private let days = BurnBackfill.standardDays()
+
+    private var workout: Habit? { habits.first { $0.gradingKind == .workout } }
+    private var canRun: Bool { HabitSyncEngine.isGradingDevice }
+
+    private var spanText: String {
+        guard let first = days.first, let last = days.last else { return "" }
+        return "\(first.formatted(.dateTime.month(.abbreviated).day())) – \(last.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+
+    var body: some View {
+        Form {
+            if let result {
+                doneSection(result)
+            } else {
+                planSection
+                runSection
+            }
+        }
+        .navigationTitle("Burned Calories")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await loadPlan() }
+    }
+
+    // MARK: The plan
+
+    @ViewBuilder
+    private var planSection: some View {
+        Section {
+            if !canRun {
+                Label("Runs on the iPhone, which has Apple Health.", systemImage: "iphone")
+                    .foregroundStyle(.secondary)
+            } else if workout == nil {
+                Text("No habit is graded by Workout, so there is nowhere to keep a day's burn.")
+                    .foregroundStyle(AppTheme.partial)
+            } else if isLoading {
+                HStack {
+                    Text("Reading Apple Health for \(spanText)…")
+                    Spacer()
+                    ProgressView()
+                }
+            } else if let plan {
+                planRows(plan)
+            }
+        } header: {
+            Text("What changes · \(spanText)")
+        } footer: {
+            footerText
+        }
+    }
+
+    @ViewBuilder
+    private func planRows(_ plan: BurnBackfill.Plan) -> some View {
+        LabeledContent("Days in span", value: "\(plan.spanDays)")
+        LabeledContent("Days with a burn already", value: "\(plan.daysWithBurn)")
+        LabeledContent("Rows missing a burn", value: plan.rowsMissingBurn == 0 ? "None" : "\(plan.rowsMissingBurn)")
+        LabeledContent("Rest days with no row", value: "\(plan.rowlessDays)")
+        LabeledContent("Burn added on", value: "\(plan.adds.count) \(plan.adds.count == 1 ? "day" : "days")")
+        if plan.unreadDays > 0 {
+            LabeledContent("Days Health had nothing for", value: "\(plan.unreadDays)")
+        }
+        LabeledContent("Burned average", value: "\(HealthRefetchView.kcal(plan.averageBefore)) → \(HealthRefetchView.kcal(plan.averageAfter))")
+            .monospacedDigit()
+    }
+
+    @ViewBuilder
+    private var footerText: some View {
+        let base = "Reads each day's active + resting calories from Apple Health — the same total the sync stores — and keeps it on that day. A rest day gets an empty automatic Workout row that holds only the burn; a row missing its burn gets just that. Grades, Set by you marks, notes and sessions are untouched; nothing from Oct 27 on is read."
+        if let readings, !readings.healthAvailable {
+            Text(base + " Health was not read, so nothing would be added. " + readings.notes.joined(separator: " "))
+        } else {
+            Text(base)
+        }
+    }
+
+    private func loadPlan() async {
+        guard canRun, let workout, !isLoading, result == nil, let first = days.first, let last = days.last else { return }
+        isLoading = true
+        defer { isLoading = false }
+        let rows = HabitStore.entriesByDay(for: workout, from: first, to: last)
+        let needed = BurnBackfill.daysNeedingBurn(rows: rows, days: days)
+        let loaded = await BurnBackfill.load(days: needed)
+        readings = loaded
+        plan = BurnBackfill.plan(rows: rows, days: days, readings: loaded)
+    }
+
+    // MARK: Run
+
+    private var runSection: some View {
+        Section {
+            Button("Backfill") { run() }
+                .disabled(plan == nil || workout == nil || readings?.healthAvailable != true)
+        } footer: {
+            if let plan, readings?.healthAvailable == true {
+                Text(plan.adds.isEmpty
+                     ? "Nothing to add. Backfill just marks this done."
+                     : "Writes \(plan.adds.count) \(plan.adds.count == 1 ? "day" : "days"): \(plan.rowsCreated) new \(plan.rowsCreated == 1 ? "row" : "rows"), \(plan.rowsFilled) filled. iCloud carries the result to the iPad.")
+            } else {
+                Text("Waiting for the counts above.")
+            }
+        }
+    }
+
+    private func run() {
+        guard let plan, let workout else { return }
+        result = BurnBackfill.perform(habit: workout, plan: plan, in: modelContext)
+    }
+
+    // MARK: Done
+
+    private func doneSection(_ result: BurnBackfill.Plan) -> some View {
+        Section {
+            Label {
+                Text("Burned calories backfilled")
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(AppTheme.success)
+            }
+            planRows(result)
+            Button("Done") { dismiss() }
+        } footer: {
+            Text("Open the Dashboard's Month view to see it. The iPad catches up through iCloud.")
+        }
+    }
+}
+
+#Preview("Backfill") {
+    NavigationStack {
+        BurnBackfillView()
+    }
+    .modelContainer(for: [Habit.self, HabitEntry.self, Note.self], inMemory: true)
+}
