@@ -152,9 +152,9 @@ struct HabitFormView: View {
                 Text("Diet is graded from protein and calories; Workout from minutes and steps. Only the iPhone writes grades.")
             case .diet?:
                 if let gradingSince {
-                    Text("Grading since \(gradingSince.formatted(.dateTime.month(.abbreviated).day())). Earlier days stay as you set them. Blank = the default shown. Carbs and fat colour the Dashboard rings only; they never change the grade.")
+                    Text("Grading since \(gradingSince.formatted(.dateTime.month(.abbreviated).day())). Earlier days stay as you set them. Blank = the default shown. Calories from, carbs and fat show on the Dashboard only; they never change the grade.")
                 } else {
-                    Text("Grading starts today. Earlier days stay as you set them. Blank = the default shown. Carbs and fat colour the Dashboard rings only; they never change the grade.")
+                    Text("Grading starts today. Earlier days stay as you set them. Blank = the default shown. Calories from, carbs and fat show on the Dashboard only; they never change the grade.")
                 }
             case .some:
                 if let gradingSince {

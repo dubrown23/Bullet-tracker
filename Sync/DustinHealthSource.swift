@@ -154,7 +154,11 @@ struct DustinHealthClient: Sendable {
         let habits: [HabitItem]
         let targets: [String: Double]
         let time_zone: String
-        let ticked_today: [String]
+        /// 2026-10-30 — "YYYY-MM-DD" (the app's local day) → habit names,
+        /// the last seven days with empty lists for quiet days. Replaced
+        /// `ticked_today` (today's list alone) once dh's per-day side went
+        /// live the same day (dh-0023).
+        let ticked_days: [String: [String]]
     }
 
     struct SyncResponse: Decodable {
@@ -162,6 +166,9 @@ struct DustinHealthClient: Sendable {
         let held_targets: [String]?
         let targets: [String: Double]?
         let time_zone: String?
+        /// Tick days dh refused (future, > 14 days old, malformed). The sync
+        /// still succeeds; the app shows them as a problem.
+        let skipped_days: [String]?
     }
 
     struct ChangesResponse: Decodable {
@@ -355,7 +362,7 @@ enum DustinHealthWire {
             habits: payload.habits.map { .init(name: $0.name, kind: $0.kind, detail_kind: $0.detailKind) },
             targets: Dictionary(uniqueKeysWithValues: payload.targets.map { ($0.key.rawValue, $0.value) }),
             time_zone: payload.timeZone,
-            ticked_today: payload.tickedToday
+            ticked_days: Dictionary(uniqueKeysWithValues: payload.tickedDays.map { (string(from: $0.key), $0.value) })
         )
     }
 
@@ -365,7 +372,7 @@ enum DustinHealthWire {
         for (key, value) in response.targets ?? [:] {
             if let typed = TargetKey(rawValue: key) { targets[typed] = value }
         }
-        return HabitSyncReply(heldTargets: held, targets: targets)
+        return HabitSyncReply(heldTargets: held, targets: targets, skippedDays: response.skipped_days ?? [])
     }
 
     static func changedDays(_ response: DustinHealthClient.ChangesResponse, calendar: Calendar = .current) -> ChangedDays {

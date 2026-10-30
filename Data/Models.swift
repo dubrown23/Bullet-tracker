@@ -693,7 +693,9 @@ final class HabitEntry {
 
 struct GradingTargets: Equatable, Sendable {
     var proteinFloorGrams: Double
-    /// The floor is Dustin's ("yes keep 1900"): undereating is a miss.
+    /// Information only since 2026-10-30: the Dashboard band shows it and
+    /// dh stores it, but `DietGrade` reads the ceiling alone — under the
+    /// floor is not a miss.
     var calorieFloor: Double
     var calorieCeiling: Double
     var workoutMinutes: Double

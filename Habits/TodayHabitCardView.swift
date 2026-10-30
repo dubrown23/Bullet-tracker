@@ -53,11 +53,14 @@ struct WeekGridMetrics {
         }
     }
 
-    /// bt-0026 — the `count` days before `selected`, oldest first: the Today
-    /// row's dots. The selected day itself is the round control, not a dot.
+    /// bt-0026 — the `count` days before `selected`, **yesterday first**: the
+    /// Today row's dots. The selected day itself is the round control, not a
+    /// dot. Yesterday first (2026-10-30, Dustin's pick from a mock) so time
+    /// runs one way across the row — the control, then yesterday beside the
+    /// name, then back into the past towards the flame.
     static func previousDays(before selected: Date, count: Int = 6, calendar: Calendar) -> [Date] {
         let day = calendar.startOfDay(for: selected)
-        return (1...max(count, 1)).reversed().compactMap {
+        return (1...max(count, 1)).compactMap {
             calendar.date(byAdding: .day, value: -$0, to: day)
         }
     }
@@ -104,7 +107,7 @@ struct TodayHabitRowView: View {
 
     // MARK: - Data
 
-    /// The six days before the selected day, oldest first.
+    /// The six days before the selected day, yesterday first.
     private var dotDays: [Date] {
         WeekGridMetrics.previousDays(before: date, count: Self.dotCount, calendar: calendar)
     }
@@ -112,8 +115,8 @@ struct TodayHabitRowView: View {
     /// One indexed range fetch for the visible window (dots + the selected
     /// day); every per-day read below comes from this dictionary.
     private var entriesInWindow: [Date: HabitEntry] {
-        guard let first = dotDays.first else { return [:] }
-        return HabitStore.entriesByDay(for: habit, from: first, to: calendar.startOfDay(for: date))
+        guard let oldest = dotDays.last else { return [:] }
+        return HabitStore.entriesByDay(for: habit, from: oldest, to: calendar.startOfDay(for: date))
     }
 
     private func entry(on day: Date) -> HabitEntry? {
@@ -236,7 +239,7 @@ struct TodayHabitRowView: View {
                     }
                     HStack(spacing: 8) {
                         Spacer(minLength: 0)
-                        DayDotStrip(marks: dotMarks)
+                        DayDotStrip(days: dotDays, marks: dotMarks)
                         streakSlot
                     }
                 }
@@ -333,7 +336,7 @@ struct TodayHabitRowView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if showHistory {
-                    DayDotStrip(marks: dotMarks)
+                    DayDotStrip(days: dotDays, marks: dotMarks)
                     streakSlot
                 }
             }

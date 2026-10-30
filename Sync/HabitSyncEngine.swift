@@ -27,9 +27,12 @@
 //      write; deterministic, never reaches zero (see that function).
 //    • A voice note never sets a state or a source.
 //    • Facts that could not be loaded leave every row exactly as it is.
-//    • bt-0020: a hand tap on today sends itself — a quiet run 3 s after
-//      the last tap, at once when the app leaves, and never hidden by the
-//      on-open throttle (see "Quiet sync after a tap" below).
+//    • bt-0020: a hand tap sends itself — a quiet run 3 s after the last
+//      tap, at once when the app leaves, and never hidden by the on-open
+//      throttle (see "Quiet sync after a tap" below). Today-only until
+//      2026-10-30; now any day, and op=sync carries the last seven days'
+//      ticks (`ticked_days`, which replaced `ticked_today`) — sent again
+//      at the end of a run that applied a voice tick / untick / grade.
 //
 
 import Foundation
@@ -126,9 +129,10 @@ final class HabitSyncEngine {
 
     // MARK: - Quiet sync after a tap (bt-0020)
     //
-    // `HabitStore` reports every write here. A hand write on today arms a
-    // timer; when it fires the same full run as pull-down goes (op=sync is
-    // its first call, so dh knows about the tap within about a second).
+    // `HabitStore` reports every write here. A hand write on any day (today
+    // only until 2026-10-30) arms a timer; when it fires the same full run
+    // as pull-down goes (op=sync is its first call, so dh knows about the
+    // tap within about a second — under its own day, via `ticked_days`).
     // Every tap restarts the timer, so a burst of taps is one send. Any run
     // that starts for another reason drops the waiting timer — it built its
     // tick list after the tap's save, so it already carries the tap.
@@ -229,8 +233,10 @@ final class HabitSyncEngine {
 
     // MARK: - Quiet sync entry points (bt-0020)
 
-    /// `HabitStore` calls this after every write. Only a hand write on
-    /// today, on an iPhone that can reach dh, arms the quiet sync.
+    /// `HabitStore` calls this after every write. Only a hand write, on an
+    /// iPhone that can reach dh, arms the quiet sync — on any day since
+    /// 2026-10-30 (the payload carries the last seven days, so fixing
+    /// yesterday and then asking voice is right straight away).
     func noteWrite(on day: Date, source: EntrySource, in context: ModelContext) {
         var canReach = APIKeyStore.hasKey
         #if DEBUG
@@ -241,8 +247,7 @@ final class HabitSyncEngine {
             canReach = true
         }
         #endif
-        guard Self.shouldQuietSync(isPhone: Self.isGradingDevice, hasKey: canReach,
-                                   source: source, isToday: calendar.isDateInToday(day)) else { return }
+        guard Self.shouldQuietSync(isPhone: Self.isGradingDevice, hasKey: canReach, source: source) else { return }
 
         Self.tapWaitingSince = Date()
         holdBackgroundWindow()
@@ -265,10 +270,11 @@ final class HabitSyncEngine {
         }
     }
 
-    /// Phone + key + a hand write + today. Pure, so the table is testable
-    /// without faking a device.
-    static func shouldQuietSync(isPhone: Bool, hasKey: Bool, source: EntrySource, isToday: Bool) -> Bool {
-        isPhone && hasKey && source == .hand && isToday
+    /// Phone + key + a hand write, any day. Pure, so the table is testable
+    /// without faking a device. (Today-only until 2026-10-30: a past-day
+    /// tap used to wait for the next run; now it sends like a today tap.)
+    static func shouldQuietSync(isPhone: Bool, hasKey: Bool, source: EntrySource) -> Bool {
+        isPhone && hasKey && source == .hand
     }
 
     enum OpenDecision: Equatable {
@@ -417,7 +423,14 @@ final class HabitSyncEngine {
                 // bt-0020 — the run's START, so a tap that landed while this
                 // run was going is still newer and still "waiting".
                 Self.lastSentAt = startedAt
-                report.lines.append("Sent \(payload.habits.count) habits, \(payload.targets.count) targets, \(payload.tickedToday.count) ticked today")
+                let tickCount = payload.tickedDays.values.reduce(0) { $0 + $1.count }
+                report.lines.append("Sent \(payload.habits.count) habits, \(payload.targets.count) targets, \(tickCount) ticks over \(payload.tickedDays.count) days")
+                // dh skips a bad day (future, > 14 days old, malformed) and
+                // says so instead of failing; the app only sends the last 7,
+                // so this should never fire — if it does, it shows as a problem.
+                if !reply.skippedDays.isEmpty {
+                    report.errors.append("dh skipped tick days: \(reply.skippedDays.joined(separator: ", "))")
+                }
                 var heldAny = false
                 for key in reply.heldTargets {
                     guard let value = reply.targets[key],
@@ -458,6 +471,9 @@ final class HabitSyncEngine {
         var appliedIDs: [String] = []
         var unapplied: [UnappliedAction] = []
         var inboxFetched = false
+        /// A voice tick / untick / grade landed this run, so the tick lists
+        /// sent in step 2 are already stale (step 7 sends them again).
+        var inboxChangedTicks = false
         if let source, !transportFailed {
             do {
                 let actions = try await source.pendingActions()
@@ -477,6 +493,10 @@ final class HabitSyncEngine {
                         report.lines.append(line)
                         appliedIDs.append(action.id)
                         if let habit { touched.append((habit, day)) }
+                        switch action.kind {
+                        case .tick, .untick, .setGrade: inboxChangedTicks = true
+                        case .note, .setTarget: break
+                        }
                     case .skipped(let reason):
                         report.lines.append("Not applied: \(action.title) — \(reason)")
                         unapplied.append(UnappliedAction(id: action.id, title: action.title, reason: reason))
@@ -624,6 +644,25 @@ final class HabitSyncEngine {
             }
         }
 
+        // 7. 2026-10-30 — the tick lists went up in step 2, BEFORE the inbox.
+        //    Once a voice tick is confirmed (step 4's ack) dh trusts the app's
+        //    list for that day — and the list it holds is from before the
+        //    tick, so voice would show the habit unticked until the next run.
+        //    Send the lists once more, now that the rows carry the change.
+        if let source, !transportFailed, inboxChangedTicks {
+            let again = Self.payload(habits: habits, today: today, timeZone: TimeZone.current.identifier)
+            do {
+                let reply = try await source.sync(again)
+                let tickCount = again.tickedDays.values.reduce(0) { $0 + $1.count }
+                report.lines.append("Sent the tick lists again after voice changes (\(tickCount) ticks)")
+                if !reply.skippedDays.isEmpty {
+                    report.errors.append("dh skipped tick days: \(reply.skippedDays.joined(separator: ", "))")
+                }
+            } catch {
+                failed("Sync again", error)
+            }
+        }
+
         // Status + cursor: only a live source, only after a clean run.
         if isLive {
             if transportFailed {
@@ -646,16 +685,26 @@ final class HabitSyncEngine {
 
     // MARK: - What the app sends
 
+    /// How many local days of ticks go up with every run (today included).
+    /// dh accepts up to 15 and refuses anything older than 14 days.
+    static let tickedDaysCount = 7
+
     /// The sync payload, from the habit list. Kind: avoid for an avoidance
     /// habit, graded when "Graded by" is on, else simple. Reading Log habits
     /// say so, so a voice "read done, Harry Potter, 30 pages" knows where
     /// the book goes. Names that dh would see as the same (same letters and
-    /// digits, case-insensitive) are sent once.
-    static func payload(habits: [Habit], today: Date, timeZone: String) -> HabitSyncPayload {
+    /// digits, case-insensitive) are sent once. Ticks: one range fetch per
+    /// habit over the last `tickedDaysCount` days; every day gets a list,
+    /// empty when nothing is marked.
+    static func payload(habits: [Habit], today: Date, timeZone: String, calendar: Calendar = .current) -> HabitSyncPayload {
         var items: [HabitSyncPayload.HabitItem] = []
         var keys = Set<String>()
         var targets: [TargetKey: Double] = [:]
-        var ticked: [String] = []
+        let todayStart = calendar.startOfDay(for: today)
+        let days: [Date] = (0..<tickedDaysCount).reversed().compactMap {
+            calendar.date(byAdding: .day, value: -$0, to: todayStart)
+        }
+        var tickedByDay: [Date: [String]] = Dictionary(uniqueKeysWithValues: days.map { ($0, []) })
         for habit in habits.sorted(by: { $0.order < $1.order }) {
             guard let name = habit.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { continue }
             let key = habitKey(name)
@@ -684,11 +733,14 @@ final class HabitSyncEngine {
                     }
                 }
             }
-            if let entry = HabitStore.entry(for: habit, on: today), HabitWinRule.isLogged(state: entry.effectiveCompletionState) {
-                ticked.append(String(name.prefix(80)))
+            if let oldest = days.first {
+                let rows = HabitStore.entriesByDay(for: habit, from: oldest, to: todayStart)
+                for day in days where HabitWinRule.isLogged(state: rows[day]?.effectiveCompletionState) {
+                    tickedByDay[day, default: []].append(String(name.prefix(80)))
+                }
             }
         }
-        return HabitSyncPayload(habits: items, targets: targets, timeZone: timeZone, tickedToday: ticked)
+        return HabitSyncPayload(habits: items, targets: targets, timeZone: timeZone, tickedDays: tickedByDay)
     }
 
     /// dh's `habit_key`: lower-case letters and digits only.

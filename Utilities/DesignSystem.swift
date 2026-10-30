@@ -191,20 +191,27 @@ struct DayDot: View {
     }
 }
 
-/// A row of `DayDot`s in fixed-width slots, oldest first, so the dots line
-/// up in straight columns from row to row.
+/// A row of `DayDot`s in fixed-width slots, yesterday first, so the dots
+/// line up in straight columns from row to row. Each dot is keyed by its
+/// day: when the selected day changes, the day that left the window fades
+/// out, the one that entered fades in, and the rest slide a slot — so you
+/// see the control's old mark become the first dot (2026-10-30).
 struct DayDotStrip: View {
+    /// The days shown, yesterday first; `marks` runs in the same order.
+    let days: [Date]
     let marks: [DayMark]
     static let slotWidth: CGFloat = 14
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
+            ForEach(Array(zip(days, marks)), id: \.0) { _, mark in
                 DayDot(mark: mark)
                     .frame(width: Self.slotWidth)
+                    .transition(.scale.combined(with: .opacity))
             }
         }
         .fixedSize()
+        .animation(.snappy, value: days)
         .accessibilityHidden(true) // the row speaks the six days as one value
     }
 }

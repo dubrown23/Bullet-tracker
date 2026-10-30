@@ -7,10 +7,12 @@
 //  they are unit-testable and shared verbatim by the widget if it ever needs
 //  them.
 //
-//  Diet (decided 2026-10-26, shared design note Part A):
-//    🟢 Done    — protein ≥ floor AND calories within floor…ceiling
+//  Diet (decided 2026-10-26, shared design note Part A; calorie floor
+//  dropped from the grade 2026-10-30 — under the floor is not a miss):
+//    🟢 Done    — protein ≥ floor AND calories tracked and ≤ ceiling
 //    🟡 Partial — one of the two
-//    🔴 Tried   — neither, or nothing tracked that day
+//    🔴 Tried   — neither, or nothing tracked that day (missing calories
+//                 are a miss, not "under the ceiling")
 //
 //  Workout:
 //    🟢 Done    — workout minutes ≥ target (from dh, Step 3)
@@ -31,9 +33,9 @@ import Foundation
 enum DietGrade {
     static func state(proteinGrams: Double?, calories: Double?, targets: GradingTargets = .defaults) -> CompletionState {
         let proteinHit = (proteinGrams ?? 0) >= targets.proteinFloorGrams
-        let caloriesHit = calories.map {
-            (targets.calorieFloor...targets.calorieCeiling).contains($0)
-        } ?? false
+        // The floor (`targets.calorieFloor`) is kept as a setting and shown
+        // on the Dashboard band, but it no longer grades (2026-10-30).
+        let caloriesHit = calories.map { $0 <= targets.calorieCeiling } ?? false
 
         switch (proteinHit, caloriesHit) {
         case (true, true): return .success

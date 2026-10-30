@@ -232,8 +232,10 @@ struct HabitCompletionDetailView: View {
         }
     }
 
-    /// Diet only: "Protein 30 / 180 g · Calories 168 of 1,900–2,200". Today
-    /// from the live numbers; a past day from the stored meals.
+    /// Diet only: "Protein 30 / 180 g · Calories 1,850 of 2,200". Today
+    /// from the live numbers; a past day from the stored meals. The line
+    /// describes the grade, so it names the ceiling only (the floor stopped
+    /// grading 2026-10-30; the Dashboard band still shows it).
     private var dietNumbers: String? {
         guard habit.gradingKind == .diet else { return nil }
         let t = habit.gradingTargets
@@ -248,7 +250,7 @@ struct HabitCompletionDetailView: View {
         }
         guard protein != nil || calories != nil else { return nil }
         let proteinText = "Protein \(Self.whole(protein ?? 0)) / \(Self.whole(t.proteinFloorGrams)) g"
-        let caloriesText = "Calories \(Self.whole(calories ?? 0)) of \(Self.whole(t.calorieFloor))–\(Self.whole(t.calorieCeiling))"
+        let caloriesText = "Calories \(Self.whole(calories ?? 0)) of \(Self.whole(t.calorieCeiling))"
         return proteinText + " · " + caloriesText
     }
 

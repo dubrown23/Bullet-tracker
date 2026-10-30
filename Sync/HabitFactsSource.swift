@@ -73,8 +73,12 @@ struct DayFacts: Sendable, Equatable {
 
 /// What the app tells dh on every run: its habit list (so voice knows the
 /// names and kinds), its targets (one place to set them), its time zone
-/// (so meal days are HIS days) and today's hand ticks (so "what's left
-/// today" knows about taps).
+/// (so meal days are HIS days) and its ticks for each of the last seven
+/// local days, today included (so "what's left today" knows about taps,
+/// and a past day fixed in the app reaches voice too — `ticked_today`
+/// carried today alone until dh's per-day side went live 2026-10-30).
+/// "Ticked" is any mark on the day — tap, voice, automatic grade, Rest, or
+/// an avoidance slip — the one rule the list has always used.
 struct HabitSyncPayload: Sendable, Equatable {
     struct HabitItem: Sendable, Equatable {
         let name: String
@@ -87,14 +91,20 @@ struct HabitSyncPayload: Sendable, Equatable {
     var habits: [HabitItem]
     var targets: [TargetKey: Double]
     var timeZone: String
-    var tickedToday: [String]
+    /// The last seven local days, today included, keyed by start of day.
+    /// Every day is present; an empty list means "nothing ticked", a
+    /// missing day would mean "no copy" to dh.
+    var tickedDays: [Date: [String]]
 }
 
 /// dh's answer: which targets it held back because a voice change is still
-/// pending (the app takes dh's value for those), and its current numbers.
+/// pending (the app takes dh's value for those), its current numbers, and
+/// any tick day it skipped (future, too old, malformed — reported, never a
+/// failed sync).
 struct HabitSyncReply: Sendable, Equatable {
     var heldTargets: [TargetKey]
     var targets: [TargetKey: Double]
+    var skippedDays: [String] = []
 }
 
 /// Days whose facts changed since the app last asked, plus the cursor to
