@@ -531,23 +531,23 @@ struct MiniDayStrip: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Width reader: takes the row's full width whatever the squares
-            // measure, so thirty squares shrink to fit instead of pushing the
-            // row past its insets (found on the iPad render, Month mode).
-            Color.clear
-                .frame(height: 0)
-                .frame(maxWidth: .infinity)
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-            HStack(spacing: spacing) {
-                ForEach(squares) { square in
-                    DaySquare(size: size, style: square.color.map { .filled($0) } ?? .empty)
-                }
-                Spacer(minLength: 0)
-            }
+        // Width reader: takes exactly the row's width. The squares sit in an
+        // overlay so they can never widen what is measured — as a sibling
+        // they inflated the container once laid out wide (unfolded / rotated),
+        // the reader then saw that inflated width, and the squares stayed
+        // large past the row's edge after the screen narrowed again.
+        Color.clear
+            .frame(maxWidth: .infinity)
             .frame(height: size)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            .overlay(alignment: .leading) {
+                HStack(spacing: spacing) {
+                    ForEach(squares) { square in
+                        DaySquare(size: size, style: square.color.map { .filled($0) } ?? .empty)
+                    }
+                }
+            }
+            .clipped()
     }
 }
 
