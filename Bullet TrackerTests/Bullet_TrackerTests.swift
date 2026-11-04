@@ -812,7 +812,7 @@ struct DustinHealthWireTests {
         // What a server that turns "+" into a space, then percent-decodes, sees:
         let serverSide = query.replacingOccurrences(of: "+", with: " ").removingPercentEncoding
         #expect(serverSide?.contains("since=\(cursor)") == true)
-        #expect(url.absoluteString.hasPrefix("https://dustin-health.vercel.app/api/bullet?op=changes&"))
+        #expect(url.absoluteString.hasPrefix("https://yuelxxoophskfmadcjng.supabase.co/functions/v1/bullet?op=changes&"))
     }
 
     @Test func pastedKeyIsTrimmed() {

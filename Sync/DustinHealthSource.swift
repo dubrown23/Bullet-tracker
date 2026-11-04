@@ -102,7 +102,7 @@ enum APIKeyStore {
 // MARK: - Client (the five ops)
 
 struct DustinHealthClient: Sendable {
-    static let defaultBaseURL = URL(string: "https://dustin-health.vercel.app/api/bullet")!
+    static let defaultBaseURL = URL(string: "https://yuelxxoophskfmadcjng.supabase.co/functions/v1/bullet")!
 
     enum ClientError: LocalizedError, Equatable {
         /// 401 — the key is wrong (or not set on dh).
