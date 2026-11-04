@@ -716,3 +716,18 @@ Voice can tick a past day in dh, but a day fixed in the app only ever reached dh
 - 2026-10-29 — queued from `bt-0023`'s cleanup pass with the two options; "decide with Dustin".
 - 2026-10-30 — Dustin: backfill from Health, Aug 1 → Oct 26, same total the sync reads, don't touch Oct 27 on, no grade changes, show the plan, then the average before and after. Design pass found two things outside scope: no write could create a row without a grade (`setCompletion(state: 0)` deletes, `setHealth` never creates), and the Settings row from the last refresh was already hidden. **Activation:** scope grew by `Habits/HabitDataRepository.swift` and `App/SettingsView.swift`; his addition on rows missing a burn.
 - 2026-10-30 — built in plan order; the answer to "before and after" lives on the screen because the data lives on the phone. First launch on DBd failed (the phone was waking), the second landed. Phone pass as above. Found on the way: the Dashboard's day view hides Burned for any day before the Diet go-live ("Meals start Oct 27" covers the whole Calories block, Eaten vs Burned) — pre-existing from `bt-0023`, an open thread for Dustin's call. **Shipped.**
+
+### Inline (2026-10-30) — Dashboard habit rows fit the screen: `MiniDayStrip` squares overlay the width reader
+
+**Summary:** The squares sat beside the width reader in a VStack, so after a wide layout (unfolded / rotated) they stretched the container, the reader measured that stretched width, and the squares stayed large past the card's edge once the screen narrowed. Drawing them as an overlay means they can never widen what is measured; the strip is clipped to the row. `Habits/HabitDashboardView.swift` only; verified Month + Week on the iPhone Duo simulator. Commit `865269e`, made after that day's wrap and recorded here on 2026-11-04.
+
+### Inline (2026-11-04) — Bullet talks to dh's Supabase endpoint (`dh-0029`)
+
+**Summary:** `DustinHealthClient.defaultBaseURL` (`Sync/DustinHealthSource.swift:105`) moves from `https://dustin-health.vercel.app/api/bullet` to `https://yuelxxoophskfmadcjng.supabase.co/functions/v1/bullet`; the cursor-encoding test's expected prefix follows. Same key in the Authorization header, same `?op=` calls, nothing else changes. Vercel stays up as the fallback: if sync fails, change line 105 back.
+
+**Why:** dh moved its Bullet endpoint onto Supabase (`dh-0029`), giving byte-identical answers, and asked Bullet to switch.
+
+**Decision log:**
+
+- 2026-11-04 — dh's request, done inline. Checked first: a read-only `op=facts` for Nov 3 to both addresses with the Mac Keychain key (`dustin-health-bullet-api-key`), both HTTP 200 with identical 1,803-byte bodies. 113 tests on the Duo sim; installed on DBd; Dustin's pull-down showed "last synced" this morning. Commit `15dd4a8`.
+
