@@ -31,6 +31,7 @@
 		774023302FB60DD80036690B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7740232E2FB60DD80036690B /* Assets.xcassets */; };
 		774843FF2EB2D27A007F3B9B /* HabitDataRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */; };
 		775A0FB430A2618F00C63208 /* HealthCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 775A0FB330A2618F00C63208 /* HealthCopy.swift */; };
+		775A0FB830A3661A00C63208 /* HealthDaily.swift in Sources */ = {isa = PBXBuildFile; fileRef = 775A0FB730A3661A00C63208 /* HealthDaily.swift */; };
 		77A9E554308D03FF000C0F07 /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77A9E553308D03FF000C0F07 /* AdaptiveLayout.swift */; };
 		77A9E566308EAC81000C0F07 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77A9E565308EAC81000C0F07 /* DesignSystem.swift */; };
 		77A9E577308EBE08000C0F07 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9A5322F2D112C0019C64C /* AppTheme.swift */; };
@@ -124,6 +125,7 @@
 		7740232F2FB60DD80036690B /* Bullet Tracker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Bullet Tracker.entitlements"; sourceTree = "<group>"; };
 		774843FE2EB2D27A007F3B9B /* HabitDataRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitDataRepository.swift; sourceTree = "<group>"; };
 		775A0FB330A2618F00C63208 /* HealthCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCopy.swift; sourceTree = "<group>"; };
+		775A0FB730A3661A00C63208 /* HealthDaily.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDaily.swift; sourceTree = "<group>"; };
 		7783B25B2DD2894B0008E0F3 /* Bullet Tracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Bullet Tracker.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7783B26D2DD2894D0008E0F3 /* Bullet TrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Bullet TrackerTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7783B2772DD2894D0008E0F3 /* Bullet TrackerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Bullet TrackerUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -321,6 +323,7 @@
 				772A40B13092B01000A8673E /* HistoryMigration.swift */,
 				772A40B53092E1A000A8673E /* HealthRefetch.swift */,
 				775A0FB330A2618F00C63208 /* HealthCopy.swift */,
+				775A0FB730A3661A00C63208 /* HealthDaily.swift */,
 			);
 			path = Sync;
 			sourceTree = "<group>";
@@ -561,6 +564,7 @@
 				77D9A5292F29A1B60019C64C /* HabitCalculations.swift in Sources */,
 				77DB37E92DEBFBB4004E2ED9 /* EditHabitView.swift in Sources */,
 				77DB37EA2DEBFBB4004E2ED9 /* AddHabitView.swift in Sources */,
+				775A0FB830A3661A00C63208 /* HealthDaily.swift in Sources */,
 			);
 		};
 		7783B2692DD2894D0008E0F3 /* Sources */ = {

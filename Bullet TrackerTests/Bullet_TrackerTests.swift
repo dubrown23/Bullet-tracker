@@ -2220,3 +2220,105 @@ struct HealthCopyTests {
         #expect(workout.keys.contains("active_energy_kcal") == false)
     }
 }
+
+// MARK: - Steps + sleep to dh (bt-0028)
+
+struct HealthDailyTests {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        return calendar
+    }
+
+    private func at(_ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour, minute: minute))!
+    }
+
+    private let inBed = 0, core = 3, deep = 4, awake = 2, rem = 5
+
+    @Test func overlappingAndRepeatedSamplesCountOnce() {
+        // Core 23:00–03:00 written twice, REM 02:00–04:00 overlapping it by 1 h.
+        let nights = HealthDaily.nights(from: [
+            SleepSlice(start: at(9, 23), end: at(10, 3), value: core),
+            SleepSlice(start: at(9, 23), end: at(10, 3), value: core),
+            SleepSlice(start: at(10, 2), end: at(10, 4), value: rem),
+        ], calendar: calendar)
+        #expect(nights.count == 1)
+        // The contested hour goes to REM; 5 h asleep, never 7 h.
+        #expect(nights[0].core == 180)
+        #expect(nights[0].rem == 120)
+        #expect(nights[0].asleepMinutes == 300)
+    }
+
+    @Test func deepBeatsRemBeatsCoreBeatsAwake() {
+        let nights = HealthDaily.nights(from: [
+            SleepSlice(start: at(9, 23), end: at(10, 1), value: awake),
+            SleepSlice(start: at(9, 23), end: at(10, 1), value: core),
+            SleepSlice(start: at(10, 0), end: at(10, 1), value: deep),
+        ], calendar: calendar)
+        #expect(nights[0].awake == 0)
+        #expect(nights[0].core == 60)
+        #expect(nights[0].deep == 60)
+    }
+
+    @Test func inBedSetsBedtimeButIsNoStage() {
+        let nights = HealthDaily.nights(from: [
+            SleepSlice(start: at(9, 22, 20), end: at(10, 7, 1), value: inBed),
+            SleepSlice(start: at(9, 22, 40), end: at(10, 6, 40), value: core),
+        ], calendar: calendar)
+        #expect(nights[0].bedtime == at(9, 22, 20))
+        #expect(nights[0].wake == at(10, 7, 1))
+        #expect(nights[0].asleepMinutes == 480)
+        #expect(nights[0].awake == 0)
+    }
+
+    @Test func aSplitNightIsOneNightAndANapIsLeftOut() {
+        let nights = HealthDaily.nights(from: [
+            SleepSlice(start: at(9, 20), end: at(9, 23, 50), value: core),   // early piece, wakes 23:50
+            SleepSlice(start: at(10, 2), end: at(10, 7), value: core),       // after a 2 h 10 m gap
+            SleepSlice(start: at(10, 14), end: at(10, 14, 40), value: core), // afternoon nap
+        ], calendar: calendar)
+        #expect(nights.count == 1)
+        #expect(nights[0].wokeOn == calendar.startOfDay(for: at(10, 12)))
+        #expect(nights[0].bedtime == at(9, 20))
+        #expect(nights[0].wake == at(10, 7))
+        #expect(nights[0].core == 230 + 300)
+    }
+
+    @Test func minutesAddUpToTheRoundedTotal() {
+        // 3 × 20.5 min = 61.5 → 62 total; rounding each would give 63.
+        let minutes = HealthDaily.wholeMinutes([.core: 1230, .deep: 1230, .rem: 1230])
+        #expect(minutes.values.reduce(0, +) == 62)
+    }
+
+    @Test func nightWireCarriesTheZoneAndTheWakeDay() {
+        let night = HealthDaily.Night(wokeOn: calendar.startOfDay(for: at(10, 12)), bedtime: at(9, 22, 41), wake: at(10, 6, 12),
+                                      awake: 31, core: 236, deep: 78, rem: 106)
+        let wire = HealthDaily.wire(night)
+        #expect(wire.woke_on == DustinHealthWire.string(from: night.wokeOn))
+        #expect(wire.core_minutes == 236)
+        #expect(wire.bedtime == HealthCopy.isoString(at(9, 22, 41)))
+    }
+
+    @Test func sendsKeepEachListInsideFourHundred() {
+        let steps = (0..<401).map { DustinHealthClient.HealthRequest.StepsDay(day: "d\($0)", count: $0, counted_at: "t") }
+        let sleep = (0..<3).map { _ in HealthDaily.wire(HealthDaily.Night(wokeOn: at(10, 0), bedtime: at(9, 23), wake: at(10, 7), awake: 0, core: 1, deep: 1, rem: 1)) }
+        let sends = HealthDaily.sends(steps: steps, sleep: sleep)
+        #expect(sends.map(\.steps.count) == [400, 1])
+        #expect(sends.map(\.sleep.count) == [3, 0])
+        #expect(sends.allSatisfy { $0.workouts.isEmpty && $0.samples.isEmpty })
+        #expect(HealthDaily.sends(steps: [], sleep: []).isEmpty)
+    }
+
+    @Test func stepsAndSleepRideBesideWorkoutsInTheJSON() throws {
+        let body = DustinHealthClient.HealthRequest(
+            workouts: [], samples: [],
+            steps: [.init(day: "2026-11-09", count: 11871, counted_at: "2026-11-09T23:58:00-05:00")],
+            sleep: []
+        )
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(body)) as? [String: Any]
+        let steps = try #require(json?["steps"] as? [[String: Any]])
+        #expect(steps.first?["count"] as? Int == 11871)
+        #expect(steps.first?["day"] as? String == "2026-11-09")
+    }
+}

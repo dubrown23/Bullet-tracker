@@ -10,7 +10,8 @@
 //    GET  ?op=facts     meal totals + workout minutes per local day
 //    GET  ?op=inbox     voice actions waiting (marks them fetched)
 //    POST ?op=ack       ids the app actually applied
-//    POST ?op=health    Apple Health workouts + raw samples (bt-0027, dh-0030)
+//    POST ?op=health    Apple Health workouts + raw samples (bt-0027, dh-0030),
+//                       Watch steps per day + Oura sleep per night (bt-0028, dh-0034)
 //
 //  The key travels in the Authorization header only, never in a URL, and
 //  lives in the iOS Keychain on this device only (`APIKeyStore`). dh never
@@ -280,8 +281,26 @@ struct DustinHealthClient: Sendable {
             let unit: String
             let source_device: String?
         }
+        /// bt-0028 (dh-0034) — one Apple Watch step total for a local day.
+        struct StepsDay: Encodable, Equatable {
+            let day: String
+            let count: Int
+            let counted_at: String
+        }
+        /// bt-0028 (dh-0034) — one Oura night, filed under the day he woke.
+        struct SleepNight: Encodable, Equatable {
+            let woke_on: String
+            let bedtime: String
+            let wake_time: String
+            let awake_minutes: Int
+            let core_minutes: Int
+            let deep_minutes: Int
+            let rem_minutes: Int
+        }
         var workouts: [Workout]
         var samples: [Sample]
+        var steps: [StepsDay] = []
+        var sleep: [SleepNight] = []
     }
 
     struct HealthResponse: Decodable {
@@ -294,8 +313,26 @@ struct DustinHealthClient: Sendable {
             let already_had: Int
             let refused: [Refused]?
         }
+        /// dh-0034: refusals name the day (`day` for steps, `woke_on` for sleep).
+        struct DailyRefused: Decodable {
+            let day: String?
+            let woke_on: String?
+            let reason: String
+        }
+        struct StepsCounts: Decodable {
+            let saved: Int
+            let older_ignored: Int
+            let refused: [DailyRefused]?
+        }
+        struct SleepCounts: Decodable {
+            let saved: Int
+            let unchanged: Int
+            let refused: [DailyRefused]?
+        }
         let workouts: Counts
         let samples: Counts
+        let steps: StepsCounts?
+        let sleep: SleepCounts?
     }
 
     struct ErrorBody: Decodable {

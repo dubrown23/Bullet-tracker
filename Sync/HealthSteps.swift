@@ -2,9 +2,10 @@
 //  HealthSteps.swift
 //  Bullet Tracker
 //
-//  bt-0017. Step counts from Apple Health. Steps never pass through
-//  dustin-health — the phone has them, so the app reads them itself. bt-0018
-//  uses them for the Workout "Partial" rule and the live caption on Today.
+//  bt-0017. Step counts from Apple Health. The phone has them, so the app
+//  reads them itself; bt-0018 uses them for the Workout "Partial" rule and the
+//  live caption on Today. bt-0028: Apple Watch steps only, and `HealthCopy`
+//  copies the same per-day number to dh.
 //
 //  bt-0023 — calories burned, read the same way: Active Energy + Resting
 //  (Basal) Energy per local day, added up = the day's total burn, exactly the
@@ -70,16 +71,57 @@ actor HealthSteps {
         }
     }
 
-    /// Sum of step samples for the current local day, as the Health app
-    /// shows it (HealthKit merges iPhone + Watch sources in the sum).
+    /// The Apple Watch's steps for the current local day.
     func stepsToday() async throws -> Int {
         try await steps(on: Date())
     }
 
-    /// Sum of step samples for the local day containing `day`.
+    /// bt-0028 — the Apple Watch's steps for the local day containing `day`.
+    /// Watch only (Dustin, 2026-11-10): Pedometer++ shows the Watch's count,
+    /// and dh gets this same number, so one day never has two step numbers.
     func steps(on day: Date) async throws -> Int {
-        let sum = try await cumulativeSum(of: stepType, on: day, unit: .count()) ?? 0
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: day)
+        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? Date()
+        let predicate = Self.watchOnly(HKQuery.predicateForSamples(withStart: start, end: end))
+        let query = HKStatisticsQueryDescriptor(
+            predicate: .quantitySample(type: stepType, predicate: predicate),
+            options: .cumulativeSum
+        )
+        let sum = try await query.result(for: store)?.sumQuantity()?.doubleValue(for: .count()) ?? 0
         return Int(sum.rounded())
+    }
+
+    /// bt-0028 — the Apple Watch's steps per local day from `from` through
+    /// the day containing `to`, in one query. A day the Watch recorded
+    /// nothing is left out (never 0, never another source).
+    func watchStepsByDay(from: Date, to: Date) async throws -> [Date: Int] {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: from)
+        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: to)) ?? to
+        let query = HKStatisticsCollectionQueryDescriptor(
+            predicate: .quantitySample(
+                type: stepType,
+                predicate: Self.watchOnly(HKQuery.predicateForSamples(withStart: start, end: end))
+            ),
+            options: .cumulativeSum,
+            anchorDate: start,
+            intervalComponents: DateComponents(day: 1)
+        )
+        var byDay: [Date: Int] = [:]
+        for stats in try await query.result(for: store).statistics() {
+            guard let sum = stats.sumQuantity()?.doubleValue(for: .count()) else { continue }
+            byDay[calendar.startOfDay(for: stats.startDate)] = Int(sum.rounded())
+        }
+        return byDay
+    }
+
+    /// Narrows a predicate to samples an Apple Watch recorded.
+    private static func watchOnly(_ predicate: NSPredicate) -> NSPredicate {
+        NSCompoundPredicate(andPredicateWithSubpredicates: [
+            predicate,
+            HKQuery.predicateForObjects(withDeviceProperty: HKDevicePropertyKeyModel, allowedValues: ["Watch"]),
+        ])
     }
 
     /// bt-0023 — Active Energy and Resting Energy for the local day containing

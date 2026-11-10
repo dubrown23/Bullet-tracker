@@ -24,6 +24,13 @@
 //  Workout duration is Apple's own (pauses left out), Dustin's call A
 //  2026-11-09; dh loosened its "within 5 s of end − start" check for it.
 //
+//  bt-0028 (dh-0034): every run also sends the Apple Watch's steps for
+//  yesterday + today and Oura's nights woken on in the last 3 days (dh keeps
+//  the newest count and replaces a re-sent night). The first run, and "Send
+//  all again", send the backlog: every day and night back up to 400 days.
+//  A new Oura night wakes the app like a new workout does. Rules for nights
+//  in `HealthDaily.swift`.
+//
 
 import Foundation
 import HealthKit
@@ -54,8 +61,8 @@ final class HealthCopy {
     struct Status: Codable, Equatable {
         struct Refused: Codable, Equatable, Identifiable {
             var id: String { "\(kind)·\(appleUUID ?? "?")·\(reason)" }
-            var kind: String            // "workout" / "reading"
-            var appleUUID: String?
+            var kind: String            // "workout" / "reading" / "steps day" / "sleep night"
+            var appleUUID: String?      // the day (YYYY-MM-DD) for steps and sleep
             var reason: String
         }
 
@@ -66,6 +73,11 @@ final class HealthCopy {
         var workoutsHad = 0
         var samplesNew = 0
         var samplesHad = 0
+        /// bt-0028. Optional so a status saved before steps + sleep still loads.
+        var stepsSaved: Int?
+        var stepsOlderIgnored: Int?
+        var sleepSaved: Int?
+        var sleepUnchanged: Int?
         var refused: [Refused] = []
         /// Last run that finished, sent or not ("nothing new" counts).
         var lastCheckAt: Date?
@@ -94,6 +106,8 @@ final class HealthCopy {
 
     private static let statusKey = "healthCopyStatus"
     private static let anchorKey = "healthCopyWorkoutAnchor"
+    /// bt-0028 — set once the steps + sleep backlog has been answered.
+    private static let dailyBacklogKey = "healthCopyDailyBacklogDone"
 
     private init() {
         if let data = UserDefaults.standard.data(forKey: Self.statusKey),
@@ -113,12 +127,18 @@ final class HealthCopy {
 
     /// Called at launch (Apple requires the observer to be set up before
     /// launch finishes, or a background wake-up has nothing to call). Asks
-    /// HealthKit to wake the app as soon as a new workout lands.
+    /// HealthKit to wake the app as soon as a new workout or night of sleep
+    /// lands (bt-0028 added sleep).
     func startBackgroundDelivery() {
         guard Self.canSend, !observerStarted else { return }
         observerStarted = true
+        for type in [HKObjectType.workoutType(), HKCategoryType(.sleepAnalysis)] {
+            observe(type)
+        }
+    }
 
-        let query = HKObserverQuery(sampleType: .workoutType(), predicate: nil) { _, completionHandler, error in
+    private func observe(_ type: HKSampleType) {
+        let query = HKObserverQuery(sampleType: type, predicate: nil) { _, completionHandler, error in
             // HealthKit waits for `completionHandler` before it will wake the
             // app again; call it once the run is over, success or not.
             nonisolated(unsafe) let done = completionHandler
@@ -130,7 +150,7 @@ final class HealthCopy {
             }
         }
         store.execute(query)
-        store.enableBackgroundDelivery(for: .workoutType(), frequency: .immediate) { _, _ in }
+        store.enableBackgroundDelivery(for: type, frequency: .immediate) { _, _ in }
     }
 
     // MARK: - Run
@@ -164,31 +184,56 @@ final class HealthCopy {
             let savedAnchor = reason == .sendAllAgain ? nil : UserDefaults.standard.data(forKey: Self.anchorKey)
             let batch = try await Self.readNew(store: store, anchorData: savedAnchor, since: Self.firstDay)
 
-            if !batch.items.isEmpty {
-                var client = DustinHealthClient(key: key)
-                client.timeout = 60
-                var totals = Status(lastSentAt: Date(), lastSentReason: reason)
-                for request in Self.chunks(batch.items) {
-                    let reply = try await client.health(request)
-                    totals.workoutsNew += reply.workouts.new
-                    totals.workoutsHad += reply.workouts.already_had
-                    totals.samplesNew += reply.samples.new
-                    totals.samplesHad += reply.samples.already_had
-                    totals.refused += (reply.workouts.refused ?? []).map {
-                        Status.Refused(kind: "workout", appleUUID: $0.apple_uuid, reason: $0.reason)
-                    }
-                    totals.refused += (reply.samples.refused ?? []).map {
-                        Status.Refused(kind: "reading", appleUUID: $0.apple_uuid, reason: $0.reason)
-                    }
+            // bt-0028: steps + sleep. The backlog once (and on Send all
+            // again); otherwise the last few days, re-sent every run.
+            let backlog = reason == .sendAllAgain || !UserDefaults.standard.bool(forKey: Self.dailyBacklogKey)
+            let daily = try await Self.readDaily(store: store, backlog: backlog)
+
+            var client = DustinHealthClient(key: key)
+            client.timeout = 60
+            var totals = Status()
+            for request in Self.chunks(batch.items) {
+                let reply = try await client.health(request)
+                totals.workoutsNew += reply.workouts.new
+                totals.workoutsHad += reply.workouts.already_had
+                totals.samplesNew += reply.samples.new
+                totals.samplesHad += reply.samples.already_had
+                totals.refused += (reply.workouts.refused ?? []).map {
+                    Status.Refused(kind: "workout", appleUUID: $0.apple_uuid, reason: $0.reason)
                 }
-                status.lastSentAt = totals.lastSentAt
+                totals.refused += (reply.samples.refused ?? []).map {
+                    Status.Refused(kind: "reading", appleUUID: $0.apple_uuid, reason: $0.reason)
+                }
+            }
+            let dailySends = HealthDaily.sends(steps: daily.steps, sleep: daily.sleep)
+            for request in dailySends {
+                let reply = try await client.health(request)
+                totals.stepsSaved = (totals.stepsSaved ?? 0) + (reply.steps?.saved ?? 0)
+                totals.stepsOlderIgnored = (totals.stepsOlderIgnored ?? 0) + (reply.steps?.older_ignored ?? 0)
+                totals.sleepSaved = (totals.sleepSaved ?? 0) + (reply.sleep?.saved ?? 0)
+                totals.sleepUnchanged = (totals.sleepUnchanged ?? 0) + (reply.sleep?.unchanged ?? 0)
+                totals.refused += (reply.steps?.refused ?? []).map {
+                    Status.Refused(kind: "steps day", appleUUID: $0.day, reason: $0.reason)
+                }
+                totals.refused += (reply.sleep?.refused ?? []).map {
+                    Status.Refused(kind: "sleep night", appleUUID: $0.woke_on, reason: $0.reason)
+                }
+            }
+
+            if !batch.items.isEmpty || !dailySends.isEmpty {
+                status.lastSentAt = Date()
                 status.lastSentReason = reason
                 status.workoutsNew = totals.workoutsNew
                 status.workoutsHad = totals.workoutsHad
                 status.samplesNew = totals.samplesNew
                 status.samplesHad = totals.samplesHad
+                status.stepsSaved = totals.stepsSaved
+                status.stepsOlderIgnored = totals.stepsOlderIgnored
+                status.sleepSaved = totals.sleepSaved
+                status.sleepUnchanged = totals.sleepUnchanged
                 status.refused = totals.refused
             }
+            if backlog { UserDefaults.standard.set(true, forKey: Self.dailyBacklogKey) }
 
             // Every chunk answered (or nothing to send): move the bookmark.
             if let newAnchor = batch.anchorData {
@@ -230,7 +275,10 @@ final class HealthCopy {
     ]
 
     private static var readTypes: Set<HKObjectType> {
-        var types: Set<HKObjectType> = [HKObjectType.workoutType(), heartRate, activeEnergy]
+        var types: Set<HKObjectType> = [
+            HKObjectType.workoutType(), heartRate, activeEnergy,
+            HKQuantityType(.stepCount), HKCategoryType(.sleepAnalysis),
+        ]
         for type in distanceTypes { types.insert(type) }
         return types
     }
@@ -245,6 +293,29 @@ final class HealthCopy {
         var items: [Item]
         /// The new bookmark, archived; saved by `run` only after dh answers.
         var anchorData: Data?
+    }
+
+    struct Daily: Sendable {
+        var steps: [DustinHealthClient.HealthRequest.StepsDay]
+        var sleep: [DustinHealthClient.HealthRequest.SleepNight]
+    }
+
+    /// bt-0028 — Watch steps per day and Oura nights. Backlog: the last
+    /// `HealthDaily.backlogDays` days; otherwise steps for yesterday + today
+    /// and nights woken on in the last 3 days.
+    private static func readDaily(store: HKHealthStore, backlog: Bool) async throws -> Daily {
+        let calendar = Calendar.current
+        let now = Date()
+        let today = calendar.startOfDay(for: now)
+        let stepsFrom = calendar.date(byAdding: .day, value: backlog ? -(HealthDaily.backlogDays - 1) : -1, to: today) ?? today
+        let sleepFrom = calendar.date(byAdding: .day, value: backlog ? -(HealthDaily.backlogDays - 1) : -2, to: today) ?? today
+
+        let countedAt = isoString(now)
+        let steps = try await HealthSteps.shared.watchStepsByDay(from: stepsFrom, to: now)
+            .sorted { $0.key < $1.key }
+            .map { DustinHealthClient.HealthRequest.StepsDay(day: DustinHealthWire.string(from: $0.key), count: $0.value, counted_at: countedAt) }
+        let sleep = try await HealthDaily.ouraNights(store: store, from: sleepFrom).map(HealthDaily.wire)
+        return Daily(steps: steps, sleep: sleep)
     }
 
     /// Workouts added since the bookmark (all from `since` when there is

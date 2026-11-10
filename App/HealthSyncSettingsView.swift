@@ -124,6 +124,17 @@ struct HealthSyncSection: View {
                     Text("Heart-rate readings: \(status.samplesNew) new, \(status.samplesHad) already had")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                    // bt-0028
+                    if let saved = status.stepsSaved {
+                        Text("Watch steps: \(saved) days saved, \(status.stepsOlderIgnored ?? 0) older ignored")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let saved = status.sleepSaved {
+                        Text("Oura sleep: \(saved) nights saved, \(status.sleepUnchanged ?? 0) unchanged")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 // Only when a later check found nothing new; a check that is
                 // the send itself would repeat the line above.
@@ -146,7 +157,12 @@ struct HealthSyncSection: View {
 
         ForEach(status.refused) { item in
             VStack(alignment: .leading, spacing: 2) {
-                Text("Refused \(item.kind)")
+                // Steps and sleep refusals name their day (bt-0028).
+                if item.kind == "steps day" || item.kind == "sleep night" {
+                    Text("Refused \(item.kind) \(item.appleUUID ?? "")")
+                } else {
+                    Text("Refused \(item.kind)")
+                }
                 Text(item.reason)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -163,7 +179,7 @@ struct HealthSyncSection: View {
                     ProgressView()
                 }
             } else {
-                Label("Send all again from Oct 28", systemImage: "arrow.clockwise.heart")
+                Label("Send all again", systemImage: "arrow.clockwise.heart")
             }
         }
         .disabled(healthCopy.isRunning)
