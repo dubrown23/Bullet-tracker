@@ -359,6 +359,24 @@ enum HabitStore {
         save(context)
     }
 
+    /// bt-0029 — once, on the iPhone: before Active day existed, the
+    /// automatic Workout grade wrote the steps-only day as Partial. Those rows
+    /// (automatic, Partial, on a Workout-graded habit) become Active day.
+    /// Hand and voice rows are left exactly as they are; nothing else moves.
+    /// Returns how many rows changed.
+    @discardableResult
+    static func convertAutoWorkoutPartials(habits: [Habit], in context: ModelContext) -> Int {
+        var changed = 0
+        for habit in habits where habit.gradingKind == .workout {
+            for entry in habit.entries ?? [] where entry.isAutomatic && entry.completionState == .partial {
+                entry.completionState = .activeDay
+                changed += 1
+            }
+        }
+        if changed > 0 { save(context) }
+        return changed
+    }
+
     // MARK: - Private
 
     private static func save(_ context: ModelContext) {
@@ -435,7 +453,7 @@ enum HabitStore {
 /// Represents the completion state of a habit on a specific date.
 struct HabitCompletionState {
     let isCompleted: Bool
-    let state: Int // 0: none, 1: success, 2: partial, 3: failure, 4: rest
+    let state: Int // 0: none, 1: success, 2: partial, 3: failure, 4: rest, 5: active day
     let hasDetails: Bool
 
     var stateColor: Color {
@@ -445,6 +463,7 @@ struct HabitCompletionState {
         case 2: return AppTheme.partial
         case 3: return AppTheme.failed
         case 4: return AppTheme.rest
+        case 5: return AppTheme.activeDay
         default: return AppTheme.success
         }
     }
@@ -455,6 +474,7 @@ struct HabitCompletionState {
         case 2: return "circle.lefthalf.filled"
         case 3: return "xmark"
         case 4: return "zzz"
+        case 5: return "figure.walk"
         default: return "checkmark"
         }
     }

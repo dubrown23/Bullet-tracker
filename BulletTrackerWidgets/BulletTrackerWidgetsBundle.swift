@@ -57,7 +57,7 @@ struct WidgetHabit: Identifiable {
     let icon: String
     let color: String
     let style: CompletionStyle
-    /// Today's raw completion state (0 = not logged, 1 / 2 / 3, 4 = rest).
+    /// Today's raw completion state (0 = not logged, 1 / 2 / 3, 4 = rest, 5 = active day).
     let todayState: Int
 
     var isNegativeHabit: Bool { style == .avoidance }
@@ -151,7 +151,7 @@ struct CompleteHabitIntent: AppIntent {
             switch current {
             case 0: return 1
             case 1: return 2
-            case 2: return 3
+            case 2, 5: return 3   // Active day (bt-0029) taps on to Tried
             default: return 0
             }
         }
@@ -530,6 +530,7 @@ struct HabitTileButton: View {
         switch habit.todayState {
         case 2: return AppTheme.partialHex
         case 3: return AppTheme.failedHex
+        case 5: return AppTheme.activeDayHex
         default: return AppTheme.successHex
         }
     }
@@ -542,6 +543,7 @@ struct HabitTileButton: View {
         case 2: return "circle.lefthalf.filled"
         case 3: return "xmark.circle.fill"
         case 4: return "zzz"
+        case 5: return "figure.walk.circle.fill"
         default: return "checkmark.circle.fill"
         }
     }
@@ -553,6 +555,7 @@ struct HabitTileButton: View {
         case 2: return "Partial"
         case 3: return "Tried"
         case 4: return "Rest day"
+        case 5: return "Active day"
         default: return "Done"
         }
     }

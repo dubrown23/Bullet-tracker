@@ -80,6 +80,9 @@ enum CompletionState: Int16, Codable {
     /// Neutral: not a win, not a miss; streaks carry through. Additive raw
     /// value — the older columns and values are untouched.
     case rest = 4
+    /// bt-0029 — Workout only, automatic: no workout but steps ≥ target
+    /// (what was Partial before). Neutral like Rest. Additive raw value.
+    case activeDay = 5
 }
 
 // MARK: - EntrySource (HabitEntry-level, bt-0018)
@@ -190,11 +193,12 @@ enum HabitWinRule {
         isSlipScored(style: style) && isLogged(state: state)
     }
 
-    /// bt-0018 — a day that counts as neither win nor miss. Streaks skip it
+    /// bt-0018 — a day that counts as neither win nor miss (Rest; since
+    /// bt-0029 also Workout's Active day). Streaks skip it
     /// the way they skip an unscheduled day; rates and the heatmap drop it
     /// from both sides of the fraction; the day summary leaves the habit out.
     static func isNeutral(state: CompletionState?) -> Bool {
-        state == .rest
+        state == .rest || state == .activeDay
     }
 
     /// Whether the entry (or its absence) means the person *logged* something

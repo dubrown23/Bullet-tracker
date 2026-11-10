@@ -518,8 +518,8 @@ struct GradingRuleTests {
     @Test func workoutMinutesThenStepsThenUnknown() {
         let t = GradingTargets.defaults
         #expect(WorkoutGrade.state(minutes: 45, steps: 0, targets: t) == .success)
-        #expect(WorkoutGrade.state(minutes: 0, steps: 12_000, targets: t) == .partial)
-        #expect(WorkoutGrade.state(minutes: nil, steps: 12_000, targets: t) == .partial)
+        #expect(WorkoutGrade.state(minutes: 0, steps: 12_000, targets: t) == .activeDay)
+        #expect(WorkoutGrade.state(minutes: nil, steps: 12_000, targets: t) == .activeDay)
         #expect(WorkoutGrade.state(minutes: 0, steps: 4_000, targets: t) == .failure)
         // Minutes unknown and steps under target: can't grade → nil, never red.
         #expect(WorkoutGrade.state(minutes: nil, steps: 4_000, targets: t) == nil)
@@ -674,7 +674,7 @@ struct HabitStoreWriteTests {
         #expect(HabitSyncEngine.grade(kind: .diet, targets: t, facts: lowDay, steps: nil, isToday: false) == .partial)
         #expect(HabitSyncEngine.grade(kind: .diet, targets: t, facts: nil, steps: nil, isToday: false) == nil)
         #expect(HabitSyncEngine.grade(kind: .workout, targets: t, facts: nil, steps: 4000, isToday: false) == nil)
-        #expect(HabitSyncEngine.grade(kind: .workout, targets: t, facts: nil, steps: 12000, isToday: true) == .partial)
+        #expect(HabitSyncEngine.grade(kind: .workout, targets: t, facts: nil, steps: 12000, isToday: true) == .activeDay)
         let zeroMinutes = DayFacts(day: today, proteinGrams: nil, calories: nil, workoutMinutes: 0)
         #expect(HabitSyncEngine.grade(kind: .workout, targets: t, facts: zeroMinutes, steps: 4000, isToday: false) == .failure)
         #expect(HabitSyncEngine.grade(kind: .workout, targets: t, facts: zeroMinutes, steps: 4000, isToday: true) == nil)
@@ -1371,7 +1371,7 @@ struct HistoryMigrationTests {
         // Workout: July and the hand rows gone; three Auto rows on the session days; Oct 27/28 untouched.
         let w = rows(workout)
         #expect(w.map(\.date) == [day(8, 5), day(9, 1), day(9, 2), day(10, 27), day(10, 28)])
-        #expect(w[0].effectiveCompletionState == .success && w[1].effectiveCompletionState == .partial && w[2].effectiveCompletionState == .failure)
+        #expect(w[0].effectiveCompletionState == .success && w[1].effectiveCompletionState == .activeDay && w[2].effectiveCompletionState == .failure)
         #expect(w[0...2].allSatisfy { $0.source == .auto })
         #expect(w[3].source == .hand && w[4].source == .hand)
         let first = try #require(w[0].health)
@@ -2320,5 +2320,64 @@ struct HealthDailyTests {
         let steps = try #require(json?["steps"] as? [[String: Any]])
         #expect(steps.first?["count"] as? Int == 11871)
         #expect(steps.first?["day"] as? String == "2026-11-09")
+    }
+}
+
+// MARK: - Active day (bt-0029)
+
+struct ActiveDayTests {
+    @Test func stepsOnlyWorkoutDayIsActiveDayAndDietPartialStays() {
+        let t = GradingTargets.defaults
+        #expect(WorkoutGrade.state(minutes: 0, steps: Int(t.steps), targets: t) == .activeDay)
+        #expect(DietGrade.state(proteinGrams: t.proteinFloorGrams, calories: nil, targets: t) == .partial)
+        #expect(VoiceGrade.partial.completionState == .partial)
+    }
+
+    @Test func activeDayIsNeutralLikeRest() {
+        #expect(HabitWinRule.isNeutral(state: .activeDay))
+        #expect(!HabitWinRule.isWin(style: .multiState, state: .activeDay, isFuture: false))
+        #expect(HabitWinRule.isLogged(state: .activeDay))
+        #expect(CompletionState.activeDay.rawValue == 5)
+        #expect(CompletionState.rest.rawValue == 4 && CompletionState.partial.rawValue == 2)
+    }
+
+    @Test func activeDayHasItsOwnOrangeAndName() {
+        let mark = DayMark(state: .activeDay, isAvoidance: false)
+        #expect(mark == .activeDay)
+        #expect(mark.color == AppTheme.activeDay)
+        #expect(mark.color != AppTheme.partial)
+        #expect(mark.spokenText(isAvoidance: false) == "Active day")
+        #expect(GradeWording.stateWord(.activeDay) == "Active day")
+    }
+
+    @Test func conversionTouchesOnlyAutomaticWorkoutPartials() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: Habit.self, HabitEntry.self, Note.self, configurations: config)
+        let context = ModelContext(container)
+        let workout = Habit(name: "Workout", frequency: "daily", completionStyle: .multiState)
+        workout.gradingKind = .workout
+        let diet = Habit(name: "Diet", frequency: "daily", completionStyle: .multiState)
+        diet.gradingKind = .diet
+        context.insert(workout)
+        context.insert(diet)
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        func day(_ back: Int) -> Date { calendar.date(byAdding: .day, value: -back, to: today)! }
+        let autoPartial = HabitEntry(date: day(1), completionState: .partial, habit: workout, source: .auto, editedAt: Date())
+        let handPartial = HabitEntry(date: day(2), completionState: .partial, habit: workout, source: .hand, editedAt: Date())
+        let voicePartial = HabitEntry(date: day(3), completionState: .partial, habit: workout, source: .voice, editedAt: Date())
+        let autoDone = HabitEntry(date: day(4), completionState: .success, habit: workout, source: .auto, editedAt: Date())
+        let dietAuto = HabitEntry(date: day(1), completionState: .partial, habit: diet, source: .auto, editedAt: Date())
+        for entry in [autoPartial, handPartial, voicePartial, autoDone, dietAuto] { context.insert(entry) }
+        try context.save()
+
+        #expect(HabitStore.convertAutoWorkoutPartials(habits: [workout, diet], in: context) == 1)
+        #expect(autoPartial.completionState == .activeDay)
+        #expect(handPartial.completionState == .partial)
+        #expect(voicePartial.completionState == .partial)
+        #expect(autoDone.completionState == .success)
+        #expect(dietAuto.completionState == .partial)
+        // A second pass finds nothing left to change.
+        #expect(HabitStore.convertAutoWorkoutPartials(habits: [workout, diet], in: context) == 0)
     }
 }

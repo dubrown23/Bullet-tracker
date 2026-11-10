@@ -260,7 +260,7 @@ enum HistoryMigration {
             summary.days += 1
             switch grade {
             case .success: summary.done += 1
-            case .partial: summary.partial += 1
+            case .partial, .activeDay: summary.partial += 1
             default: summary.tried += 1
             }
         }

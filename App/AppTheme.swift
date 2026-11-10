@@ -22,12 +22,17 @@ enum AppTheme {
     static let failedHex = "#EF5350"
     /// Rest day (bt-0018) — neutral grey, the system's `.systemGray`.
     static let restHex = "#8E8E93"
+    /// Active day (bt-0029) — Workout's steps-only day, the accent orange.
+    static let activeDayHex = accentHex
 
     /// Primary accent color - warm orange
     static let accent = Color(hex: accentHex)
 
     /// Rest day — neither win nor miss
     static let rest = Color(hex: restHex)
+
+    /// Active day — Workout with no workout but steps ≥ target (bt-0029)
+    static let activeDay = Color(hex: activeDayHex)
 
     /// Success state - warm green
     static let success = Color(hex: successHex)

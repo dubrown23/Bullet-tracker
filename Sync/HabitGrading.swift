@@ -16,7 +16,8 @@
 //
 //  Workout:
 //    🟢 Done    — workout minutes ≥ target (from dh, Step 3)
-//    🟡 Partial — no workout, but steps ≥ target (Apple Health, on the phone)
+//    🟠 Active day — no workout, but steps ≥ target (Apple Watch steps;
+//                 its own state since bt-0029, neutral like Rest)
 //    🔴 Tried   — neither
 //    ⚪ Rest    — never automatic; only when Dustin calls it
 //    Minutes unknown (no source yet) → the day can't be marked Tried: steps
@@ -56,7 +57,7 @@ enum WorkoutGrade {
     /// target). Callers treat `nil` as "write nothing".
     static func state(minutes: Double?, steps: Int?, targets: GradingTargets = .defaults) -> CompletionState? {
         if let minutes, minutes >= targets.workoutMinutes { return .success }
-        if let steps, Double(steps) >= targets.steps { return .partial }
+        if let steps, Double(steps) >= targets.steps { return .activeDay }
         return minutes == nil ? nil : .failure
     }
 }
@@ -113,6 +114,7 @@ enum GradeWording {
         case .partial?: return "Partial"
         case .failure?: return "Tried / slipped"
         case .rest?: return "Rest"
+        case .activeDay?: return "Active day"
         }
     }
 
@@ -141,6 +143,7 @@ enum GradeWording {
         case .partial: return "Partial"
         case .failure: return "Tried"
         case .rest: return "Rest"
+        case .activeDay: return "Active day"
         }
     }
 }

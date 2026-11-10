@@ -158,6 +158,8 @@ final class HabitSyncEngine {
     private static let lastSentKey = "dhLastSentAt"
     /// Written by the widget's intent after every tile tap (App Group).
     private static let widgetStampKey = "lastWidgetUpdate"
+    /// bt-0029 — set once the old automatic Partial Workout days are Active days.
+    private static let activeDayConvertedKey = "activeDayConverted"
 
     private var pendingTap: Task<Void, Never>?
     private var pendingTapContext: ModelContext?
@@ -402,6 +404,14 @@ final class HabitSyncEngine {
             report.lines.append("This device doesn't grade (iPhone only) — showing, not writing")
         }
         let isLive = source?.isLive ?? false
+
+        // bt-0029 — once, on the iPhone: the steps-only Workout days the app
+        // graded as Partial before Active day existed take the new state.
+        if canWrite && !UserDefaults.standard.bool(forKey: Self.activeDayConvertedKey) {
+            let converted = HabitStore.convertAutoWorkoutPartials(habits: habits, in: context)
+            UserDefaults.standard.set(true, forKey: Self.activeDayConvertedKey)
+            report.lines.append("Active day: \(converted) automatic Workout day\(converted == 1 ? "" : "s") recoloured")
+        }
 
         // A transport / key failure anywhere stops the later network steps
         // and keeps the cursor and status from advancing.

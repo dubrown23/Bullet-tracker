@@ -414,6 +414,7 @@ struct BinaryHabitIcon: View {
         case 2: return "\(entry.habitName), partial"
         case 3: return "\(entry.habitName), tried"
         case 4: return "\(entry.habitName), rest day"
+        case 5: return "\(entry.habitName), active day"
         default: return "\(entry.habitName), completed"
         }
     }
@@ -427,6 +428,7 @@ struct BinaryHabitIcon: View {
         case 2: return AppTheme.partial
         case 3: return AppTheme.failed
         case 4: return AppTheme.rest
+        case 5: return AppTheme.activeDay
         default: return AppTheme.success
         }
     }

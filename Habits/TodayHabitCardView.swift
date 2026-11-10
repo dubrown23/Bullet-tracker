@@ -421,7 +421,8 @@ struct TodayHabitRowView: View {
             let next: Int
             switch current {
             case 1: next = 2
-            case 2: next = 3
+            // An Active day (bt-0029) taps on to Tried, as Partial does.
+            case 2, 5: next = 3
             default: next = 0
             }
             if next == 0 {

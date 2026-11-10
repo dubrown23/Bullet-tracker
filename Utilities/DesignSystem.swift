@@ -101,7 +101,7 @@ struct DaySquare<Content: View>: View {
 
 // MARK: - Day mark (bt-0026)
 
-/// What happened on a day, reduced to the five things the palette can say.
+/// What happened on a day, reduced to the six things the palette can say.
 /// Palette colours only: a win is green whatever the habit's colour, so a
 /// red habit's done day never looks like a slip. The habit's colour stays
 /// on its glyph.
@@ -112,6 +112,8 @@ enum DayMark: Equatable {
     /// A multi-state "Tried" or an avoidance slip.
     case missed
     case rest
+    /// bt-0029 — Workout's steps-only day.
+    case activeDay
 
     /// An entry's state → a mark. For an avoidance habit anything logged
     /// is a slip (`bt-0024`: only slips get marked).
@@ -123,6 +125,7 @@ enum DayMark: Equatable {
         case .partial: self = .partial
         case .failure: self = .missed
         case .rest: self = .rest
+        case .activeDay: self = .activeDay
         case .notDone: self = .empty
         }
     }
@@ -135,6 +138,7 @@ enum DayMark: Equatable {
         case .partial: return AppTheme.partial
         case .missed: return AppTheme.failed
         case .rest: return AppTheme.rest
+        case .activeDay: return AppTheme.activeDay
         }
     }
 
@@ -147,6 +151,7 @@ enum DayMark: Equatable {
         case .done, .partial: return "checkmark.circle.fill"
         case .missed: return "xmark.circle.fill"
         case .rest: return "moon.circle.fill"
+        case .activeDay: return "figure.walk.circle.fill"
         }
     }
 
@@ -158,6 +163,7 @@ enum DayMark: Equatable {
         case .partial: return "Partial"
         case .missed: return isAvoidance ? "Slipped" : "Tried"
         case .rest: return "Rest day"
+        case .activeDay: return "Active day"
         }
     }
 }

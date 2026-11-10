@@ -135,6 +135,10 @@ struct HabitCompletionDetailView: View {
                                 Label("Rest", systemImage: "zzz")
                                     .foregroundStyle(AppTheme.rest)
                                     .tag(4)
+                                // bt-0029 — so an automatic Active day shows as picked.
+                                Label("Active day", systemImage: "figure.walk")
+                                    .foregroundStyle(AppTheme.activeDay)
+                                    .tag(5)
                             }
                         }
                         .pickerStyle(.inline)
