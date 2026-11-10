@@ -826,4 +826,6 @@ yellow Partial, so a walking day and a half-kept diet looked the same.
   iPad was locked. The iPad must get this build before the phone, because
   the phone's one-time pass sends raw value 5 through iCloud and the iPad's
   Oct 30 build doesn't know it. Commit `ef3f604`.
+- 2026-11-10 — Dustin installed the build on the iPad and the iPhone himself
+  after the wrap.
 
