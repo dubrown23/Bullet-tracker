@@ -43,7 +43,7 @@ Harness facts worth knowing: Xcode 27 has no Simulator.app, the Duo simulator on
 
 ## Open threads
 
-- **Devices:** DBd and the iPad both have the `bt-0029` build (installed by Dustin after the wrap). Not yet looked at on screen: the Developer screen's "Active day: N automatic Workout days recoloured" line and the orange past dots.
+- **Devices:** DBd and the iPad both have the `bt-0029` build (installed by Dustin after the wrap). Dustin checked the phone: the one-time conversion line and the orange past Workout days.
 - **Not checked on screen in `bt-0028`:** the Workout row's step caption against the Watch's count (the code reads the same Watch-only number dh got, 11,871 on Nov 9).
 - **A background wake-up while the phone is locked can't read Health** (Apple's rule): Bullet stores "Phone was locked … Will retry" and the workout goes on the next wake-up or open. Didn't happen in the proof; worth watching.
 - **Health copy, not sent yet:** deleted workouts (dh has no op for it), all-day heart rate. Steps + sleep went in `bt-0028`.
