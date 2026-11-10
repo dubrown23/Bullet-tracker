@@ -4,7 +4,7 @@
 
 A quick way to enter data and see it visually — simple, fast, a "quick hit": pop in, tap to log, glance at the patterns. Built for long-term personal tracking, not for other users. Kept deliberately minimal.
 
-Long-term, the plan is to merge this with **Dustin's Health** (dh — the voice-first health logger Dustin already uses for meals). That merge started 2026-10-26 with a settled design (shared note in dustin-system: `memory/in_flight/habits-voice-dh-bullet-2026-10-26.md`): voice lands in dh as day facts + an inbox of actions; **Bullet stays the master copy of habits and holds every grading rule**; dh only reports facts. Step 0 (`bt-0017`) proved the pipeline with fake data; Step 2 (`bt-0018`, 2026-10-27) gave the app the rules it needs before real data arrives — a neutral Rest grade, targets as habit settings, "in progress" today, and hand grades that win over automatic ones until put back on auto, with only the iPhone writing automatic grades. **Step 3 (`bt-0019`, live 2026-10-27) is the real sync:** the iPhone talks to dh's app endpoint with a key kept in its Keychain, sends the habit list, targets and today's taps, pulls changed days, meal and workout facts and the voice inbox, grades with its own rules and confirms back; Diet and Workout are graded from real data from that day forward, and the iPad only shows. **A design pass the same evening (`bt-0021`) made the two graded rows legible:** the Today caption says who set the day (Auto / Set by you / Set by voice) with Back to Auto on the row, and Log Details shows dh's meals and workout sessions from a `health` key kept beside, never inside, the notes. **`bt-0020` (2026-10-28) closed the loop from the tap side:** a hand tap on today sends itself a few seconds later, a burst of taps is one send, leaving the app sends at once, and a tap can never be hidden by the on-open throttle — so "what's left today" by voice is right without a pull-down; still iPhone only. **`bt-0022` (2026-10-28) laid the data for the Dashboard that replaces the dh website** — backup keeps dh's `health` block, steps are stored per day, carbs / fat targets live on Diet, and a one-time rewrite gave every habit a clean start on 2026-10-27 except Poison, with Workout rebuilt from dh's sessions back to Aug 1 — and **`bt-0024` the same evening fixed how a negative habit reads: only slips get marked, and its rate is a slip rate.** **`bt-0023` (shipped 2026-10-29) is that Dashboard:** one day like the website on top — Eaten vs Burned, where burned is Apple Health's active + resting total read by Bullet itself and the sessions' calories are never added to it, a calorie band, three rings, the driver line, meals and training with a warning that is never silent when sessions add up to more than Health's active energy — and the habit trends underneath; a one-time refresh carried dh's corrected session calories onto the stored rows. The dh website dashboard was turned off on 2026-10-29. **`bt-0026` (2026-10-29) remade the Today row as a checklist** once the Dashboard was live: a round control on the left is the one way to mark a day, six quiet dots are the history you look at, the row opens Log Details, and avoidance habits sit in their own Avoiding section — the Reminders shape, chosen from four layouts mocked side by side on the simulator. The app itself was dialed in first (the 2026-10-24/25 Duo + design-language wave) before taking this on.
+Long-term, the plan is to merge this with **Dustin's Health** (dh — the voice-first health logger Dustin already uses for meals). That merge started 2026-10-26 with a settled design (shared note in dustin-system: `memory/in_flight/habits-voice-dh-bullet-2026-10-26.md`): voice lands in dh as day facts + an inbox of actions; **Bullet stays the master copy of habits and holds every grading rule**; dh only reports facts. Step 0 (`bt-0017`) proved the pipeline with fake data; Step 2 (`bt-0018`, 2026-10-27) gave the app the rules it needs before real data arrives — a neutral Rest grade, targets as habit settings, "in progress" today, and hand grades that win over automatic ones until put back on auto, with only the iPhone writing automatic grades. **Step 3 (`bt-0019`, live 2026-10-27) is the real sync:** the iPhone talks to dh's app endpoint with a key kept in its Keychain, sends the habit list, targets and today's taps, pulls changed days, meal and workout facts and the voice inbox, grades with its own rules and confirms back; Diet and Workout are graded from real data from that day forward, and the iPad only shows. **A design pass the same evening (`bt-0021`) made the two graded rows legible:** the Today caption says who set the day (Auto / Set by you / Set by voice) with Back to Auto on the row, and Log Details shows dh's meals and workout sessions from a `health` key kept beside, never inside, the notes. **`bt-0020` (2026-10-28) closed the loop from the tap side:** a hand tap on today sends itself a few seconds later, a burst of taps is one send, leaving the app sends at once, and a tap can never be hidden by the on-open throttle — so "what's left today" by voice is right without a pull-down; still iPhone only. **`bt-0022` (2026-10-28) laid the data for the Dashboard that replaces the dh website** — backup keeps dh's `health` block, steps are stored per day, carbs / fat targets live on Diet, and a one-time rewrite gave every habit a clean start on 2026-10-27 except Poison, with Workout rebuilt from dh's sessions back to Aug 1 — and **`bt-0024` the same evening fixed how a negative habit reads: only slips get marked, and its rate is a slip rate.** **`bt-0023` (shipped 2026-10-29) is that Dashboard:** one day like the website on top — Eaten vs Burned, where burned is Apple Health's active + resting total read by Bullet itself and the sessions' calories are never added to it, a calorie band, three rings, the driver line, meals and training with a warning that is never silent when sessions add up to more than Health's active energy — and the habit trends underneath; a one-time refresh carried dh's corrected session calories onto the stored rows. The dh website dashboard was turned off on 2026-10-29. **`bt-0026` (2026-10-29) remade the Today row as a checklist** once the Dashboard was live: a round control on the left is the one way to mark a day, six quiet dots are the history you look at, the row opens Log Details, and avoidance habits sit in their own Avoiding section — the Reminders shape, chosen from four layouts mocked side by side on the simulator. **`bt-0027` (2026-11-10) made Bullet the only reader of Apple Health for dh:** once the Claude app started turning dh off for a whole chat after reading Health, Bullet took over copying workouts and their heart rate to dh, on open and by background wake-up, so voice talks to dh only. The app itself was dialed in first (the 2026-10-24/25 Duo + design-language wave) before taking this on.
 
 ## Origin
 
@@ -730,4 +730,42 @@ Voice can tick a past day in dh, but a day fixed in the app only ever reached dh
 **Decision log:**
 
 - 2026-11-04 — dh's request, done inline. Checked first: a read-only `op=facts` for Nov 3 to both addresses with the Mac Keychain key (`dustin-health-bullet-api-key`), both HTTP 200 with identical 1,803-byte bodies. 113 tests on the Duo sim; installed on DBd; Dustin's pull-down showed "last synced" this morning. Commit `15dd4a8`.
+
+### `bt-0027` (shipped 2026-11-10) — Bullet copies Apple Health workouts + their heart rate to dh
+
+**Summary:** **Bullet is the only thing that reads Apple Health for dh.** `Sync/HealthCopy.swift` sends every workout from 2026-10-28 on, with every heart-rate reading inside it, to dh's `op=health` (`dh-0030`) in chunks of ≤ 50 workouts / ≤ 5,000 readings; dh never doubles. "New" is HealthKit's anchored query, and the bookmark moves only after dh answers every chunk. It runs on every open (beside the habit sync, never inside it) and on HealthKit's background wake-up for a new workout (observer query + background delivery, registered at launch in an `AppDelegate`; new entitlement). iPhone with the key only. Settings → Dustin's Health shows the last send, why, counts, refused items with dh's reason, and **Send all again from Oct 28**.
+
+**Why:**
+
+Since ~Nov 4 the Claude iPhone app turns off connector tools for the rest of
+a chat once Claude has read Apple Health. Voice reading Health therefore broke
+voice logging for the whole chat. Bullet is an app and may read Health, so it
+becomes the only reader and copies what dh needs; voice reads dh only (plan in
+dustin-system in_flight `dh-bullet-health-pipe-2026-11-09.md`).
+
+**The plan, scope and outcome** — in the bead body, kept in git before roll-off (`git show 793ed7b:.beads/active/bt-0027.md`).
+
+**Decision log:**
+
+- 2026-11-09 — Step 0, a read-only proof: a throwaway Developer screen read
+  the morning's workout and showed every field dh's
+  `log_workout_with_apple_health` takes. Dustin matched it to Fitness; 718
+  heart-rate readings inside the workout. Passed.
+- 2026-11-09 — dh built `op=health`. Before planning, dh's intake code was
+  read: name and code must agree (Bullet copies dh's activity table, Apple's
+  identifier spaced), and a "duration within 5 s of end − start" check would
+  refuse any paused workout. Dustin chose **A: send Apple's real duration**;
+  dh loosened the check.
+- 2026-11-09 — Built; 7 new tests (chunking, names, ISO time with zone,
+  omitted fields). Phone: the first open sent 19 workouts / 10,232 readings;
+  Send all again → 0 new, 19 already had, 0 refused.
+- 2026-11-09 — Background proof: Xcode stopped, Bullet closed, a 20-minute
+  test workout → "Apple Health sent 3:58 PM · background wake-up", 1 / 277.
+  Hockey practice reached dh by itself at 8:35 PM.
+- 2026-11-10 — Step 0 screen removed; the "Last checked" line shows only when
+  a later check found nothing. A full test run booted 4 parallel simulator
+  clones and overloaded the Mac; shell `xcodebuild test` can't launch the
+  runner in this session (pty "Operation not permitted"). Xcode's RunSomeTests
+  ran the 117 unit tests: all pass. One clone left booted, shut down.
+  Shipped (`793ed7b`).
 
