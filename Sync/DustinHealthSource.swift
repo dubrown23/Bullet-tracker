@@ -10,6 +10,7 @@
 //    GET  ?op=facts     meal totals + workout minutes per local day
 //    GET  ?op=inbox     voice actions waiting (marks them fetched)
 //    POST ?op=ack       ids the app actually applied
+//    POST ?op=health    Apple Health workouts + raw samples (bt-0027, dh-0030)
 //
 //  The key travels in the Authorization header only, never in a URL, and
 //  lives in the iOS Keychain on this device only (`APIKeyStore`). dh never
@@ -251,6 +252,52 @@ struct DustinHealthClient: Sendable {
         let not_applied: [NotApplied]?
     }
 
+    /// bt-0027 — Apple Health copied to dh (dh-0030). Field names are dh's.
+    /// A `nil` optional is left out of the JSON (dh: "leave out any you
+    /// can't read").
+    struct HealthRequest: Encodable, Equatable {
+        struct Workout: Encodable, Equatable {
+            let apple_uuid: String
+            let activity_type: String?
+            let activity_code: Int
+            let start_time: String
+            let end_time: String
+            let duration_seconds: Double
+            let active_energy_kcal: Double?
+            let distance_m: Double?
+            let average_heart_rate_bpm: Double?
+            let minimum_heart_rate_bpm: Double?
+            let maximum_heart_rate_bpm: Double?
+            let source_device: String?
+            let source_bundle_identifier: String?
+        }
+        struct Sample: Encodable, Equatable {
+            let apple_uuid: String
+            let kind: String
+            let start_time: String
+            let end_time: String
+            let value: Double
+            let unit: String
+            let source_device: String?
+        }
+        var workouts: [Workout]
+        var samples: [Sample]
+    }
+
+    struct HealthResponse: Decodable {
+        struct Refused: Decodable {
+            let apple_uuid: String?
+            let reason: String
+        }
+        struct Counts: Decodable {
+            let new: Int
+            let already_had: Int
+            let refused: [Refused]?
+        }
+        let workouts: Counts
+        let samples: Counts
+    }
+
     struct ErrorBody: Decodable {
         let error: String?
         let message: String?
@@ -276,6 +323,10 @@ struct DustinHealthClient: Sendable {
 
     func ack(ids: [String]) async throws -> AckResponse {
         try await send(op: "ack", method: "POST", body: AckRequest(ids: ids))
+    }
+
+    func health(_ body: HealthRequest) async throws -> HealthResponse {
+        try await send(op: "health", method: "POST", body: body)
     }
 
     // MARK: Transport

@@ -58,6 +58,9 @@ struct ContentView: View {
                 // Steps + grades every time; the fake source when the
                 // Developer switch is on (debug builds); dh in Step 3.
                 Task { await HabitSyncEngine.shared.refresh(in: modelContext) }
+                // bt-0027 — copy new Apple Health workouts to dh. Its own run,
+                // so a failure on one side never stops the other.
+                Task { await HealthCopy.shared.run(reason: .appOpened) }
             }
             // bt-0020 — a tap still waiting when the app leaves (lock, Home)
             // goes now, inside the background window taken at the tap.

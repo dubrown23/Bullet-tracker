@@ -2151,3 +2151,72 @@ struct BurnBackfillTests {
     }
 }
 
+
+// MARK: - bt-0027 Apple Health copy to dh
+
+struct HealthCopyTests {
+    private typealias Wire = DustinHealthClient.HealthRequest
+
+    private func item(_ n: Int, samples: Int) -> HealthCopy.Item {
+        let workout = Wire.Workout(
+            apple_uuid: "W\(n)", activity_type: "Walking", activity_code: 52,
+            start_time: "s", end_time: "e", duration_seconds: 60,
+            active_energy_kcal: nil, distance_m: nil, average_heart_rate_bpm: nil,
+            minimum_heart_rate_bpm: nil, maximum_heart_rate_bpm: nil,
+            source_device: nil, source_bundle_identifier: nil
+        )
+        let readings = (0..<samples).map {
+            Wire.Sample(apple_uuid: "W\(n)-\($0)", kind: "HKQuantityTypeIdentifierHeartRate",
+                        start_time: "s", end_time: "e", value: 100, unit: "count/min", source_device: nil)
+        }
+        return HealthCopy.Item(workout: workout, samples: readings)
+    }
+
+    @Test func chunksStayInsideDhLimitsAndLoseNothing() {
+        // 120 workouts × 718 readings, the size of one real hour-long workout.
+        let items = (0..<120).map { item($0, samples: 718) }
+        let sends = HealthCopy.chunks(items)
+        #expect(sends.allSatisfy { $0.workouts.count <= 50 && $0.samples.count <= 5000 })
+        #expect(sends.flatMap(\.workouts).map(\.apple_uuid) == items.map(\.workout.apple_uuid))
+        #expect(sends.flatMap(\.samples) == items.flatMap(\.samples))
+    }
+
+    @Test func aLongWorkoutsReadingsRunOnIntoTheNextSend() {
+        let sends = HealthCopy.chunks([item(1, samples: 12_000), item(2, samples: 10)])
+        #expect(sends.map(\.samples.count) == [5000, 5000, 2010])
+        #expect(sends[0].workouts.map(\.apple_uuid) == ["W1"])
+        #expect(sends[2].workouts.map(\.apple_uuid) == ["W2"])
+    }
+
+    @Test func workoutCapSplitsWithoutReadings() {
+        let sends = HealthCopy.chunks((0..<51).map { item($0, samples: 0) })
+        #expect(sends.map(\.workouts.count) == [50, 1])
+    }
+
+    @Test func nothingToSendMeansNoSends() {
+        #expect(HealthCopy.chunks([]).isEmpty)
+    }
+
+    @Test func activityNamesMatchDhsTable() {
+        #expect(HealthCopy.activityName(code: 25) == "Hockey")
+        #expect(HealthCopy.activityName(code: 20) == "Functional Strength Training")
+        #expect(HealthCopy.activityName(code: 63) == "High Intensity Interval Training")
+        #expect(HealthCopy.activityName(code: 52) == "Walking")
+        #expect(HealthCopy.activityName(code: 81) == nil)
+    }
+
+    @Test func isoTimeCarriesTheZone() {
+        let date = Date(timeIntervalSince1970: 1_794_222_133.402)  // 2026-11-09 11:02:13.402 UTC
+        let text = HealthCopy.isoString(date, timeZone: TimeZone(identifier: "America/New_York")!)
+        #expect(text == "2026-11-09T06:02:13.402-05:00")
+    }
+
+    @Test func unreadableFieldsAreLeftOutOfTheJSON() throws {
+        let body = Wire(workouts: [item(1, samples: 0).workout], samples: [])
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(body)) as? [String: Any]
+        let workout = try #require((json?["workouts"] as? [[String: Any]])?.first)
+        #expect(workout["activity_code"] as? Int == 52)
+        #expect(workout["distance_m"] == nil)
+        #expect(workout.keys.contains("active_energy_kcal") == false)
+    }
+}

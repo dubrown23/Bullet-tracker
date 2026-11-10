@@ -5,7 +5,8 @@
 //  bt-0019. Settings → "Dustin's Health". On the iPhone: paste the app's
 //  key once (trimmed, stored in the Keychain on this device only), then a
 //  status line, Sync now, anything the app couldn't apply (with Dismiss),
-//  and Remove key. On the iPad: one line — it syncs on the iPhone and shows
+//  and Remove key. bt-0027 adds the Apple Health copy's lines (last send,
+//  why, counts, refused items, Send all again). On the iPad: one line — it syncs on the iPhone and shows
 //  what iCloud brings. Release builds too; this is the one piece of the
 //  sync Dustin touches.
 //
@@ -16,6 +17,7 @@ import SwiftData
 struct HealthSyncSection: View {
     @Environment(\.modelContext) private var modelContext
     @State private var engine = HabitSyncEngine.shared
+    @State private var healthCopy = HealthCopy.shared
     @State private var pastedKey = ""
     @State private var hasKey = APIKeyStore.hasKey
     @State private var saveError: String?
@@ -74,6 +76,8 @@ struct HealthSyncSection: View {
                     }
                 }
 
+                healthCopyRows
+
                 Button("Remove key", role: .destructive) {
                     confirmingRemove = true
                 }
@@ -104,6 +108,71 @@ struct HealthSyncSection: View {
             Image(systemName: statusIcon(status))
                 .foregroundStyle(statusColor(status))
         }
+    }
+
+    /// bt-0027 — what the Apple Health copy last did.
+    @ViewBuilder
+    private var healthCopyRows: some View {
+        let status = healthCopy.status
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(healthCopyHeadline(status))
+                if status.lastSentAt != nil {
+                    Text("Workouts: \(status.workoutsNew) new, \(status.workoutsHad) already had")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text("Heart-rate readings: \(status.samplesNew) new, \(status.samplesHad) already had")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                // Only when a later check found nothing new; a check that is
+                // the send itself would repeat the line above.
+                if let checked = status.lastCheckAt, status.lastError == nil,
+                   checked.timeIntervalSince(status.lastSentAt ?? .distantPast) > 60 {
+                    Text("Last checked \(checked.formatted(date: .abbreviated, time: .shortened)) · \(status.lastCheckReason?.label ?? "")")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                if let error = status.lastError {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(AppTheme.failed)
+                }
+            }
+        } icon: {
+            Image(systemName: "heart.text.square")
+                .foregroundStyle(status.lastError == nil ? AppTheme.success : AppTheme.partial)
+        }
+
+        ForEach(status.refused) { item in
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Refused \(item.kind)")
+                Text(item.reason)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+
+        Button {
+            Task { await healthCopy.run(reason: .sendAllAgain) }
+        } label: {
+            if healthCopy.isRunning {
+                HStack {
+                    Text("Copying Apple Health…")
+                    Spacer()
+                    ProgressView()
+                }
+            } else {
+                Label("Send all again from Oct 28", systemImage: "arrow.clockwise.heart")
+            }
+        }
+        .disabled(healthCopy.isRunning)
+    }
+
+    private func healthCopyHeadline(_ status: HealthCopy.Status) -> String {
+        guard let sent = status.lastSentAt else { return "Apple Health: nothing sent yet" }
+        let why = status.lastSentReason?.label ?? ""
+        return "Apple Health sent \(sent.formatted(date: .abbreviated, time: .shortened)) · \(why)"
     }
 
     @ViewBuilder
